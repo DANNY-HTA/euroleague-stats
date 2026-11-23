@@ -8,8 +8,8 @@
     "title": "HAPOEL – INTERNAL",
     "salt": "37372325be29abad9a6850e3088407ec",
     "iterations": 600000,
-    "repoUploadUrl": "https://github.com/DANNY-HTA/euroleague-stats/upload/main/internal",
-    "repoFolderUrl": "https://github.com/DANNY-HTA/euroleague-stats/tree/main/internal",
+    "repoUploadUrl": "https://github.com/hta-lab/hta-lab.github.io/upload/main/internal",
+    "repoFolderUrl": "https://github.com/hta-lab/hta-lab.github.io/tree/main/internal",
     "categories": [
       "Strategy",
       "Scouting report",
@@ -20,6 +20,6 @@
       "Medical",
       "Other"
     ],
-    "repo": "DANNY-HTA/euroleague-stats"
+    "repo": "hta-lab/hta-lab.github.io"
   }
 }
