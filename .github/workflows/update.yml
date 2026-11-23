@@ -32,8 +32,20 @@ jobs:
           node-version: 22
       - name: Test the formulas and checks
         run: npm test
+      - name: Restore games downloaded in earlier runs
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: euroleague-data-${{ github.run_id }}
+          restore-keys: euroleague-data-
       - name: Download the official box scores
         run: npm run fetch
+      - name: Remember downloaded games for the next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: euroleague-data-${{ github.run_id }}
       - name: Check accuracy and build the site
         run: npm run build
       - uses: actions/upload-pages-artifact@v3

@@ -8,7 +8,7 @@
     for (const [k, v] of Object.entries(attrs)) {
       if (k === 'class') n.className = v; else if (k === 'style') n.setAttribute('style', v); else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (v != null && v !== false) n.setAttribute(k, v);
     }
-    for (const k of kids.flat()) if (k != null) n.append(k.nodeType ? k : document.createTextNode(String(k)));
+    for (const k of kids.flat(Infinity)) if (k != null) n.append(k.nodeType ? k : document.createTextNode(String(k)));
     return n;
   };
   const f1 = (v) => (Number.isFinite(v) ? v.toFixed(1) : '–');

@@ -11,7 +11,8 @@ import { validateSeason } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, leaders, seasonInfo, teamGames, quarterAverages, playerGameLogs } from '../lib/stats.mjs';
 import { esc, f1, signed, scatter, page, fmtDate, assetVersion } from '../lib/render.mjs';
 import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
-import { buildStints, checkStints, aggregate, rapm } from '../lib/pbp.mjs';
+import { buildStints, checkStints, aggregate, rapm, BOX_KEYS } from '../lib/pbp.mjs';
+import { GLOSSARY } from '../lib/glossary.mjs';
 
 const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 const args = process.argv.slice(2);
@@ -99,10 +100,10 @@ const mmss = (m) => { const t = Math.round(m * 60); return `${Math.floor(t / 60)
 
 const crestImg = (code, size = 'big') => crests.has(code) ? `<img class="crest ${size}" src="${esc(crests.get(code))}" alt="" width="56" height="56">` : '';
 const coverCrest = (code) => crests.has(code) ? `<div class="side cover-crest"><img src="${esc(crests.get(code))}" alt=""></div>` : '';
-const cover = ({ crumbs = '', kicker = '', title, meta = '', lede = '', strip = [], side = '' }) => `<section class="cover"><div class="wrap"><div>
+const cover = ({ crumbs = '', kicker = '', title, meta = '', lede = '', strip = [], side = '', actions = '' }) => `<section class="cover"><div class="wrap"><div>
 ${crumbs ? `<div class="crumbs">${crumbs}</div>` : ''}${kicker ? `<span class="kicker">${kicker}</span>` : ''}
 <h1>${title}</h1>${meta ? `<div class="cover-meta">${meta}</div>` : ''}${lede ? `<p class="cover-lede">${lede}</p>` : ''}
-${strip.length ? `<div class="strip">${strip.map(([b, t]) => `<span><b>${b}</b> ${t}</span>`).join('')}</div>` : ''}
+${strip.length ? `<div class="strip">${strip.map(([b, t]) => `<span><b>${b}</b> ${t}</span>`).join('')}</div>` : ''}${actions ? `<div class="cover-actions">${actions}</div>` : ''}
 </div>${side}</div></section>`;
 const roundLine = info.lastDate ? `Through ${info.lastRound ? `Round ${info.lastRound}, ` : ''}${fmtDate(info.lastDate)}` : 'Season';
 
@@ -279,7 +280,7 @@ for (const t of teams) {
     if (L.length) lineupCard = `<section class="card"><h2>Lineups</h2><p class="muted">Five-man groups with at least 5 minutes together, most used first. Ratings are points per 100 possessions.</p>
 <div class="scroll"><table><thead><tr><th scope="col">Lineup</th><th scope="col" class="num">MIN</th><th scope="col" class="num">Poss</th><th scope="col" class="num">ORtg</th><th scope="col" class="num">DRtg</th><th scope="col" class="num">Net</th></tr></thead><tbody>
 ${L.map((l) => { const o = l.poss ? 100 * l.pf / l.poss : 0, d = l.poss ? 100 * l.pa / l.poss : 0; return `<tr><td class="team">${l.ids.map((id) => `<a href="${playerHref(id)}">${esc(short(id))}</a>`).join('<span class="muted"> · </span>')}</td><td class="num">${f1(l.secs / 60)}</td><td class="num">${Math.round(l.poss)}</td><td class="num">${f1(o)}</td><td class="num">${f1(d)}</td><td class="num ${o - d >= 0 ? 'pos' : 'neg'}">${sg(o - d)}</td></tr>`; }).join('')}
-</tbody></table></div><p class="muted small">Lineups with few minutes swing a lot from game to game. Treat them as clues, not verdicts.</p></section>`;
+</tbody></table></div><p class="muted small">Lineups with few minutes swing a lot from game to game. Treat them as clues, not verdicts. <a href="lineups.html?team=${encodeURIComponent(t.code)}"><strong>Open the full lineups tool →</strong></a></p></section>`;
     const R = roster.map((q) => ({ q, oo: onOffOf(q.id), imp: IMPACT?.values.get(q.id) })).filter((x) => x.oo);
     if (R.length) onoffTeamCard = `<section class="card"><h2>With and without</h2><p class="muted">Team margin per 100 possessions with each player on the court and on the bench (games he played), and his impact rating.</p>
 <div class="scroll"><table><thead><tr><th scope="col">Player</th><th scope="col" class="num">MIN on</th><th scope="col" class="num">On</th><th scope="col" class="num">Off</th><th scope="col" class="num">Swing</th><th scope="col" class="num">Impact</th></tr></thead><tbody>
@@ -409,6 +410,7 @@ for (const p of players) {
     kicker, title: esc(p.name),
     meta: `${crests.has(p.team) ? `<img class="crest" src="${esc(crests.get(p.team))}" alt="">` : ''}<span>${esc(teamT ? titleCase(teamT.name) : p.tv)}</span>${position ? `<span class="sep">/</span><span>${esc(position)}</span>` : ''}${age != null ? `<span class="sep">/</span><span>${age} years</span>` : ''}${person?.height ? `<span class="sep">/</span><span>${person.height} cm</span>` : ''}${person?.country ? `<span class="sep">/</span><span>${esc(person.country)}</span>` : ''}`,
     lede: ledeParts.join(' '),
+    actions: `<button type="button" id="share-btn" class="btn white">Download as image</button>`,
     side: num ? `<div class="side jersey" aria-hidden="true">${esc(String(num).replace(/^0+(?=\d)/, ''))}</div>` : coverCrest(p.team)
   });
 
@@ -490,6 +492,20 @@ ${oo.offMin < 30 ? '<p class="muted small">Few bench minutes so far, so the "wit
 ${stackList.map((q) => `<tr${q.id === p.id ? ' class="me"' : ''}><td><a href="${playerHref(q.id)}">${badge(q.team, q.tv)}${esc(q.name)}</a></td>${SC.map(([k]) => `<td class="num">${q[k] === bestIn[k] ? `<span class="best">${f1(q[k])}</span>` : f1(q[k])}</td>`).join('')}</tr>`).join('')}
 </tbody></table></div></section>`;
 
+  const tileData = (oo && imp != null)
+    ? [['Scoring', f1(p.ppg), 'points per game', isQual ? r.ppg : null], ['Impact', sgn(imp), 'RAPM per 100 poss', rankIn((q) => IMPACT.values.get(q.id) ?? null)?.r], ['On / off', sgn(oo.swing), 'margin per 100, on v off', oo.swing == null ? null : rankIn((q) => onOffOf(q.id)?.swing ?? null)?.r], ['All-round', f1(p.pirpg), 'PIR per game', isQual ? r.pirpg : null]]
+    : [['Scoring', f1(p.ppg), 'points per game', isQual ? r.ppg : null], ['All-round', f1(p.pirpg), 'PIR per game', isQual ? r.pirpg : null], ['Efficiency', f1(p.ts), 'true shooting %', isQual ? r.ts : null], [fourth[1], f1(p[fourth[0]]), fourth[2], isQual ? r[fourth[0]] : null]];
+  const shareJson = JSON.stringify({
+    site: cfg.siteName, season: `${cfg.seasonLabel}, ${roundLine.toLowerCase()}`, kicker: kicker.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&'), name: p.name, number: num ? String(num).replace(/^0+(?=\d)/, '') : '',
+    crest: crests.get(p.team) || null,
+    meta: [teamT ? titleCase(teamT.name) : p.tv, position, age != null ? `${age} years` : null].filter(Boolean).join('  ·  '),
+    lede: `Averages ${f1(p.ppg)} points, ${f1(p.rpg)} rebounds and ${f1(p.apg)} assists in ${f1(p.mpg)} minutes, at ${f1(p.ts)}% true shooting. His team is ${wonWith}–${log.length - wonWith} when he plays.`,
+    tiles: tileData.map(([label, value, sub, rk]) => ({ label, value, sub, rank: rk ? `${ord(rk)} in the league` : '', hot: rk != null && rk <= 3 })),
+    games: log.slice(0, 8).reverse().map((g) => ({ pts: g.line.pts, opp: g.opp.tv, win: g.win })),
+    gbgNote: `Points in his last ${Math.min(8, log.length)} games. Red = win.`,
+    footer: 'Calculated from the official EuroLeague box scores and play-by-play.',
+    file: `${p.name.replace(/[^A-Za-z0-9]+/g, '-')}-HTA-LAB.png`
+  }).replace(/</g, '\\u003c');
   writePage(`player-${safe(p.id)}.html`, p.name, `
 ${tiles}
 <div class="row">${onoffCard}${gbg}</div>
@@ -519,7 +535,8 @@ ${[['FG%', pct(fgm, fga) + ` <span class="muted">(${fgm}/${fga})</span>`], ['2P%
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col">Opponent</th><th scope="col">Result</th>${['MIN', 'PTS', '2P', '3P', 'FT', 'REB', 'AST', 'STL', 'TOV', 'BLK', 'PF', '+/-', 'PIR'].map(th).join('')}</tr></thead><tbody>
 ${log.map((g) => { const l = g.line; return `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td><a href="${teamHref(g.opp.code)}"><span class="muted">${g.isHome ? 'vs' : 'at'}&nbsp;</span>${badge(g.opp.code, g.opp.tv)}${esc(g.opp.tv)}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td>
 <td class="num">${mmss(l.min)}${l.starter ? '<span class="muted">*</span>' : ''}</td><td class="num"><strong>${l.pts}</strong></td><td class="num">${l.fgm2}/${l.fga2}</td><td class="num">${l.fgm3}/${l.fga3}</td><td class="num">${l.ftm}/${l.fta}</td><td class="num">${l.reb}</td><td class="num">${l.ast}</td><td class="num">${l.stl}</td><td class="num">${l.tov}</td><td class="num">${l.blk}</td><td class="num">${l.pf}</td><td class="num">${l.pm > 0 ? '+' : ''}${l.pm}</td><td class="num">${l.pir}</td></tr>`; }).join('')}
-</tbody></table></div><p class="muted small">* started the game.</p></section>`, 'players.html', hero);
+</tbody></table></div><p class="muted small">* started the game.</p></section>
+<script type="application/json" id="share-data">${shareJson}</script>`, 'players.html', hero, { scripts: `<script src="share.js?v=${assetVersion()}" defer></script>` });
 }
 
 // Method page
@@ -563,6 +580,54 @@ writePage('method.html', 'How we calculate', `
 <p>${qualNote}</p>
 </section>`, 'method.html', cover({ kicker: 'Methodology', title: 'How we calculate', lede: 'Every number on this site comes from the official EuroLeague box scores. Nothing is typed in by hand, and every game is checked before it is published.' }));
 
+
+// ---- Lineups tool data: one row per team, game and lineup (stints merged) ----
+if (PBP) {
+  const K = BOX_KEYS.filter((k) => k !== 'pts');
+  const rows = new Map();
+  for (const { game, stints } of pbpOk) {
+    const A = game.home.code, B = game.away.code;
+    for (const st of stints) {
+      for (const [code, opp, ids, isHome, won] of [[A, B, st.home, 1, game.home.score > game.away.score ? 1 : 0], [B, A, st.away, 0, game.away.score > game.home.score ? 1 : 0]]) {
+        const key = `${game.gameCode}|${code}|${ids.join(',')}`;
+        if (!rows.has(key)) rows.set(key, { code, ids, g: game.gameCode, isHome, won, secs: 0, me: Object.fromEntries(K.map((k) => [k, 0])), op: Object.fromEntries(K.map((k) => [k, 0])) });
+        const r = rows.get(key); r.secs += st.secs;
+        for (const k of K) { r.me[k] += st.box[code][k]; r.op[k] += st.box[opp][k]; }
+      }
+    }
+  }
+  const usedIds = new Set([...rows.values()].flatMap((r) => r.ids));
+  const out = {
+    keys: K,
+    players: Object.fromEntries(players.filter((q) => usedIds.has(q.id)).map((q) => [q.id, [q.name, q.tv, playerHref(q.id)]])),
+    teams: Object.fromEntries(teams.map((t) => [t.code, [t.tv, titleCase(t.name), crests.get(t.code) || null, teamHref(t.code)]])),
+    games: Object.fromEntries(pbpOk.map(({ game }) => [game.gameCode, [game.date, game.round]])),
+    rows: [...rows.values()].map((r) => [r.code, r.ids.join(','), r.g, r.isHome, r.won, r.secs, ...K.map((k) => r.me[k]), ...K.map((k) => r.op[k])]),
+    note: `${pbpOk.length} of ${rawPbp.size} games`
+  };
+  mkdirSync(OUT, { recursive: true });
+  writeFileSync(join(OUT, 'lineups.json'), JSON.stringify(out));
+}
+writePage('lineups.html', 'Lineups', `<div id="lineups-app"><p class="muted">Loading…</p></div>`, 'lineups.html',
+  cover({ kicker: esc(roundLine), title: 'Lineups', lede: 'Every five-man unit, and every 2-, 3- and 4-man combination, built from the official play-by-play. Filter, sort any column, and switch between totals, per game, per 40 minutes and per 100 possessions.' }),
+  { scripts: `<script src="lineups.js?v=${assetVersion()}" defer></script>` });
+
+// ---- Glossary ----
+{
+  const all = GLOSSARY.flatMap(([, items]) => items);
+  const live = all.filter((x) => x[5] === 'live').length;
+  writePage('glossary.html', 'Glossary', `
+<section class="card"><div class="gl-bar"><input type="search" id="gl-q" placeholder="Search: TS%, usage, rebound…" aria-label="Search the glossary">
+<div class="tabs" role="group" aria-label="Show"><button type="button" data-gl="all" aria-pressed="true">All</button><button type="button" data-gl="live" aria-pressed="false">On HTA LAB</button><button type="button" data-gl="soon" aria-pressed="false">Coming</button></div></div></section>
+${GLOSSARY.map(([section, items]) => `<section class="card gl-sec"><h2>${esc(section)}</h2><dl class="gl">
+${items.map(([ab, name, def, formula, where, status]) => `<div class="gl-item" data-status="${status}" data-text="${esc((ab + ' ' + name + ' ' + def).toLowerCase())}"><dt><span class="gl-ab">${esc(ab)}</span><span class="gl-name">${esc(name)}</span><span class="chip ${status === 'live' ? 'hot' : ''}">${status === 'live' ? 'On HTA LAB' : 'Coming'}</span></dt>
+<dd><p>${esc(def)}</p>${formula ? `<code>${esc(formula)}</code>` : ''}<p class="muted small">${status === 'live' ? 'Where: ' : ''}${esc(where)}</p></dd></div>`).join('')}
+</dl></section>`).join('')}
+<p class="muted small">${live} of ${all.length} stats are on HTA LAB today. Formulas in detail: <a href="method.html">How we calculate</a>.</p>
+<script>(function(){var q=document.getElementById('gl-q'),mode='all';function f(){var t=q.value.toLowerCase();document.querySelectorAll('.gl-item').forEach(function(i){i.hidden=!((mode==='all'||i.dataset.status===mode)&&(!t||i.dataset.text.indexOf(t)>-1));});document.querySelectorAll('.gl-sec').forEach(function(s){s.hidden=!s.querySelector('.gl-item:not([hidden])');});}
+q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(function(b){b.addEventListener('click',function(){mode=b.dataset.gl;document.querySelectorAll('[data-gl]').forEach(function(x){x.setAttribute('aria-pressed',x===b);});f();});});})();</script>`,
+  'glossary.html', cover({ kicker: 'Reference', title: 'Glossary', lede: `Every stat in basketball analytics, explained in plain words with its formula. ${live} of ${all.length} are already on HTA LAB; the rest are marked as coming.` }));
+}
 
 // ---- Matchup (head-to-head) ----
 {
@@ -629,6 +694,8 @@ copyFileSync('static/style.css', join(OUT, 'style.css'));
 copyFileSync('static/app.js', join(OUT, 'app.js'));
 copyFileSync('static/internal.js', join(OUT, 'internal.js'));
 copyFileSync('static/matchup.js', join(OUT, 'matchup.js'));
+copyFileSync('static/lineups.js', join(OUT, 'lineups.js'));
+copyFileSync('static/share.js', join(OUT, 'share.js'));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   id: p.id, name: p.name, team: teamName.get(p.team) ? titleCase(teamName.get(p.team)) : p.team, tv: p.tv, gp: p.gp,
   stats: [['PTS', p.ppg], ['REB', p.rpg], ['AST', p.apg], ['STL', p.spg], ['BLK', p.bpg], ['PIR', p.pirpg], ['MIN', p.mpg], ['TS%', p.ts], ['USG%', p.usg]].map(([k, v]) => [k, f1(v)])

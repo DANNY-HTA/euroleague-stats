@@ -7,7 +7,7 @@
 // It re-downloads every game on each run, so corrections made by the league's
 // stat crew after a game always come through.
 
-import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, unlink, readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isFinishedGame } from '../lib/parse.mjs';
@@ -19,24 +19,44 @@ const BASE = 'https://live.euroleague.net/api';
 const OUT = join('data', 'raw', season);
 const MAX_GAMES = 600;          // a full season incl. playoffs is ~400 games
 const STOP_AFTER_MISSES = 20;   // stop when this many game codes in a row are not played yet
-const DELAY_MS = 150;           // be polite to the league's servers
+const DELAY_MS = 350;           // be polite to the league's servers
+const REFRESH_DAYS = 10;        // re-download games this recent (stat corrections); older ones are kept from the cache
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function getJson(url, tries = 3) {
+async function getJson(url, tries = 6) {
   for (let i = 1; i <= tries; i++) {
     try {
       const res = await fetch(url, { headers: { Accept: 'application/json' } });
       if (res.status === 404 || res.status === 204) return null;
+      if (res.status === 429 || res.status >= 500) {
+        // Too many requests / server busy: wait (as long as the server asks, else longer each time) and try again.
+        const ra = Number(res.headers.get('retry-after'));
+        const wait = Number.isFinite(ra) && ra > 0 ? ra * 1000 : 15000 * i;
+        if (i < tries) { console.log(`  Server busy (${res.status}), waiting ${Math.round(wait / 1000)}s…`); await sleep(wait); continue; }
+        throw new Error('HTTP ' + res.status);
+      }
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const text = await res.text();
       if (!text.trim()) return null;
       return JSON.parse(text);
     } catch (err) {
       if (i === tries) throw new Error(`${url} failed: ${err.message}`);
-      await sleep(1000 * i);
+      await sleep(2000 * i);
     }
   }
+}
+
+/** A saved game we can keep without downloading again: finished, has play-by-play, and older than REFRESH_DAYS. */
+async function cached(file) {
+  try {
+    const raw = JSON.parse(await readFile(file, 'utf8'));
+    if (!raw.pbp || !raw.header?.Date) return null;
+    const m = String(raw.header.Date).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    const played = Date.UTC(+m[3], +m[2] - 1, +m[1]);
+    return Date.now() - played > REFRESH_DAYS * 86400000 ? raw : null;
+  } catch { return null; }
 }
 
 async function main() {
@@ -44,8 +64,11 @@ async function main() {
   let saved = 0, misses = 0, live = 0;
   const keep = new Set();
 
+  let reused = 0;
   for (let code = 1; code <= MAX_GAMES; code++) {
     const q = `gamecode=${code}&seasoncode=${season}`;
+    const fileName = `${String(code).padStart(3, '0')}.json`;
+    if (await cached(join(OUT, fileName))) { keep.add(fileName); saved++; reused++; misses = 0; continue; }
     const header = await getJson(`${BASE}/Header?${q}`);
     await sleep(DELAY_MS);
 
@@ -114,7 +137,7 @@ async function main() {
     console.log(`Player details saved: ${people.length} roster entries`);
   }
 
-  console.log(`Done: ${saved} finished games saved for ${season}` + (live ? ` (${live} live game(s) skipped)` : ''));
+  console.log(`Done: ${saved} finished games for ${season} (${saved - reused} downloaded, ${reused} kept from earlier runs)` + (live ? `, ${live} live game(s) skipped` : ''));
   if (saved === 0) {
     console.error('No games downloaded. The feed may be down or the season code may be wrong.');
     process.exit(1);
