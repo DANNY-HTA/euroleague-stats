@@ -664,17 +664,23 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
   mkdirSync(join(OUT, 'internal'), { recursive: true });
   for (const f of encFiles) {
     const text = readFileSync(join('internal', f), 'utf8');
-    try { const o = JSON.parse(text); if (o.v !== 1 || !o.iv || !o.ct) throw new Error('not an encrypted document'); }
+    try { const o = JSON.parse(text); if (![1, 2].includes(o.v) || !o.iv || !o.ct) throw new Error('not an encrypted document'); }
     catch (e) { console.warn(`Skipping internal/${f}: ${e.message}`); continue; }
     writeFileSync(join(OUT, 'internal', f), text);
+  }
+  // Encrypted file parts (binary). Published only if their description file is published.
+  const partFiles = existsSync('internal') ? readdirSync('internal').filter((f) => /^[a-z0-9][a-z0-9-]{0,80}-\d{1,3}\.part$/.test(f)) : [];
+  for (const f of partFiles) {
+    const owner = f.replace(/-\d{1,3}\.part$/, '.enc');
+    if (encFiles.includes(owner)) copyFileSync(join('internal', f), join(OUT, 'internal', f));
   }
   const published = encFiles.filter((f) => existsSync(join(OUT, 'internal', f)));
   writeFileSync(join(OUT, 'internal', 'index.json'), JSON.stringify(published));
   // Warn loudly if anything that is not an encrypted document was put in the folder.
   if (existsSync('internal')) for (const f of readdirSync('internal')) {
-    if (f !== 'README.md' && !f.endsWith('.enc')) console.warn(`WARNING: internal/${f} is not an encrypted .enc file. It is NOT published, but it IS visible in the public GitHub repository. Delete it there.`);
+    if (f !== 'README.md' && !f.endsWith('.enc') && !f.endsWith('.part')) console.warn(`WARNING: internal/${f} is not an encrypted .enc file. It is NOT published, but it IS visible in the public GitHub repository. Delete it there.`);
   }
-  const clientCfg = JSON.stringify({ salt: IC.salt, iterations: IC.iterations, uploadUrl: IC.repoUploadUrl, categories: IC.categories, teams: teams.map((t) => titleCase(t.name)).sort() }).replace(/</g, '\\u003c');
+  const clientCfg = JSON.stringify({ salt: IC.salt, iterations: IC.iterations, uploadUrl: IC.repoUploadUrl, repo: IC.repo, categories: IC.categories, teams: teams.map((t) => titleCase(t.name)).sort() }).replace(/</g, '\\u003c');
   const extra = {
     head: '<meta name="robots" content="noindex, nofollow">',
     scripts: `<script>window.HTA_INTERNAL = ${clientCfg};</script>\n<script src="internal.js?v=${assetVersion()}" defer></script>`

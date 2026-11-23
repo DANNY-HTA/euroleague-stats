@@ -330,3 +330,10 @@ nav a.nav-internal::before { content: ""; display: inline-block; width: 11px; he
 .gl-item .chip { font-size: 11px; padding: 5px 9px; }
 .gl-item dd { margin: 8px 0 0; } .gl-item dd p { margin: 0 0 6px; }
 .gl-item code { display: inline-block; background: var(--soft); border-radius: 6px; padding: 4px 8px; font: 600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
+.gh summary { cursor: pointer; font: 800 18px/1.2 var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--red); }
+.gh[open] summary { margin-bottom: 10px; }
+.gh ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.6; }
+.gh a { color: var(--red); text-decoration: underline; }
+.gh input { width: 100%; font: 500 15px var(--body); padding: 12px 14px; min-height: 46px; border: 1.5px solid #d5d8de; border-radius: 10px; margin: 4px 0 10px; }
+.gh label { display: block; font: 700 13px/1.2 var(--display); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+#internal-app { display: flex; flex-direction: column; gap: 22px; }
