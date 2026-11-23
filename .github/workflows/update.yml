@@ -1,0 +1,51 @@
+# Updates the website automatically.
+# Runs after every night of games, whenever code changes, and when you press
+# "Run workflow" on the Actions tab. If any accuracy check fails, the run stops,
+# GitHub emails you, and the site keeps showing the last correct numbers.
+
+name: Update site
+
+on:
+  schedule:
+    - cron: "47 0 * * *"   # 02:47 Sofia time (winter), after the evening games
+    - cron: "47 6 * * *"   # 08:47 Sofia time, picks up morning corrections
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test the formulas and checks
+        run: npm test
+      - name: Download the official box scores
+        run: npm run fetch
+      - name: Check accuracy and build the site
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
