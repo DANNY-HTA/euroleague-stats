@@ -77,26 +77,33 @@ async function main() {
     if (f.endsWith('.json') && !f.startsWith('_') && !keep.has(f)) await unlink(join(OUT, f));
   }
 
-  // Club list with the official crest images. Optional: the site still builds without it.
+  // Club list (with official crests) and each club's roster (age, height, position,
+  // nationality). Optional: the site still builds without them. Photos are not saved.
+  let clubs = [];
   try {
-    const clubs = await getJson(`https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/clubs`);
-    const list = (clubs?.data || []).map((c) => ({
+    const raw = await getJson(`https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/clubs`);
+    clubs = (raw?.data || []).map((c) => ({
       code: c.code, name: c.name, tvCode: c.tvCode,
       crest: c.images?.crest || c['images.crest'] || null
     }));
-    await writeFile(join(OUT, '_clubs.json'), JSON.stringify(list));
-    console.log(`Club crests saved for ${list.filter((c) => c.crest).length} clubs`);
+    await writeFile(join(OUT, '_clubs.json'), JSON.stringify(clubs));
+    console.log(`Club crests saved for ${clubs.filter((c) => c.crest).length} clubs`);
   } catch (err) {
-    console.warn('Could not download club crests (the site will show team codes instead): ' + err.message);
+    console.warn('Could not download the club list (the site will show team codes instead): ' + err.message);
   }
 
-  // Player details: age, height, position, nationality. Optional. Photos are not saved.
-  try {
-    const people = slimPeople(await getJson(`https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/people`));
+  const people = [];
+  const sources = [
+    ...clubs.map((c) => `https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/clubs/${encodeURIComponent(c.code)}/people`),
+    `https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/people`
+  ];
+  for (const url of sources) {
+    try { people.push(...slimPeople(await getJson(url))); } catch (err) { console.warn(`Could not download ${url}: ${err.message}`); }
+    await sleep(DELAY_MS);
+  }
+  if (people.length) {
     await writeFile(join(OUT, '_people.json'), JSON.stringify(people));
-    console.log(`Player details saved for ${people.length} roster entries`);
-  } catch (err) {
-    console.warn('Could not download player details (player pages will show stats only): ' + err.message);
+    console.log(`Player details saved: ${people.length} roster entries`);
   }
 
   console.log(`Done: ${saved} finished games saved for ${season}` + (live ? ` (${live} live game(s) skipped)` : ''));

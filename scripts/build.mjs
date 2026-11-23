@@ -260,6 +260,12 @@ ${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td
 }
 
 // ---- Player pages ----
+{
+  const matched = players.filter((p) => findPerson(peopleIndex, p)).length;
+  console.log(`Player details matched for ${matched} of ${players.length} players`);
+  const missing = players.filter((p) => !findPerson(peopleIndex, p)).slice(0, 10).map((p) => `${p.name} (${p.id})`);
+  if (missing.length && peopleIndex.byId.size) console.log('  No details for: ' + missing.join(', ') + (players.length - matched > 10 ? ', …' : ''));
+}
 const logs = playerGameLogs(games);
 const today = new Date().toISOString().slice(0, 10);
 const pct = (m, a) => (a > 0 ? f1(100 * m / a) : '–');
