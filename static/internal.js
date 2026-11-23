@@ -127,17 +127,15 @@
     forget(); lockScreen(open);
   }
 
-  async function openFile(key, d, status) {
+  /** Unlocks an attached file and returns a local link to it (no pop-ups: browsers block those after a wait). */
+  async function unlockFile(key, d, status) {
     let parts;
     if (d.data) parts = [unb64(d.data)];
     else {
       parts = [];
       for (let n = 1; n <= d.parts; n++) { status(`Opening… ${n} of ${d.parts}`); parts.push(await decryptPart(key, d.id, n, await fetchBuf(`${d.id}-${n}.part`))); }
     }
-    const url = URL.createObjectURL(new Blob(parts, { type: d.mime || 'application/octet-stream' }));
-    if (/^(application\/pdf|image\/|text\/plain|video\/)/.test(d.mime || '')) window.open(url, '_blank', 'noopener');
-    else { const a = el('a', { href: url, download: d.fileName || 'document' }); document.body.append(a); a.click(); a.remove(); }
-    setTimeout(() => URL.revokeObjectURL(url), 120000);
+    return URL.createObjectURL(new Blob(parts, { type: d.mime || 'application/octet-stream' }));
   }
 
   async function showDocs(key, files) {
@@ -160,13 +158,11 @@
     function card(d) {
       const btn = el('button', { type: 'button', class: 'btn ghost' }, d.kind === 'file' ? 'Open file' : 'Read');
       btn.addEventListener('click', async () => {
-        if (d.kind === 'file') {
-          const label = btn.textContent; btn.disabled = true;
-          try { await openFile(key, d, (t) => { btn.textContent = t; }); } catch (err) { alertBox('Could not open the file: ' + err.message); }
-          btn.disabled = false; btn.textContent = label;
-          if (!d.text) return;
-        }
-        showText(d);
+        if (d.kind !== 'file') { showDoc(d, null); return; }
+        const label = btn.textContent; btn.disabled = true;
+        try { showDoc(d, await unlockFile(key, d, (t) => { btn.textContent = t; })); }
+        catch (err) { alertBox('Could not open the file: ' + err.message); }
+        btn.disabled = false; btn.textContent = label;
       });
       return el('article', { class: 'doc' },
         el('div', { class: 'doc-top' }, el('span', { class: 'chip hot' }, d.category || 'Document'), el('span', { class: 'muted small' }, d.date || '')),
@@ -175,12 +171,27 @@
         btn);
     }
     function alertBox(t) { viewer.hidden = false; viewer.replaceChildren(el('p', { class: 'form-msg' }, t)); }
-    function showText(d) {
+    let lastUrl = null;
+    function showDoc(d, url) {
+      if (lastUrl && lastUrl !== url) URL.revokeObjectURL(lastUrl);
+      lastUrl = url;
+      const mime = d.mime || '';
+      let preview = null;
+      if (url && mime === 'application/pdf') preview = el('iframe', { class: 'pdf-frame', src: url, title: d.title || 'Document' });
+      else if (url && mime.startsWith('image/')) preview = el('img', { class: 'img-frame', src: url, alt: d.title || '' });
+      else if (url && mime.startsWith('video/')) preview = el('video', { class: 'img-frame', src: url, controls: true });
       viewer.hidden = false;
-      viewer.replaceChildren(
-        el('div', { class: 'viewer-head' }, el('div', {}, el('span', { class: 'chip hot' }, d.category || 'Document'), el('h2', {}, d.title || 'Untitled'), el('p', { class: 'muted' }, [d.date, d.opponent && 'Opponent: ' + d.opponent, d.author && 'By ' + d.author].filter(Boolean).join(' · '))),
-          el('button', { type: 'button', class: 'btn ghost', onclick: () => { viewer.hidden = true; } }, 'Close')),
-        el('div', { class: 'viewer-body' }, d.text || ''));
+      viewer.replaceChildren(...[
+        el('div', { class: 'viewer-head' },
+          el('div', {}, el('span', { class: 'chip hot' }, d.category || 'Document'), el('h2', {}, d.title || 'Untitled'),
+            el('p', { class: 'muted' }, [d.date, d.opponent && 'Opponent: ' + d.opponent, d.author && 'By ' + d.author].filter(Boolean).join(' · '))),
+          el('div', { class: 'row-btns' },
+            url ? el('a', { class: 'btn', href: url, target: '_blank', rel: 'noopener' }, 'Open in new tab') : null,
+            url ? el('a', { class: 'btn ghost', href: url, download: d.fileName || 'document' }, 'Download') : null,
+            el('button', { type: 'button', class: 'btn ghost', onclick: () => { viewer.hidden = true; } }, 'Close'))),
+        d.text ? el('div', { class: 'viewer-body' }, d.text) : null,
+        preview,
+        url && !preview ? el('p', { class: 'muted' }, 'This file type can’t be shown in the page. Use Download to open it.') : null].filter(Boolean));
       viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     root.replaceChildren(
