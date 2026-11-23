@@ -51,6 +51,11 @@ tr:target td { background: #fdebdd; }
 .dot.big text { font-size: 10px; font-weight: 700; fill: #fff; pointer-events: none; }
 .dot:hover circle, .dot:focus circle, .dot.on circle { fill: var(--accent); fill-opacity: 1; stroke: var(--ink); }
 .dot.dim { opacity: .12; }
+.dot.big circle.crest-bg { fill: #fff; stroke: #d5d9df; stroke-width: 1.5; }
+.dot.big:hover circle.crest-bg, .dot.big:focus circle.crest-bg { fill: #fff; stroke: var(--accent); stroke-width: 3; }
+.crest { width: 22px; height: 22px; object-fit: contain; vertical-align: middle; margin-right: 8px; }
+.crest.big { width: 56px; height: 56px; margin-right: 14px; }
+.team-title { display: flex; align-items: center; }
 .hover-info { min-height: 22px; margin: 10px 0 0 !important; }
 .controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 16px; align-items: center; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; }

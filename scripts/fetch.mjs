@@ -73,7 +73,20 @@ async function main() {
 
   // Remove files for games that no longer exist in the feed (e.g. a game code that was reassigned).
   for (const f of await readdir(OUT)) {
-    if (f.endsWith('.json') && !keep.has(f)) await unlink(join(OUT, f));
+    if (f.endsWith('.json') && !f.startsWith('_') && !keep.has(f)) await unlink(join(OUT, f));
+  }
+
+  // Club list with the official crest images. Optional: the site still builds without it.
+  try {
+    const clubs = await getJson(`https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/clubs`);
+    const list = (clubs?.data || []).map((c) => ({
+      code: c.code, name: c.name, tvCode: c.tvCode,
+      crest: c.images?.crest || c['images.crest'] || null
+    }));
+    await writeFile(join(OUT, '_clubs.json'), JSON.stringify(list));
+    console.log(`Club crests saved for ${list.filter((c) => c.crest).length} clubs`);
+  } catch (err) {
+    console.warn('Could not download club crests (the site will show team codes instead): ' + err.message);
   }
 
   console.log(`Done: ${saved} finished games saved for ${season}` + (live ? ` (${live} live game(s) skipped)` : ''));

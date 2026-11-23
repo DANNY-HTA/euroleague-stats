@@ -18,8 +18,19 @@ const sample = args.includes('--sample');
 const OUT = 'site';
 
 if (!existsSync(dataDir)) { console.error(`No data in ${dataDir}. Run "npm run fetch" first.`); process.exit(1); }
-const files = readdirSync(dataDir).filter((f) => f.endsWith('.json')).sort();
+const files = readdirSync(dataDir).filter((f) => f.endsWith('.json') && !f.startsWith('_')).sort();
 const games = files.map((f) => parseGame(JSON.parse(readFileSync(join(dataDir, f)))));
+
+// Official club crests (optional). Only https image links are used.
+const crests = new Map();
+try {
+  for (const c of JSON.parse(readFileSync(join(dataDir, '_clubs.json')))) {
+    if (c.code && typeof c.crest === 'string' && /^https:\/\/[^\s"'<>]+$/.test(c.crest)) crests.set(c.code, c.crest);
+  }
+} catch { /* no crest file: team codes are shown instead */ }
+const badge = (code, tv) => crests.has(code)
+  ? `<img class="crest" src="${esc(crests.get(code))}" alt="" width="22" height="22" loading="lazy">`
+  : `<span class="code">${esc(tv)}</span>`;
 
 // ---- 1. Accuracy checks: stop if anything is wrong ----
 const { errors, warnings } = validateSeason(games);
@@ -47,7 +58,7 @@ const titleCase = (s) => s.split(/\s+/).map((w) => (KEEP_UPPER.has(w) || w.lengt
 // ---- 3. Pages ----
 const standingsRows = teams.map((t) => `<tr>
 <td class="num muted">${t.rank}</td>
-<td><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html"><span class="code">${esc(t.tv)}</span> ${esc(titleCase(t.name))}</a></td>
+<td><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a></td>
 <td class="num">${t.w}–${t.l}</td>
 <td class="num">${f1(t.ortg)}</td>
 <td class="num">${f1(t.drtg)}</td>
@@ -55,7 +66,7 @@ const standingsRows = teams.map((t) => `<tr>
 </tr>`).join('');
 
 const teamChart = scatter(teams.map((t) => ({
-  x: t.ortg, y: t.drtg, label: t.tv,
+  x: t.ortg, y: t.drtg, label: t.tv, img: crests.get(t.code),
   title: `${titleCase(t.name)}: ${t.w}–${t.l}, offensive rating ${f1(t.ortg)}, defensive rating ${f1(t.drtg)}, net ${signed(t.net)}`
 })), { xLabel: 'Points scored per 100 possessions', yLabel: 'Points allowed per 100', invertY: true, big: true, avgX: avg(teams, 'ortg'), avgY: avg(teams, 'drtg'), cornerGood: 'Good at both ends', cornerBad: 'Struggling at both ends' });
 
@@ -134,7 +145,7 @@ const tcols = [['name', 'Team', 's'], ['gp', 'GP'], ['w', 'W'], ['l', 'L'], ['pp
 writePage('teams.html', 'Teams', `
 <section class="hero"><h1>Teams</h1><p>${esc(cfg.seasonLabel)} team stats. Click a column to sort, or a team for its scouting report.</p></section>
 <section class="card"><div class="scroll"><table class="sortable"><thead><tr>${tcols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}><button type="button" data-key="${k}">${l}</button></th>`).join('')}</tr></thead>
-<tbody>${teams.map((t) => `<tr>${tcols.map(([k, , ty]) => ty === 's' ? `<td data-v="${esc(t.name)}"><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html"><span class="code">${esc(t.tv)}</span> ${esc(titleCase(t.name))}</a></td>` : `<td class="num" data-v="${t[k].toFixed(3)}">${['gp', 'w', 'l'].includes(k) ? t[k] : k === 'net' ? signed(t[k]) : f1(t[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`, 'teams.html');
+<tbody>${teams.map((t) => `<tr>${tcols.map(([k, , ty]) => ty === 's' ? `<td data-v="${esc(t.name)}"><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a></td>` : `<td class="num" data-v="${t[k].toFixed(3)}">${['gp', 'w', 'l'].includes(k) ? t[k] : k === 'net' ? signed(t[k]) : f1(t[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`, 'teams.html');
 
 // Scouting page for every team
 const ord = (n) => {
@@ -200,7 +211,7 @@ for (const t of teams) {
   const last5 = list.slice(0, 5).map((g) => (g.win ? 'W' : 'L')).join(' ');
   writePage(teamHref(t.code), titleCase(t.name), `
 <section class="hero"><p class="muted"><a href="teams.html">Teams</a> / Scouting report</p>
-<h1>${esc(titleCase(t.name))}</h1>
+<h1 class="team-title">${crests.has(t.code) ? `<img class="crest big" src="${esc(crests.get(t.code))}" alt="" width="56" height="56">` : ''}${esc(titleCase(t.name))}</h1>
 <p>${t.w}–${t.l} · ${ord(t.rank)} in the standings · Home ${t.home} · Away ${t.away} · Last 5: ${last5}</p></section>
 <div class="row">
 <section class="card"><h2>Scouting notes</h2><p class="muted">Generated from this season's box scores. Ranks are out of ${N} teams.</p>
@@ -238,7 +249,7 @@ ${roster.map((p) => `<tr><td><a href="players.html#${esc(p.id)}">${esc(p.name)}<
 </tbody></table></div></section>
 <section class="card"><h2>Results</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
-${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}"><span class="code">${esc(g.opp.tv)}</span> ${esc(titleCase(g.opp.name))}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td></tr>`).join('')}
+${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}">${badge(g.opp.code, g.opp.tv)} ${esc(titleCase(g.opp.name))}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td></tr>`).join('')}
 </tbody></table></div></section>`, 'teams.html');
 }
 
