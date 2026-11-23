@@ -11,6 +11,7 @@ import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isFinishedGame } from '../lib/parse.mjs';
+import { slimPeople } from '../lib/people.mjs';
 
 const config = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 const season = process.argv[2] || config.seasonCode;
@@ -87,6 +88,15 @@ async function main() {
     console.log(`Club crests saved for ${list.filter((c) => c.crest).length} clubs`);
   } catch (err) {
     console.warn('Could not download club crests (the site will show team codes instead): ' + err.message);
+  }
+
+  // Player details: age, height, position, nationality. Optional. Photos are not saved.
+  try {
+    const people = slimPeople(await getJson(`https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/people`));
+    await writeFile(join(OUT, '_people.json'), JSON.stringify(people));
+    console.log(`Player details saved for ${people.length} roster entries`);
+  } catch (err) {
+    console.warn('Could not download player details (player pages will show stats only): ' + err.message);
   }
 
   console.log(`Done: ${saved} finished games saved for ${season}` + (live ? ` (${live} live game(s) skipped)` : ''));

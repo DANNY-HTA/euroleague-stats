@@ -19,7 +19,7 @@
       g.classList.add('on');
       const p = byId[g.dataset.id];
       if (!p) { detail.textContent = g.getAttribute('aria-label'); return; }
-      detail.innerHTML = `<h3>${esc(p.name)}</h3><p class="muted">${esc(p.team)} · ${p.gp} games</p><dl>${p.stats.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl><p><a href="#${esc(p.id)}">Find in table ↓</a></p>`;
+      detail.innerHTML = `<h3>${esc(p.name)}</h3><p class="muted">${esc(p.team)} · ${p.gp} games</p><dl>${p.stats.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl><p><a href="player-${String(p.id).replace(/[^A-Za-z0-9]/g, '')}.html"><strong>Full player page →</strong></a></p>`;
     };
     document.querySelectorAll('.charts .dot').forEach((g) => {
       g.addEventListener('mouseenter', () => pick(g));

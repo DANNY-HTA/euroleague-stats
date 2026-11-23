@@ -82,3 +82,9 @@ tbody th[scope="row"] { text-transform: none; letter-spacing: 0; font-size: 14px
 .prose { max-width: 820px; } .prose h2 { margin-top: 20px; } .prose dt { font-weight: 700; margin-top: 10px; } .prose dd { margin: 2px 0 0; color: #4b5361; }
 .foot { color: var(--muted); font-size: 13px; padding-top: 16px; padding-bottom: 40px; border-top: 1px solid var(--line); }
 .foot a { text-decoration: underline; }
+.bio { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px 18px; margin: 8px 0 0; }
+.bio dt { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.bio dd { margin: 2px 0 0; font-size: 17px; font-weight: 600; }
+.bio dd a { display: inline-flex; align-items: center; }
+.highs dd { font-size: 24px; } .highs .small { display: block; margin-top: 0 !important; }
+.kpis + .kpis { margin-top: 0; }

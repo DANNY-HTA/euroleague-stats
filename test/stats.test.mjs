@@ -146,3 +146,25 @@ test('overtime game is accepted', () => {
   const g = parseGame(rawGame({ a, b, codeA: 'AAA', codeB: 'BBB' }));
   assert.deepEqual(validateGame(g), []);
 });
+
+import { normId, slimPeople, indexPeople, findPerson, ageOn } from '../lib/people.mjs';
+
+test('player details: matching, age, no photos kept', () => {
+  assert.equal(normId('P007200   '), '007200');
+  const raw = { data: [
+    { type: 'A', person: { code: 'CTB', name: 'COLLET, VINCENT' } },
+    { type: 'J', active: false, startDate: '2026-07-01', positionName: 'Guard', dorsal: '0', person: { code: '007200', name: 'LARKIN, SHANE', birthDate: '1992-10-02T00:00:00', height: 180, weight: 80, country: { name: 'Turkey' }, birthCountry: { name: 'United States of America' }, images: { headshot: 'x.png' } }, club: { code: 'OLD' }, images: { action: 'y.png' } },
+    { type: 'J', active: true, startDate: '2026-09-01', positionName: 'Guard', dorsal: '0', person: { code: '007200', name: 'LARKIN, SHANE', birthDate: '1992-10-02T00:00:00', height: 180, weight: 80, country: { name: 'Turkey' } }, club: { code: 'IST' } }
+  ] };
+  const list = slimPeople(raw);
+  assert.equal(list.length, 2);                                   // coach dropped
+  assert.ok(!JSON.stringify(list).includes('png'));               // no images stored
+  const idx = indexPeople(list);
+  const p = findPerson(idx, { id: 'P007200   ' });
+  assert.equal(p.club, 'IST');                                    // active entry wins
+  assert.equal(findPerson(idx, { id: 'X', rawName: 'LARKIN, SHANE' }).club, 'IST');
+  assert.equal(findPerson(idx, { id: 'X', rawName: 'NOBODY' }), null);
+  assert.equal(ageOn('1992-10-02', '2026-11-23'), 34);
+  assert.equal(ageOn('1992-12-02', '2026-11-23'), 33);            // birthday not reached yet
+  assert.equal(ageOn(null, '2026-11-23'), null);
+});
