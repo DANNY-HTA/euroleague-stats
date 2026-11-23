@@ -195,7 +195,7 @@ for (const t of teams) {
   curTeam = t;
   const list = teamGames(games, t.code);
   const qa = quarterAverages(list);
-  const roster = players.filter((p) => p.team === t.code).sort((a, b) => b.mpg - a.mpg);
+  const roster = players.filter((p) => p.team === t.code).sort((a, b) => b.totalMin - a.totalMin);
   const notes = scoutNotes(t, roster, qa);
   const last5 = list.slice(0, 5).map((g) => (g.win ? 'W' : 'L')).join(' ');
   writePage(teamHref(t.code), titleCase(t.name), `
@@ -232,7 +232,7 @@ ${factorRow('2P%', 'twoPct', 'twoPctD')}
 ${factorRow('FT%', 'ftPct', null)}
 ${factorRow('Assisted baskets %', 'astRate', null)}
 </tbody></table></div></section>
-<section class="card"><h2>Rotation</h2><p class="muted">Sorted by minutes. Season stats for players whose most recent game was for this team.</p>
+<section class="card"><h2>Rotation</h2><p class="muted">Sorted by total minutes played. Season stats for players whose most recent game was for this team.</p>
 <div class="scroll"><table><thead><tr>${['Player', 'GP', 'GS', 'MIN', 'PTS', 'REB', 'AST', 'STL', 'TOV', 'PIR', 'USG%', 'TS%', '3PA', '3P%', 'FT%'].map((h, i) => `<th scope="col"${i ? ' class="num"' : ''}>${h}</th>`).join('')}</tr></thead><tbody>
 ${roster.map((p) => `<tr><td><a href="players.html#${esc(p.id)}">${esc(p.name)}</a></td><td class="num">${p.gp}</td><td class="num">${p.gs}</td><td class="num">${f1(p.mpg)}</td><td class="num">${f1(p.ppg)}</td><td class="num">${f1(p.rpg)}</td><td class="num">${f1(p.apg)}</td><td class="num">${f1(p.spg)}</td><td class="num">${f1(p.tpg)}</td><td class="num">${f1(p.pirpg)}</td><td class="num">${f1(p.usg)}</td><td class="num">${f1(p.ts)}</td><td class="num">${f1(p.threeApg)}</td><td class="num">${f1(p.threePct)}</td><td class="num">${f1(p.ftPct)}</td></tr>`).join('')}
 </tbody></table></div></section>

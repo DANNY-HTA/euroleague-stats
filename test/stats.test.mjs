@@ -15,6 +15,8 @@ test('parsing helpers', () => {
   assert.equal(formatName('LARKIN, SHANE'), 'Shane Larkin');
   assert.equal(formatName('DE COLO, NANDO'), 'Nando De Colo');
   assert.equal(formatName("O'NEALE, ROYCE"), "Royce O'Neale");
+  assert.equal(formatName('MILLER-MCINTYRE, CODI'), 'Codi Miller-McIntyre');
+  assert.equal(formatName('MCCOLLUM, KJ'), 'Kj McCollum');
   assert.equal(parseDate('30/09/2025'), '2025-09-30');
 });
 
