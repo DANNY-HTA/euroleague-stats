@@ -158,6 +158,7 @@ test('player details: matching, age, no photos kept', () => {
   ] };
   const list = slimPeople(raw);
   assert.equal(list.length, 2);                                   // coach dropped
+  assert.equal(slimPeople(raw.data).length, 2);                   // plain list works too
   assert.ok(!JSON.stringify(list).includes('png'));               // no images stored
   const idx = indexPeople(list);
   const p = findPerson(idx, { id: 'P007200   ' });

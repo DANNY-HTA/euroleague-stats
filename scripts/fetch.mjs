@@ -98,7 +98,11 @@ async function main() {
     `https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/people`
   ];
   for (const url of sources) {
-    try { people.push(...slimPeople(await getJson(url))); } catch (err) { console.warn(`Could not download ${url}: ${err.message}`); }
+    try {
+      const got = slimPeople(await getJson(url));
+      people.push(...got);
+      console.log(`  ${got.length} players from ${url.split('/seasons/')[1]}`);
+    } catch (err) { console.warn(`Could not download ${url}: ${err.message}`); }
     await sleep(DELAY_MS);
   }
   if (people.length) {
