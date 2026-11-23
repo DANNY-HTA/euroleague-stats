@@ -54,3 +54,19 @@ The EuroLeague's public live feed (`live.euroleague.net`). It's the feed behind
 euroleaguebasketball.net, but it has no official documentation and could change
 without notice. If the feed changes, the accuracy checks fail and the site stops
 updating instead of showing wrong numbers.
+
+## HAPOEL – INTERNAL (staff documents)
+
+1. On the website, open **Hapoel Internal → + Add document**.
+2. The first time, choose the team password: at least 12 characters, ideally a
+   long passphrase. Everyone on the staff uses the same password.
+3. Fill in the title, category and notes, and/or attach a file (up to 18 MB),
+   then click **Lock and download**. Your browser saves a locked `.enc` file.
+4. Click **Open upload folder on GitHub**, drag the `.enc` file in and click
+   **Commit changes**. It appears in the internal section in about 3 minutes.
+
+Documents are locked in the browser before they leave your computer, so only
+locked files are stored. **Never upload an original document to GitHub**: the
+repository is public. To remove a document, delete its `.enc` file in the
+`internal` folder on GitHub. If someone leaves the staff, choose a new password,
+re-add the documents with it, and delete the old `.enc` files.
