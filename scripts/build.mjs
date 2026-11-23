@@ -61,6 +61,26 @@ const titleCase = (s) => s.split(/\s+/).map((w) => (KEEP_UPPER.has(w) || w.lengt
   ? w : w.charAt(0) + w.slice(1).toLowerCase())).join(' ');
 
 // ---- 3. Pages ----
+const ord = (n) => {
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  return n + (teen ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'));
+};
+const N = teams.length;
+const lg = (k) => avg(teams, k);
+const safe = (code) => String(code).replace(/[^A-Za-z0-9]/g, '');
+const teamHref = (code) => `team-${safe(code)}.html`;
+const rankTag = (r, total = N) => { const band = Math.max(3, Math.round(total * 0.1)); return `<span class="rank ${r <= band ? 'top' : r > total - band ? 'bottom' : ''}">${ord(r)}</span>`; };
+const mmss = (m) => { const t = Math.round(m * 60); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+
+const crestImg = (code, size = 'big') => crests.has(code) ? `<img class="crest ${size}" src="${esc(crests.get(code))}" alt="" width="56" height="56">` : '';
+const coverCrest = (code) => crests.has(code) ? `<div class="side cover-crest"><img src="${esc(crests.get(code))}" alt=""></div>` : '';
+const cover = ({ crumbs = '', kicker = '', title, meta = '', lede = '', strip = [], side = '' }) => `<section class="cover"><div class="wrap"><div>
+${crumbs ? `<div class="crumbs">${crumbs}</div>` : ''}${kicker ? `<span class="kicker">${kicker}</span>` : ''}
+<h1>${title}</h1>${meta ? `<div class="cover-meta">${meta}</div>` : ''}${lede ? `<p class="cover-lede">${lede}</p>` : ''}
+${strip.length ? `<div class="strip">${strip.map(([b, t]) => `<span><b>${b}</b> ${t}</span>`).join('')}</div>` : ''}
+</div>${side}</div></section>`;
+const roundLine = info.lastDate ? `Through ${info.lastRound ? `Round ${info.lastRound}, ` : ''}${fmtDate(info.lastDate)}` : 'Season';
+
 const standingsRows = teams.map((t) => `<tr>
 <td class="num muted">${t.rank}</td>
 <td class="team"><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a></td>
@@ -85,18 +105,37 @@ ${list.map((p, i) => `<li><span class="muted num">${i + 1}</span><div><a href="$
 
 const qualNote = `Players averaging at least ${cfg.minMinutesForLeaders} minutes and playing ${Math.round(cfg.minGamesShare * 100)}% of their team's games.`;
 
+const lead = teams[0];
+const topBy = (k) => leaders(qual, k, 1)[0];
+const bestO = [...teams].sort((x, y) => y.ortg - x.ortg)[0], bestD = [...teams].sort((x, y) => x.drtg - y.drtg)[0];
+const leaderTile = (k, label, sub) => {
+  const p = topBy(k);
+  if (!p) return '';
+  return `<a class="tile" href="${playerHref(p.id)}"><span class="label">${label}</span><span class="big">${f1(p[k])}</span><span class="sub">${sub}</span>
+<span class="chip hot">${esc(p.name)} · ${esc(p.tv)}</span></a>`;
+};
+const homeHero = cover({
+  kicker: esc(roundLine),
+  title: esc(cfg.seasonLabel),
+  lede: lead ? `<strong>${esc(titleCase(lead.name))}</strong> lead the league at ${lead.w}–${lead.l}. ` +
+    (topBy('pirpg') ? `<strong>${esc(topBy('pirpg').name)}</strong> tops the PIR chart at ${f1(topBy('pirpg').pirpg)} a game.` : '') : '',
+  strip: [[info.games, 'games played'], [esc(bestO?.tv || ''), `best offence, ${f1(bestO?.ortg)}`], [esc(bestD?.tv || ''), `best defence, ${f1(bestD?.drtg)}`]],
+  side: lead ? coverCrest(lead.code) : ''
+});
 writePage('index.html', cfg.seasonLabel, `
-<section class="hero">
-<h1>${esc(cfg.seasonLabel)}</h1>
-<p>Every team placed by how well it scores and how well it defends, per 100 possessions.</p>
-</section>
+<div class="tiles">
+${leaderTile('ppg', 'Scoring', 'points per game, 1st in the league')}
+${leaderTile('pirpg', 'All-round', 'PIR per game, 1st in the league')}
+${leaderTile('rpg', 'Rebounding', 'rebounds per game, 1st in the league')}
+${leaderTile('apg', 'Playmaking', 'assists per game, 1st in the league')}
+</div>
 <div class="row">
-<section class="card"><h2>Standings</h2>
-<div class="scroll"><table><thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col" class="num">W–L</th><th scope="col" class="num" title="Points scored per 100 possessions">ORtg</th><th scope="col" class="num" title="Points allowed per 100 possessions">DRtg</th><th scope="col" class="num">Net</th></tr></thead>
+<section class="card"><h2>Standings</h2><p class="muted">Top 6 go to the playoffs, 7–10 to the play-in.</p>
+<div class="scroll"><table class="standings"><thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col" class="num">W–L</th><th scope="col" class="num" title="Points scored per 100 possessions">ORtg</th><th scope="col" class="num" title="Points allowed per 100 possessions">DRtg</th><th scope="col" class="num">Net</th></tr></thead>
 <tbody>${standingsRows}</tbody></table></div>
 <p class="muted small">Ranked by wins, then point difference. Official tiebreakers use head-to-head results.</p>
 </section>
-<section class="card wide"><h2>Who scores, who defends</h2><p class="muted">Right = better offense. Up = better defense. Dashed lines are the league average.</p>
+<section class="card wide"><h2>Who scores, who defends</h2><p class="muted">Right = better offence. Up = better defence. Dashed lines are the league average.</p>
 ${teamChart}<p class="hover-info" aria-live="polite"></p></section>
 </div>
 <div class="row">
@@ -107,7 +146,8 @@ ${board('PIR', 'Performance Index Rating per game', 'pirpg')}
 ${board('PRA', 'Points + rebounds + assists per game', 'pra')}
 ${board('Stocks', 'Steals + blocks per game', 'stocks')}
 </div>
-<p class="muted small">${qualNote}</p>`, 'index.html');
+<p class="muted small">${qualNote}</p>`, 'index.html', homeHero);
+
 
 // Players page
 const VIEWS = [
@@ -130,7 +170,6 @@ const playerRows = sortedPlayers.map((p) => `<tr id="${esc(p.id)}" data-team="${
 const teamOptions = teams.slice().sort((a, b) => a.name.localeCompare(b.name)).map((t) => `<option value="${esc(t.code)}">${esc(titleCase(t.name))}</option>`).join('');
 
 writePage('players.html', 'Players', `
-<section class="hero"><h1>Players</h1><p>${esc(cfg.seasonLabel)} per-game stats. Click a column to sort.</p></section>
 <section class="card">
 <div class="controls">
 <div role="group" aria-label="Chart" class="tabs">${VIEWS.map((v, i) => `<button type="button" data-show="${v.id}" aria-pressed="${i === 0}">${v.label}</button>`).join('')}</div>
@@ -143,27 +182,15 @@ writePage('players.html', 'Players', `
 <section class="card">
 <div class="scroll"><table class="sortable" id="players"><thead><tr>${cols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}><button type="button" data-key="${k}">${l}</button></th>`).join('')}</tr></thead>
 <tbody>${playerRows}</tbody></table></div>
-</section>`, 'players.html');
+</section>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Switch the chart, filter by team, and click any name for the full profile.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']] }));
 
 // Teams page
 const tcols = [['name', 'Team', 's'], ['gp', 'GP'], ['w', 'W'], ['l', 'L'], ['ppg', 'PTS'], ['oppg', 'OPP'], ['ortg', 'ORtg'], ['drtg', 'DRtg'], ['net', 'Net'], ['pace', 'Pace'], ['ts', 'TS%'], ['efg', 'eFG%'], ['tov100', 'TOV/100'], ['orebPct', 'OREB%']];
 writePage('teams.html', 'Teams', `
-<section class="hero"><h1>Teams</h1><p>${esc(cfg.seasonLabel)} team stats. Click a column to sort, or a team for its scouting report.</p></section>
 <section class="card"><div class="scroll"><table class="sortable"><thead><tr>${tcols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}><button type="button" data-key="${k}">${l}</button></th>`).join('')}</tr></thead>
-<tbody>${teams.map((t) => `<tr>${tcols.map(([k, , ty]) => ty === 's' ? `<td data-v="${esc(t.name)}"><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a></td>` : `<td class="num" data-v="${t[k].toFixed(3)}">${['gp', 'w', 'l'].includes(k) ? t[k] : k === 'net' ? signed(t[k]) : f1(t[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`, 'teams.html');
+<tbody>${teams.map((t) => `<tr>${tcols.map(([k, , ty]) => ty === 's' ? `<td data-v="${esc(t.name)}"><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a></td>` : `<td class="num" data-v="${t[k].toFixed(3)}">${['gp', 'w', 'l'].includes(k) ? t[k] : k === 'net' ? signed(t[k]) : f1(t[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`, 'teams.html', cover({ kicker: esc(roundLine), title: 'Teams', lede: 'Every club, every rating. Click a column to sort, or a team for its scouting report.', strip: [[teams.length, 'clubs'], [f1(avg(teams, 'ortg')), 'league ORtg'], [f1(avg(teams, 'pace')), 'possessions per 40 min']] }));
 
 // Scouting page for every team
-const ord = (n) => {
-  const teen = n % 100 >= 11 && n % 100 <= 13;
-  return n + (teen ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'));
-};
-const N = teams.length;
-const lg = (k) => avg(teams, k);
-const safe = (code) => String(code).replace(/[^A-Za-z0-9]/g, '');
-const teamHref = (code) => `team-${safe(code)}.html`;
-const rankTag = (r, total = N) => { const band = Math.max(3, Math.round(total * 0.1)); return `<span class="rank ${r <= band ? 'top' : r > total - band ? 'bottom' : ''}">${ord(r)}</span>`; };
-const mmss = (m) => { const t = Math.round(m * 60); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
-
 function scoutNotes(t, roster, qa) {
   const notes = [];
   const top = (k) => t.ranks[k] <= 3, bottom = (k) => t.ranks[k] > N - 3;
@@ -215,10 +242,18 @@ for (const t of teams) {
   const roster = players.filter((p) => p.team === t.code).sort((a, b) => b.totalMin - a.totalMin);
   const notes = scoutNotes(t, roster, qa);
   const last5 = list.slice(0, 5).map((g) => (g.win ? 'W' : 'L')).join(' ');
+  const form = list.slice(0, 5).reverse().map((g) => `<span class="form ${g.win ? 'w' : 'l'}" title="${g.win ? 'Win' : 'Loss'} ${g.isHome ? 'vs' : 'at'} ${esc(g.opp.tv)} ${g.for}–${g.against}">${g.win ? 'W' : 'L'}</span>`).join('');
+  const best = Object.entries(t.ranks).filter(([k]) => ['ortg', 'drtg', 'net', 'efg', 'efgD', 'tov100D', 'orebPct', 'drebPct', 'threePct', 'twoPct'].includes(k)).sort((a, b) => a[1] - b[1])[0];
+  const LBL = { ortg: 'offence', drtg: 'defence', net: 'net rating', efg: 'shooting (eFG%)', efgD: 'shooting defence', tov100D: 'forcing turnovers', orebPct: 'offensive rebounding', drebPct: 'defensive rebounding', threePct: '3-point shooting', twoPct: '2-point shooting' };
+  const teamHero = cover({
+    crumbs: `<a href="teams.html">Teams</a> / Scouting report`,
+    kicker: best && best[1] <= 3 ? `${ord(best[1])} in the league in ${LBL[best[0]]}` : `${ord(t.rank)} in the standings`,
+    title: esc(titleCase(t.name)),
+    meta: `<span>${t.w}–${t.l}</span><span class="sep">/</span><span>${ord(t.rank)} in the standings</span><span class="sep">/</span><span>Home ${t.home} · Away ${t.away}</span><span class="sep">/</span><span class="formrow">${form}</span>`,
+    strip: [[f1(t.ortg), `ORtg · ${ord(t.ranks.ortg)}`], [f1(t.drtg), `DRtg · ${ord(t.ranks.drtg)}`], [signed(t.net), `Net · ${ord(t.ranks.net)}`], [f1(t.pace), `Pace · ${ord(t.ranks.pace)}`]],
+    side: coverCrest(t.code)
+  });
   writePage(teamHref(t.code), titleCase(t.name), `
-<section class="hero"><p class="muted"><a href="teams.html">Teams</a> / Scouting report</p>
-<h1 class="team-title">${crests.has(t.code) ? `<img class="crest big" src="${esc(crests.get(t.code))}" alt="" width="56" height="56">` : ''}${esc(titleCase(t.name))}</h1>
-<p>${t.w}–${t.l} · ${ord(t.rank)} in the standings · Home ${t.home} · Away ${t.away} · Last 5: ${last5}</p></section>
 <div class="row">
 <section class="card"><h2>Scouting notes</h2><p class="muted">Generated from this season's box scores. Ranks are out of ${N} teams.</p>
 <ul class="notes">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></section>
@@ -256,7 +291,7 @@ ${roster.map((p) => `<tr><td><a href="${playerHref(p.id)}">${esc(p.name)}</a></t
 <section class="card"><h2>Results</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
 ${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}">${badge(g.opp.code, g.opp.tv)} ${esc(titleCase(g.opp.name))}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td></tr>`).join('')}
-</tbody></table></div></section>`, 'teams.html');
+</tbody></table></div></section>`, 'teams.html', teamHero);
 }
 
 // ---- Player pages ----
@@ -285,6 +320,7 @@ function boxCells(s, gp, perGame) {
 const BOX_HEAD = ['PTS', '2PM', '2PA', '2P%', '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB', 'AST', 'STL', 'TOV', 'BLK', 'BLKA', 'PF', 'FD', 'PIR'];
 const th = (h) => `<th scope="col" class="num">${h}</th>`;
 
+const posOf = new Map(players.map((q) => [q.id, findPerson(peopleIndex, q)?.position || null]));
 for (const p of players) {
   const person = findPerson(peopleIndex, p);
   const log = logs.get(p.id) || [];
@@ -308,10 +344,96 @@ for (const p of players) {
   ];
   const ranks = qualRank[p.id];
 
+  // ---- infographic sections ----
+  const position = person?.position || null;
+  const peersAll = position ? qual.filter((q) => (posOf.get(q.id) || null) === position) : [];
+  const peers = peersAll.length >= 10 ? peersAll : qual;
+  const peerLabel = peersAll.length >= 10 ? `${position.toLowerCase()}s` : 'players';
+  const isQual = qual.some((q) => q.id === p.id);
+  const r = qualRank[p.id] || {};
+  const LBLS = { ppg: 'points', rpg: 'rebounds', apg: 'assists', spg: 'steals', bpg: 'blocks', pirpg: 'PIR', pra: 'PRA', ts: 'true shooting' };
+  const tops = Object.entries(r).filter(([k, v]) => LBLS[k] && v <= 10).sort((a, b) => a[1] - b[1]);
+  const firsts = tops.filter(([, v]) => v === 1).map(([k]) => LBLS[k]);
+  const kicker = firsts.length ? `1st in the league in ${firsts.slice(0, 2).join(' and ')}`
+    : tops.length ? `${ord(tops[0][1])} in the league in ${LBLS[tops[0][0]]}`
+    : esc([position, p.tv].filter(Boolean).join(' · '));
+  const wonWith = log.filter((g) => g.win).length;
+  const ledeParts = [`Averages <strong>${f1(p.ppg)} points</strong>, ${f1(p.rpg)} rebounds and ${f1(p.apg)} assists in ${f1(p.mpg)} minutes, at ${f1(p.ts)}% true shooting.`,
+    `His team is ${wonWith}–${log.length - wonWith} in the games he played.`];
+  if (tops.length > 1) ledeParts.push(`Top 10 in the league in ${tops.slice(0, 3).map(([k, v]) => `${LBLS[k]} (${ord(v)})`).join(', ')}.`);
+  const num = person?.dorsal || p.number;
+  const hero = cover({
+    crumbs: `<a href="players.html">Players</a> / <a href="${teamHref(p.team)}">${esc(p.tv)}</a>`,
+    kicker, title: esc(p.name),
+    meta: `${crests.has(p.team) ? `<img class="crest" src="${esc(crests.get(p.team))}" alt="">` : ''}<span>${esc(teamT ? titleCase(teamT.name) : p.tv)}</span>${position ? `<span class="sep">/</span><span>${esc(position)}</span>` : ''}${age != null ? `<span class="sep">/</span><span>${age} years</span>` : ''}${person?.height ? `<span class="sep">/</span><span>${person.height} cm</span>` : ''}${person?.country ? `<span class="sep">/</span><span>${esc(person.country)}</span>` : ''}`,
+    lede: ledeParts.join(' '),
+    side: num ? `<div class="side jersey" aria-hidden="true">${esc(String(num).replace(/^0+(?=\d)/, ''))}</div>` : coverCrest(p.team)
+  });
+
+  const chip = (k) => !isQual ? '<span class="chip">Not enough minutes yet</span>'
+    : `<span class="chip ${r[k] <= 3 ? 'hot' : r[k] <= 20 ? 'warm' : ''}">${ord(r[k])} in the league</span>`;
+  const fourth = [['rpg', 'Rebounding', 'rebounds per game'], ['apg', 'Playmaking', 'assists per game'], ['stocks', 'Defence', 'steals + blocks per game']]
+    .map((x) => ({ x, rank: isQual ? (qualRank[p.id]?.[x[0]] ?? [...qual].sort((a, b) => b[x[0]] - a[x[0]]).findIndex((q) => q.id === p.id) + 1) : 0 }))
+    .sort((a, b) => a.rank - b.rank)[0].x;
+  if (isQual && r[fourth[0]] == null) r[fourth[0]] = [...qual].sort((a, b) => b[fourth[0]] - a[fourth[0]]).findIndex((q) => q.id === p.id) + 1;
+  const tiles = `<div class="tiles">
+<div class="tile"><span class="label">Scoring</span><span class="big">${f1(p.ppg)}</span><span class="sub">points per game</span>${chip('ppg')}</div>
+<div class="tile"><span class="label">All-round</span><span class="big">${f1(p.pirpg)}</span><span class="sub">PIR per game</span>${chip('pirpg')}</div>
+<div class="tile"><span class="label">Efficiency</span><span class="big">${f1(p.ts)}</span><span class="sub">true shooting %</span>${chip('ts')}</div>
+<div class="tile"><span class="label">${fourth[1]}</span><span class="big">${f1(p[fourth[0]])}</span><span class="sub">${fourth[2]}</span>${chip(fourth[0])}</div>
+</div>`;
+
+  // Game by game: last 10 games, oldest left
+  const recent = log.slice(0, 10).reverse();
+  let gbg = '';
+  if (recent.length) {
+    const W = 640, H = 250, top = 34, base = 180, max = Math.max(10, ...recent.map((g) => g.line.pts));
+    const slot = W / recent.length, bw = Math.min(56, slot * 0.62);
+    const bars = recent.map((g, i) => {
+      const l = g.line, h = Math.max(3, (l.pts / max) * (base - top)), x = i * slot + (slot - bw) / 2;
+      const fgm = l.fgm2 + l.fgm3, fga = l.fga2 + l.fga3;
+      return `<g><title>${esc(g.date)} ${g.isHome ? 'vs' : 'at'} ${esc(g.opp.tv)}: ${l.pts} points, ${fgm}/${fga} FG, ${g.win ? 'win' : 'loss'} ${g.for}–${g.against}</title>
+<rect class="${g.win ? 'b-win' : 'b-loss'}" x="${x.toFixed(1)}" y="${(base - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="4"/>
+<text class="v" x="${(x + bw / 2).toFixed(1)}" y="${(base - h - 8).toFixed(1)}" text-anchor="middle">${l.pts}</text>
+<text class="o" x="${(x + bw / 2).toFixed(1)}" y="${base + 20}" text-anchor="middle">${esc(g.opp.tv)}</text>
+<text class="f" x="${(x + bw / 2).toFixed(1)}" y="${base + 35}" text-anchor="middle">${fgm}/${fga} FG</text>
+<text class="f" x="${(x + bw / 2).toFixed(1)}" y="${base + 49}" text-anchor="middle">${g.win ? 'Win' : 'Loss'}</text></g>`;
+    }).join('');
+    const last3 = log.slice(0, 3);
+    const l3pts = last3.reduce((a, g) => a + g.line.pts, 0) / (last3.length || 1);
+    const l3m = last3.reduce((a, g) => a + g.line.fgm2 + g.line.fgm3, 0), l3a = last3.reduce((a, g) => a + g.line.fga2 + g.line.fga3, 0);
+    const l3w = last3.filter((g) => g.win).length;
+    gbg = `<section class="card gbg"><h2>Game by game</h2><p class="muted">Points in his last ${recent.length} games. Last ${last3.length}: ${f1(l3pts)} a night on ${l3a ? f1(100 * l3m / l3a) : '–'}% shooting, ${l3w} win${l3w === 1 ? '' : 's'}. Red = win.</p>
+<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Points per game, last ${recent.length} games">${bars}<line class="base" x1="0" x2="${W}" y1="${base}" y2="${base}"/></svg></section>`;
+  }
+
+  // Percentiles against players at the same position
+  const PCT = [['ppg', 'Points'], ['rpg', 'Rebounds'], ['apg', 'Assists'], ['stocks', 'Stocks'], ['pirpg', 'PIR'], ['ts', 'TS%'], ['threePct', '3P%', (q) => q.totals.fga3 >= 15], ['usg', 'Usage'], ['tpg', 'Ball security', null, true]];
+  const pctl = PCT.map(([k, label, filt, low]) => {
+    const pool = peers.filter(filt || (() => true));
+    if (!pool.some((q) => q.id === p.id) && !(isQual === false && (!filt || filt(p)))) return '';
+    const vals = [...pool.filter((q) => q.id !== p.id).map((q) => q[k])];
+    if (!vals.length) return '';
+    const below = vals.filter((v) => (low ? v > p[k] : v < p[k])).length;
+    const pc = Math.round(100 * below / vals.length);
+    return `<div class="p"><span>${label}</span><span class="track" role="img" aria-label="${label}: better than ${pc}% of ${peerLabel}"><span class="fill" style="width:${Math.max(3, pc)}%"></span></span><span>${pc}<small>${f1(p[k])}</small></span></div>`;
+  }).join('');
+  const pctlCard = pctl ? `<section class="card"><h2>Profile vs ${esc(peerLabel)}</h2><p class="muted">Percentile: better than this share of ${peers.length} qualified ${esc(peerLabel)}. The line marks the middle.${isQual ? '' : ' He has not played enough minutes to qualify yet.'}</p><div class="pctl">${pctl}</div></section>` : '';
+
+  // How he stacks up against the best at his position
+  const SC = [['ppg', 'PPG'], ['rpg', 'RPG'], ['apg', 'APG'], ['pirpg', 'PIR'], ['ts', 'TS%'], ['usg', 'USG%']];
+  const stackList = [...peers].sort((a, b) => b.pirpg - a.pirpg).slice(0, 5);
+  if (!stackList.some((q) => q.id === p.id)) stackList.push(p);
+  const bestIn = Object.fromEntries(SC.map(([k]) => [k, Math.max(...stackList.map((q) => q[k]))]));
+  const stack = `<section class="card"><h2>How he stacks up</h2><p class="muted">The top 5 ${esc(peerLabel)} by PIR${stackList.length > 5 ? `, plus ${esc(p.name)}` : ''}. Red marks the best in each column.</p>
+<div class="scroll"><table><thead><tr><th scope="col">Player</th>${SC.map(([, l]) => `<th scope="col" class="num">${l}</th>`).join('')}</tr></thead><tbody>
+${stackList.map((q) => `<tr${q.id === p.id ? ' class="me"' : ''}><td><a href="${playerHref(q.id)}">${badge(q.team, q.tv)}${esc(q.name)}</a></td>${SC.map(([k]) => `<td class="num">${q[k] === bestIn[k] ? `<span class="best">${f1(q[k])}</span>` : f1(q[k])}</td>`).join('')}</tr>`).join('')}
+</tbody></table></div></section>`;
+
   writePage(`player-${safe(p.id)}.html`, p.name, `
-<section class="hero"><p class="muted"><a href="players.html">Players</a> / ${esc(p.tv)}</p>
-<h1 class="team-title">${p.team && crests.has(p.team) ? `<img class="crest big" src="${esc(crests.get(p.team))}" alt="" width="56" height="56">` : ''}${esc(p.name)}</h1>
-<p>${f1(p.ppg)} PTS · ${f1(p.rpg)} REB · ${f1(p.apg)} AST · ${f1(p.pirpg)} PIR in ${gp} game${gp === 1 ? '' : 's'}${p.teams.length > 1 ? ` · Teams this season: ${esc(p.teams.join(', '))}` : ''}</p></section>
+${tiles}
+<div class="row">${gbg}${pctlCard}</div>
+${stack}
 <div class="row">
 <section class="card"><h2>Profile</h2><dl class="bio">${bio.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
 ${person ? '' : '<p class="muted small">Personal details are not available for this player in the EuroLeague roster feed.</p>'}</section>
@@ -336,12 +458,12 @@ ${[['FG%', pct(fgm, fga) + ` <span class="muted">(${fgm}/${fga})</span>`], ['2P%
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col">Opponent</th><th scope="col">Result</th>${['MIN', 'PTS', '2P', '3P', 'FT', 'REB', 'AST', 'STL', 'TOV', 'BLK', 'PF', '+/-', 'PIR'].map(th).join('')}</tr></thead><tbody>
 ${log.map((g) => { const l = g.line; return `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td><a href="${teamHref(g.opp.code)}"><span class="muted">${g.isHome ? 'vs' : 'at'}&nbsp;</span>${badge(g.opp.code, g.opp.tv)}${esc(g.opp.tv)}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td>
 <td class="num">${mmss(l.min)}${l.starter ? '<span class="muted">*</span>' : ''}</td><td class="num"><strong>${l.pts}</strong></td><td class="num">${l.fgm2}/${l.fga2}</td><td class="num">${l.fgm3}/${l.fga3}</td><td class="num">${l.ftm}/${l.fta}</td><td class="num">${l.reb}</td><td class="num">${l.ast}</td><td class="num">${l.stl}</td><td class="num">${l.tov}</td><td class="num">${l.blk}</td><td class="num">${l.pf}</td><td class="num">${l.pm > 0 ? '+' : ''}${l.pm}</td><td class="num">${l.pir}</td></tr>`; }).join('')}
-</tbody></table></div><p class="muted small">* started the game.</p></section>`, 'players.html');
+</tbody></table></div><p class="muted small">* started the game.</p></section>`, 'players.html', hero);
 }
 
 // Method page
 writePage('method.html', 'How we calculate', `
-<section class="hero"><h1>How we calculate</h1><p>Every number on this site comes from the official EuroLeague box scores. Nothing is typed in by hand.</p></section>
+
 <section class="card prose">
 <h2>Where the data comes from</h2>
 <p>Each night the site downloads the box score of every finished game from the EuroLeague's live data feed, the same feed behind euroleaguebasketball.net. All games are downloaded again every night, so any correction the league makes after a game is picked up.</p>
@@ -371,7 +493,7 @@ writePage('method.html', 'How we calculate', `
 </dl>
 <h2>Leaderboards</h2>
 <p>${qualNote}</p>
-</section>`, 'method.html');
+</section>`, 'method.html', cover({ kicker: 'Methodology', title: 'How we calculate', lede: 'Every number on this site comes from the official EuroLeague box scores. Nothing is typed in by hand, and every game is checked before it is published.' }));
 
 // Static files + data for the browser
 mkdirSync(OUT, { recursive: true });
@@ -384,7 +506,7 @@ writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
 writeFileSync(join(OUT, '.nojekyll'), '');
 console.log(`✓ Site written to ${OUT}/ (${teams.length} teams, ${players.length} players)`);
 
-function writePage(file, title, body, active) {
+function writePage(file, title, body, active, hero) {
   mkdirSync(OUT, { recursive: true });
-  writeFileSync(join(OUT, file), page({ title, cfg, info, active, sample, body }));
+  writeFileSync(join(OUT, file), page({ title, cfg, info, active, sample, body, hero }));
 }
