@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { parseGame } from '../lib/parse.mjs';
 import { validateSeason } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, leaders, seasonInfo, teamGames, quarterAverages, playerGameLogs } from '../lib/stats.mjs';
-import { esc, f1, signed, scatter, page, fmtDate } from '../lib/render.mjs';
+import { esc, f1, signed, scatter, page, fmtDate, assetVersion } from '../lib/render.mjs';
 import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
 
 const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
@@ -495,10 +495,72 @@ writePage('method.html', 'How we calculate', `
 <p>${qualNote}</p>
 </section>`, 'method.html', cover({ kicker: 'Methodology', title: 'How we calculate', lede: 'Every number on this site comes from the official EuroLeague box scores. Nothing is typed in by hand, and every game is checked before it is published.' }));
 
+
+// ---- Matchup (head-to-head) ----
+{
+  const METRICS = [['ortg', 'Offensive rating', true, 'points per 100'], ['drtg', 'Defensive rating', false, 'allowed per 100'], ['net', 'Net rating', true], ['pace', 'Pace', null, 'possessions per 40'],
+    ['efg', 'Effective FG%', true], ['efgD', 'Opponent eFG%', false], ['threeRate', 'Share of shots from three', null], ['threePct', '3P%', true], ['threePctD', 'Opponent 3P%', false],
+    ['tov100', 'Turnovers per 100', false], ['tov100D', 'Forced turnovers per 100', true], ['orebPct', 'Offensive rebound %', true], ['drebPct', 'Defensive rebound %', true],
+    ['ftr', 'Free throws per 100 shots', true], ['ftrD', 'Opponent FT per 100 shots', false], ['astRate', 'Assisted baskets %', true]];
+  const data = {
+    defaultA: teams.some((t) => t.code === 'HTA') ? 'HTA' : teams[0]?.code,
+    defaultB: teams.find((t) => t.code !== 'HTA')?.code,
+    metrics: METRICS,
+    teams: teams.map((t) => {
+      const list = teamGames(games, t.code);
+      return {
+        code: t.code, tv: t.tv, name: titleCase(t.name), crest: crests.get(t.code) || null, href: teamHref(t.code),
+        w: t.w, l: t.l, rank: t.rank, form: list.slice(0, 5).map((g) => (g.win ? 'W' : 'L')).join(' '),
+        ...Object.fromEntries(METRICS.map(([k]) => [k, +t[k].toFixed(2)])), ranks: t.ranks,
+        players: players.filter((p) => p.team === t.code).sort((a, b) => b.totalMin - a.totalMin).slice(0, 7)
+          .map((p) => ({ name: p.name, href: playerHref(p.id), mpg: +p.mpg.toFixed(1), ppg: +p.ppg.toFixed(1), rpg: +p.rpg.toFixed(1), apg: +p.apg.toFixed(1), pir: +p.pirpg.toFixed(1) }))
+      };
+    }),
+    games: games.map((g) => ({ h: g.home.code, v: g.away.code, hs: g.home.score, vs: g.away.score, date: g.date, round: g.round }))
+  };
+  writeFileSync(join(OUT, 'matchup.json'), JSON.stringify(data));
+  writePage('matchup.html', 'Matchup', `<div id="matchup-app"><p class="muted">Loading…</p></div>`, 'matchup.html',
+    cover({ kicker: esc(roundLine), title: 'Matchup', lede: 'Put any two teams side by side: ratings, four factors, this season’s meetings, key players, and where the mismatches are.' }),
+    { scripts: `<script src="matchup.js?v=${assetVersion()}" defer></script>` });
+}
+
+// ---- HAPOEL – INTERNAL (password-protected, encrypted in the browser) ----
+{
+  const IC = cfg.internal || {};
+  const encFiles = existsSync('internal') ? readdirSync('internal').filter((f) => /^[a-z0-9][a-z0-9-]{0,80}\.enc$/.test(f)).sort() : [];
+  mkdirSync(join(OUT, 'internal'), { recursive: true });
+  for (const f of encFiles) {
+    const text = readFileSync(join('internal', f), 'utf8');
+    try { const o = JSON.parse(text); if (o.v !== 1 || !o.iv || !o.ct) throw new Error('not an encrypted document'); }
+    catch (e) { console.warn(`Skipping internal/${f}: ${e.message}`); continue; }
+    writeFileSync(join(OUT, 'internal', f), text);
+  }
+  const published = encFiles.filter((f) => existsSync(join(OUT, 'internal', f)));
+  writeFileSync(join(OUT, 'internal', 'index.json'), JSON.stringify(published));
+  // Warn loudly if anything that is not an encrypted document was put in the folder.
+  if (existsSync('internal')) for (const f of readdirSync('internal')) {
+    if (f !== 'README.md' && !f.endsWith('.enc')) console.warn(`WARNING: internal/${f} is not an encrypted .enc file. It is NOT published, but it IS visible in the public GitHub repository. Delete it there.`);
+  }
+  const clientCfg = JSON.stringify({ salt: IC.salt, iterations: IC.iterations, uploadUrl: IC.repoUploadUrl, categories: IC.categories, teams: teams.map((t) => titleCase(t.name)).sort() }).replace(/</g, '\\u003c');
+  const extra = {
+    head: '<meta name="robots" content="noindex, nofollow">',
+    scripts: `<script>window.HTA_INTERNAL = ${clientCfg};</script>\n<script src="internal.js?v=${assetVersion()}" defer></script>`
+  };
+  const internalCover = (lede) => cover({ kicker: 'Staff only', title: esc(IC.title || 'Internal'), lede });
+  writePage('internal.html', IC.title || 'Internal', `<div id="internal-app" data-mode="vault"><p class="muted">Loading…</p></div>
+<noscript><p>The internal section needs JavaScript.</p></noscript>`, 'internal.html',
+    internalCover('Strategy, scouting reports and game plans for the Hapoel staff. Every document is locked with the team password and opened only on your device.'), extra);
+  writePage('internal-upload.html', 'Add internal document', `<div id="internal-app" data-mode="upload"><p class="muted">Loading…</p></div>`, 'internal.html',
+    internalCover('Add a document. It is locked here in your browser before it goes anywhere.'), extra);
+  console.log(`✓ Internal section: ${published.length} encrypted document(s)`);
+}
+
 // Static files + data for the browser
 mkdirSync(OUT, { recursive: true });
 copyFileSync('static/style.css', join(OUT, 'style.css'));
 copyFileSync('static/app.js', join(OUT, 'app.js'));
+copyFileSync('static/internal.js', join(OUT, 'internal.js'));
+copyFileSync('static/matchup.js', join(OUT, 'matchup.js'));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   id: p.id, name: p.name, team: teamName.get(p.team) ? titleCase(teamName.get(p.team)) : p.team, tv: p.tv, gp: p.gp,
   stats: [['PTS', p.ppg], ['REB', p.rpg], ['AST', p.apg], ['STL', p.spg], ['BLK', p.bpg], ['PIR', p.pirpg], ['MIN', p.mpg], ['TS%', p.ts], ['USG%', p.usg]].map(([k, v]) => [k, f1(v)])
@@ -506,7 +568,7 @@ writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
 writeFileSync(join(OUT, '.nojekyll'), '');
 console.log(`✓ Site written to ${OUT}/ (${teams.length} teams, ${players.length} players)`);
 
-function writePage(file, title, body, active, hero) {
+function writePage(file, title, body, active, hero, extra = {}) {
   mkdirSync(OUT, { recursive: true });
-  writeFileSync(join(OUT, file), page({ title, cfg, info, active, sample, body, hero }));
+  writeFileSync(join(OUT, file), page({ title, cfg, info, active, sample, body, hero, ...extra }));
 }
