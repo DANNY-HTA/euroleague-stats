@@ -206,3 +206,5 @@ label { font-size: 14px; color: var(--muted); display: flex; gap: 8px; align-ite
 .formrow { display: inline-flex; gap: 4px; }
 .form { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; font: 800 14px/1 var(--display); }
 .form.w { background: #fff; color: var(--red); } .form.l { background: rgba(0,0,0,.28); color: #fff; }
+.gbg { display: flex; flex-direction: column; }
+.gbg svg { margin: auto 0; }
