@@ -58,7 +58,7 @@ const titleCase = (s) => s.split(/\s+/).map((w) => (KEEP_UPPER.has(w) || w.lengt
 // ---- 3. Pages ----
 const standingsRows = teams.map((t) => `<tr>
 <td class="num muted">${t.rank}</td>
-<td><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a></td>
+<td class="team"><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a></td>
 <td class="num">${t.w}–${t.l}</td>
 <td class="num">${f1(t.ortg)}</td>
 <td class="num">${f1(t.drtg)}</td>

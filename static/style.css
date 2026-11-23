@@ -57,6 +57,7 @@ tr:target td { background: #fdebdd; }
 .crest.big { width: 56px; height: 56px; margin-right: 14px; }
 .team-title { display: flex; align-items: center; }
 td a { display: inline-flex; align-items: center; }
+td.team { white-space: normal; min-width: 170px; }
 .hover-info { min-height: 22px; margin: 10px 0 0 !important; }
 .controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 16px; align-items: center; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
