@@ -85,7 +85,7 @@
     return r.status === 204 ? null : r.json();
   }
   async function uploadFiles(files, message, progress) {
-    const ref = await gh('/git/ref/heads/main');
+    const ref = await gh('/git/ref/heads/' + (CFG.branch || 'main'));
     const head = await gh('/git/commits/' + ref.object.sha);
     const tree = [];
     for (let i = 0; i < files.length; i++) {
@@ -96,7 +96,7 @@
     progress('Saving…');
     const t = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: head.tree.sha, tree }) });
     const c = await gh('/git/commits', { method: 'POST', body: JSON.stringify({ message, tree: t.sha, parents: [ref.object.sha] }) });
-    await gh('/git/refs/heads/main', { method: 'PATCH', body: JSON.stringify({ sha: c.sha }) });
+    await gh('/git/refs/heads/' + (CFG.branch || 'main'), { method: 'PATCH', body: JSON.stringify({ sha: c.sha }) });
   }
 
   // ---------- lock screen ----------

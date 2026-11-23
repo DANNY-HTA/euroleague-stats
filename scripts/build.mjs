@@ -680,7 +680,10 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
   if (existsSync('internal')) for (const f of readdirSync('internal')) {
     if (f !== 'README.md' && !f.endsWith('.enc') && !f.endsWith('.part')) console.warn(`WARNING: internal/${f} is not an encrypted .enc file. It is NOT published, but it IS visible in the public GitHub repository. Delete it there.`);
   }
-  const clientCfg = JSON.stringify({ salt: IC.salt, iterations: IC.iterations, uploadUrl: IC.repoUploadUrl, repo: IC.repo, categories: IC.categories, teams: teams.map((t) => titleCase(t.name)).sort() }).replace(/</g, '\\u003c');
+  // The repository is taken from GitHub Actions when building there, so the site keeps working if it moves.
+  const REPO = process.env.GITHUB_REPOSITORY || IC.repo;
+  const BRANCH = process.env.GITHUB_REF_NAME || 'main';
+  const clientCfg = JSON.stringify({ salt: IC.salt, iterations: IC.iterations, uploadUrl: `https://github.com/${REPO}/upload/${BRANCH}/internal`, repo: REPO, branch: BRANCH, categories: IC.categories, teams: teams.map((t) => titleCase(t.name)).sort() }).replace(/</g, '\\u003c');
   const extra = {
     head: '<meta name="robots" content="noindex, nofollow">',
     scripts: `<script>window.HTA_INTERNAL = ${clientCfg};</script>\n<script src="internal.js?v=${assetVersion()}" defer></script>`
