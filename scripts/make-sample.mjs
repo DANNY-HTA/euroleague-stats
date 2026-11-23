@@ -97,6 +97,11 @@ async function main() {
       const d = new Date(start.getTime() + (round - 1) * 7 * 86400000 + (i % 2) * 86400000);
       const date = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
       const raw = rawGame({ code, round, date, a: teamBlock(home.name, rows(home, hl)), b: teamBlock(away.name, rows(away, al)), codeA: home.code, codeB: away.code });
+      // running score after each quarter, like the real header
+      for (const [side, total] of [['A', pts(hl)], ['B', pts(al)]]) {
+        const cuts = [0.22 + r() * 0.06, 0.47 + r() * 0.06, 0.72 + r() * 0.06].map((f) => Math.round(total * f));
+        [...cuts, total].forEach((v, i) => { raw.header[`ScoreQuarter${i + 1}${side}`] = v; });
+      }
       await writeFile(join(OUT, `${String(code).padStart(3, '0')}.json`), JSON.stringify(raw));
       code++;
     }

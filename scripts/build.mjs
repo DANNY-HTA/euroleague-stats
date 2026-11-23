@@ -8,7 +8,7 @@ import { readFileSync, readdirSync, mkdirSync, writeFileSync, copyFileSync, exis
 import { join } from 'node:path';
 import { parseGame } from '../lib/parse.mjs';
 import { validateSeason } from '../lib/validate.mjs';
-import { teamTable, playerTable, qualified, leaders, seasonInfo } from '../lib/stats.mjs';
+import { teamTable, playerTable, qualified, leaders, seasonInfo, teamGames, quarterAverages } from '../lib/stats.mjs';
 import { esc, f1, signed, scatter, page } from '../lib/render.mjs';
 
 const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
@@ -47,7 +47,7 @@ const titleCase = (s) => s.split(/\s+/).map((w) => (KEEP_UPPER.has(w) || w.lengt
 // ---- 3. Pages ----
 const standingsRows = teams.map((t) => `<tr>
 <td class="num muted">${t.rank}</td>
-<td><span class="code">${esc(t.tv)}</span> ${esc(titleCase(t.name))}</td>
+<td><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html"><span class="code">${esc(t.tv)}</span> ${esc(titleCase(t.name))}</a></td>
 <td class="num">${t.w}–${t.l}</td>
 <td class="num">${f1(t.ortg)}</td>
 <td class="num">${f1(t.drtg)}</td>
@@ -132,9 +132,115 @@ writePage('players.html', 'Players', `
 // Teams page
 const tcols = [['name', 'Team', 's'], ['gp', 'GP'], ['w', 'W'], ['l', 'L'], ['ppg', 'PTS'], ['oppg', 'OPP'], ['ortg', 'ORtg'], ['drtg', 'DRtg'], ['net', 'Net'], ['pace', 'Pace'], ['ts', 'TS%'], ['efg', 'eFG%'], ['tov100', 'TOV/100'], ['orebPct', 'OREB%']];
 writePage('teams.html', 'Teams', `
-<section class="hero"><h1>Teams</h1><p>${esc(cfg.seasonLabel)} team stats. Click a column to sort.</p></section>
+<section class="hero"><h1>Teams</h1><p>${esc(cfg.seasonLabel)} team stats. Click a column to sort, or a team for its scouting report.</p></section>
 <section class="card"><div class="scroll"><table class="sortable"><thead><tr>${tcols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}><button type="button" data-key="${k}">${l}</button></th>`).join('')}</tr></thead>
-<tbody>${teams.map((t) => `<tr>${tcols.map(([k, , ty]) => ty === 's' ? `<td data-v="${esc(t.name)}"><span class="code">${esc(t.tv)}</span> ${esc(titleCase(t.name))}</td>` : `<td class="num" data-v="${t[k].toFixed(3)}">${['gp', 'w', 'l'].includes(k) ? t[k] : k === 'net' ? signed(t[k]) : f1(t[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`, 'teams.html');
+<tbody>${teams.map((t) => `<tr>${tcols.map(([k, , ty]) => ty === 's' ? `<td data-v="${esc(t.name)}"><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html"><span class="code">${esc(t.tv)}</span> ${esc(titleCase(t.name))}</a></td>` : `<td class="num" data-v="${t[k].toFixed(3)}">${['gp', 'w', 'l'].includes(k) ? t[k] : k === 'net' ? signed(t[k]) : f1(t[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`, 'teams.html');
+
+// Scouting page for every team
+const ord = (n) => {
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  return n + (teen ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'));
+};
+const N = teams.length;
+const lg = (k) => avg(teams, k);
+const safe = (code) => String(code).replace(/[^A-Za-z0-9]/g, '');
+const teamHref = (code) => `team-${safe(code)}.html`;
+const rankTag = (r) => `<span class="rank ${r <= 3 ? 'top' : r > N - 3 ? 'bottom' : ''}">${ord(r)}</span>`;
+
+function scoutNotes(t, roster, qa) {
+  const notes = [];
+  const top = (k) => t.ranks[k] <= 3, bottom = (k) => t.ranks[k] > N - 3;
+  const say = (cond, text) => { if (cond) notes.push(text); };
+  say(top('threeRate'), `Shoots a lot of threes: ${f1(t.threeRate)}% of their shots are threes (${ord(t.ranks.threeRate)} in the league).`);
+  say(bottom('threeRate'), `Rarely shoots threes: only ${f1(t.threeRate)}% of their shots (${ord(t.ranks.threeRate)}). They attack inside.`);
+  say(top('threePct'), `Dangerous from outside: ${f1(t.threePct)}% from three (${ord(t.ranks.threePct)}).`);
+  say(bottom('threePct'), `Struggles from outside: ${f1(t.threePct)}% from three (${ord(t.ranks.threePct)}).`);
+  say(top('orebPct'), `Crashes the offensive glass: grabs ${f1(t.orebPct)}% of their own misses (${ord(t.ranks.orebPct)}). Box out.`);
+  say(bottom('orebPct'), `Doesn't chase offensive rebounds: ${f1(t.orebPct)}% (${ord(t.ranks.orebPct)}).`);
+  say(top('tov100'), `Takes care of the ball: ${f1(t.tov100)} turnovers per 100 possessions (${ord(t.ranks.tov100)}).`);
+  say(bottom('tov100'), `Turnover-prone: ${f1(t.tov100)} turnovers per 100 possessions (${ord(t.ranks.tov100)}). Pressure the ball.`);
+  say(top('tov100D'), `Forces turnovers: opponents give it away ${f1(t.tov100D)} times per 100 possessions (${ord(t.ranks.tov100D)}).`);
+  say(top('ftr'), `Gets to the line: ${f1(t.ftr)} free throws per 100 shots (${ord(t.ranks.ftr)}). Avoid cheap fouls.`);
+  say(top('ftrD'), `Rarely fouls: opponents get only ${f1(t.ftrD)} free throws per 100 shots (${ord(t.ranks.ftrD)}).`);
+  say(top('pace'), `Plays fast: ${f1(t.pace)} possessions per 40 minutes (${ord(t.ranks.pace)}).`);
+  say(bottom('pace'), `Plays slow: ${f1(t.pace)} possessions per 40 minutes (${ord(t.ranks.pace)}).`);
+  say(top('drtg'), `Elite defence: allows ${f1(t.drtg)} points per 100 possessions (${ord(t.ranks.drtg)}).`);
+  say(bottom('drtg'), `Weak defence: allows ${f1(t.drtg)} points per 100 possessions (${ord(t.ranks.drtg)}).`);
+  say(top('ortg'), `Elite offence: scores ${f1(t.ortg)} points per 100 possessions (${ord(t.ranks.ortg)}).`);
+  say(top('threePctD'), `Defends the three-point line well: opponents shoot ${f1(t.threePctD)}% (${ord(t.ranks.threePctD)}).`);
+  say(bottom('threePctD'), `Gives up threes: opponents shoot ${f1(t.threePctD)}% from three against them (${ord(t.ranks.threePctD)}).`);
+  if (qa) {
+    const best = [...qa].sort((a, b) => b.margin - a.margin)[0];
+    const worst = [...qa].sort((a, b) => a.margin - b.margin)[0];
+    notes.push(`Best quarter: Q${best.q} (${signed(best.margin)} per game on average). Worst quarter: Q${worst.q} (${signed(worst.margin)}).`);
+  }
+  const reg = roster.filter((p) => p.mpg >= 10);
+  const byUsg = [...reg].sort((a, b) => b.usg - a.usg)[0];
+  if (byUsg) notes.push(`Main option: ${byUsg.name}, who uses ${f1(byUsg.usg)}% of possessions when on court (${f1(byUsg.ppg)} points, ${f1(byUsg.ts)} TS%).`);
+  const shooter = reg.filter((p) => p.threeApg >= 2).sort((a, b) => b.threePct - a.threePct)[0];
+  if (shooter) notes.push(`Best volume shooter: ${shooter.name}, ${f1(shooter.threePct)}% on ${f1(shooter.threeApg)} threes per game.`);
+  const glass = [...reg].sort((a, b) => b.rpg - a.rpg)[0];
+  if (glass) notes.push(`Top rebounder: ${glass.name}, ${f1(glass.rpg)} per game.`);
+  const creator = [...reg].sort((a, b) => b.apg - a.apg)[0];
+  if (creator) notes.push(`Main playmaker: ${creator.name}, ${f1(creator.apg)} assists per game.`);
+  return notes;
+}
+
+const factorRow = (label, k, kd, hint) => `<tr><th scope="row">${label}${hint ? ` <span class="muted">${hint}</span>` : ''}</th>
+<td class="num">${f1(curTeam[k])} ${rankTag(curTeam.ranks[k])}</td><td class="num muted">${f1(lg(k))}</td>
+<td class="num">${kd ? `${f1(curTeam[kd])} ${rankTag(curTeam.ranks[kd])}` : '–'}</td><td class="num muted">${kd ? f1(lg(kd)) : '–'}</td></tr>`;
+let curTeam;
+
+for (const t of teams) {
+  curTeam = t;
+  const list = teamGames(games, t.code);
+  const qa = quarterAverages(list);
+  const roster = players.filter((p) => p.team === t.code).sort((a, b) => b.mpg - a.mpg);
+  const notes = scoutNotes(t, roster, qa);
+  const last5 = list.slice(0, 5).map((g) => (g.win ? 'W' : 'L')).join(' ');
+  writePage(teamHref(t.code), titleCase(t.name), `
+<section class="hero"><p class="muted"><a href="teams.html">Teams</a> / Scouting report</p>
+<h1>${esc(titleCase(t.name))}</h1>
+<p>${t.w}–${t.l} · ${ord(t.rank)} in the standings · Home ${t.home} · Away ${t.away} · Last 5: ${last5}</p></section>
+<div class="row">
+<section class="card"><h2>Scouting notes</h2><p class="muted">Generated from this season's box scores. Ranks are out of ${N} teams.</p>
+<ul class="notes">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></section>
+<section class="card"><h2>Ratings</h2>
+<div class="kpis">
+<div><span class="muted">Offence</span><strong>${f1(t.ortg)}</strong>${rankTag(t.ranks.ortg)}</div>
+<div><span class="muted">Defence</span><strong>${f1(t.drtg)}</strong>${rankTag(t.ranks.drtg)}</div>
+<div><span class="muted">Net</span><strong class="${t.net >= 0 ? 'pos' : 'neg'}">${signed(t.net)}</strong>${rankTag(t.ranks.net)}</div>
+<div><span class="muted">Pace</span><strong>${f1(t.pace)}</strong>${rankTag(t.ranks.pace)}</div>
+</div>
+${qa ? `<h3>Scoring by quarter <span class="muted">(per game)</span></h3>
+<div class="scroll"><table><thead><tr><th scope="col"></th>${qa.map((x) => `<th scope="col" class="num">Q${x.q}</th>`).join('')}</tr></thead><tbody>
+<tr><th scope="row">Scored</th>${qa.map((x) => `<td class="num">${f1(x.for)}</td>`).join('')}</tr>
+<tr><th scope="row">Allowed</th>${qa.map((x) => `<td class="num">${f1(x.against)}</td>`).join('')}</tr>
+<tr><th scope="row">Margin</th>${qa.map((x) => `<td class="num ${x.margin >= 0 ? 'pos' : 'neg'}">${signed(x.margin)}</td>`).join('')}</tr>
+</tbody></table></div>` : ''}
+</section></div>
+<section class="card"><h2>Four factors and shooting</h2><p class="muted">Ranks: 1st = best in the league. On defence, "best" means the lowest value for opponents.</p>
+<div class="scroll"><table class="factors"><thead><tr><th scope="col"></th><th scope="col" class="num">Offence</th><th scope="col" class="num">League avg</th><th scope="col" class="num">Defence (opponents)</th><th scope="col" class="num">League avg</th></tr></thead><tbody>
+${factorRow('Effective FG%', 'efg', 'efgD')}
+${factorRow('Turnovers per 100', 'tov100', 'tov100D', '(defence: forced)')}
+${factorRow('Offensive rebound %', 'orebPct', null)}
+${factorRow('Defensive rebound %', 'drebPct', null)}
+${factorRow('Free throws per 100 shots', 'ftr', 'ftrD')}
+${factorRow('Share of shots that are threes', 'threeRate', 'threeRateD')}
+${factorRow('3P%', 'threePct', 'threePctD')}
+${factorRow('2P%', 'twoPct', 'twoPctD')}
+${factorRow('FT%', 'ftPct', null)}
+${factorRow('Assisted baskets %', 'astRate', null)}
+</tbody></table></div></section>
+<section class="card"><h2>Rotation</h2><p class="muted">Sorted by minutes. Season stats for players whose most recent game was for this team.</p>
+<div class="scroll"><table><thead><tr>${['Player', 'GP', 'GS', 'MIN', 'PTS', 'REB', 'AST', 'STL', 'TOV', 'PIR', 'USG%', 'TS%', '3PA', '3P%', 'FT%'].map((h, i) => `<th scope="col"${i ? ' class="num"' : ''}>${h}</th>`).join('')}</tr></thead><tbody>
+${roster.map((p) => `<tr><td><a href="players.html#${esc(p.id)}">${esc(p.name)}</a></td><td class="num">${p.gp}</td><td class="num">${p.gs}</td><td class="num">${f1(p.mpg)}</td><td class="num">${f1(p.ppg)}</td><td class="num">${f1(p.rpg)}</td><td class="num">${f1(p.apg)}</td><td class="num">${f1(p.spg)}</td><td class="num">${f1(p.tpg)}</td><td class="num">${f1(p.pirpg)}</td><td class="num">${f1(p.usg)}</td><td class="num">${f1(p.ts)}</td><td class="num">${f1(p.threeApg)}</td><td class="num">${f1(p.threePct)}</td><td class="num">${f1(p.ftPct)}</td></tr>`).join('')}
+</tbody></table></div></section>
+<section class="card"><h2>Results</h2>
+<div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
+${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}"><span class="code">${esc(g.opp.tv)}</span> ${esc(titleCase(g.opp.name))}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td></tr>`).join('')}
+</tbody></table></div></section>`, 'teams.html');
+}
 
 // Method page
 writePage('method.html', 'How we calculate', `

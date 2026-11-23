@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseGame, parseMinutes, formatName, parseDate, isFinishedGame } from '../lib/parse.mjs';
+import { parseGame, parseMinutes, formatName, parseDate, isFinishedGame, quarterPoints } from '../lib/parse.mjs';
 import { validateGame, validateSeason } from '../lib/validate.mjs';
-import { possessions, gamePossessions, trueShooting, teamTable, playerTable, leaders } from '../lib/stats.mjs';
+import { possessions, gamePossessions, trueShooting, teamTable, playerTable, leaders, teamGames, quarterAverages } from '../lib/stats.mjs';
 import { knownGame, rawGame, teamBlock, playerRow } from './helpers.mjs';
 
 const close = (actual, expected, tol = 0.01) =>
@@ -61,6 +61,32 @@ test('player shooting and usage match hand calculation', () => {
   close(larkin.pra, 31);                     // 20 + 5 + 6
   close(larkin.stocks, 2);
   close(trueShooting({ pts: 0, fga2: 0, fga3: 0, fta: 0 }), 0); // no divide-by-zero
+});
+
+test('four factors match hand calculation', () => {
+  const [ist, tel] = teamTable([parseGame(knownGame())]);
+  close(ist.efg, 58.65);       // (27 FGM + 0.5×7 3PM) / 52 FGA
+  close(ist.efgD, 50.0);       // opponents: (20 + 2.5) / 45
+  close(ist.tov100, 15.93);    // 9 TOV / 56.5 possessions
+  close(ist.orebPct, 31.82);   // 7 / (7 + 15 opponent DREB)
+  close(ist.drebPct, 78.57);   // 22 / (22 + 6 opponent OREB)
+  close(ist.ftr, 26.92);       // 14 FTA / 52 FGA
+  close(ist.threeRate, 34.62); // 18 3PA / 52 FGA
+  assert.equal(ist.home, '1–0');
+  assert.equal(tel.away, '0–1');
+  assert.equal(ist.ranks.ortg, 1);
+  assert.equal(tel.ranks.ortg, 2);
+});
+
+test('quarter points come from the running totals', () => {
+  assert.deepEqual(quarterPoints({ ScoreQuarter1A: 21, ScoreQuarter2A: 40, ScoreQuarter3A: 60, ScoreQuarter4A: 85 }, 'A'), [21, 19, 20, 25]);
+  assert.equal(quarterPoints({ ScoreQuarter1A: 21 }, 'A'), null);
+  const raw = knownGame();
+  Object.assign(raw.header, { ScoreQuarter1A: 20, ScoreQuarter2A: 38, ScoreQuarter3A: 55, ScoreQuarter4A: 71, ScoreQuarter1B: 10, ScoreQuarter2B: 25, ScoreQuarter3B: 40, ScoreQuarter4B: 53 });
+  const list = teamGames([parseGame(raw)], 'IST');
+  assert.equal(list[0].win, true);
+  const qa = quarterAverages(list);
+  assert.deepEqual(qa.map((x) => x.margin), [10, 3, 2, 3]);
 });
 
 test('season averages over two games', () => {
