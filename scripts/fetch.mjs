@@ -65,9 +65,13 @@ async function main() {
       continue;
     }
     misses = 0;
+    // Play-by-play (for on/off, lineups and impact). Optional: a game without it still counts everywhere else.
+    let pbp = null;
+    try { pbp = await getJson(`${BASE}/PlaybyPlay?${q}`); } catch (err) { console.warn(`  Game ${code}: no play-by-play (${err.message})`); }
+    await sleep(DELAY_MS);
     const file = `${String(code).padStart(3, '0')}.json`;
     keep.add(file);
-    await writeFile(join(OUT, file), JSON.stringify({ season, gameCode: code, fetchedAt: new Date().toISOString(), header, boxscore }));
+    await writeFile(join(OUT, file), JSON.stringify({ season, gameCode: code, fetchedAt: new Date().toISOString(), header, boxscore, pbp }));
     saved++;
     if (saved % 25 === 0) console.log(`  ${saved} games saved…`);
   }

@@ -11,6 +11,7 @@ import { validateSeason } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, leaders, seasonInfo, teamGames, quarterAverages, playerGameLogs } from '../lib/stats.mjs';
 import { esc, f1, signed, scatter, page, fmtDate, assetVersion } from '../lib/render.mjs';
 import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
+import { buildStints, checkStints, aggregate, rapm } from '../lib/pbp.mjs';
 
 const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 const args = process.argv.slice(2);
@@ -20,7 +21,8 @@ const OUT = 'site';
 
 if (!existsSync(dataDir)) { console.error(`No data in ${dataDir}. Run "npm run fetch" first.`); process.exit(1); }
 const files = readdirSync(dataDir).filter((f) => f.endsWith('.json') && !f.startsWith('_')).sort();
-const games = files.map((f) => parseGame(JSON.parse(readFileSync(join(dataDir, f)))));
+const rawPbp = new Map();
+const games = files.map((f) => { const raw = JSON.parse(readFileSync(join(dataDir, f))); const g = parseGame(raw); if (raw.pbp) rawPbp.set(g.gameCode, raw.pbp); return g; });
 
 // Official club crests (optional). Only https image links are used.
 const crests = new Map();
@@ -53,6 +55,29 @@ const teams = teamTable(games);
 const players = playerTable(games);
 const qual = qualified(players, teams, cfg);
 const info = seasonInfo(games);
+
+// ---- Play-by-play: on/off, lineups, impact (only games that match the box score exactly) ----
+const pbpOk = [], pbpBad = [];
+for (const g of games) {
+  const raw = rawPbp.get(g.gameCode);
+  if (!raw) continue;
+  const r = buildStints(g, raw);
+  const why = r.ok ? checkStints(g, r.stints) : r.reason;
+  if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints });
+}
+const PBP = pbpOk.length ? aggregate(pbpOk) : null;
+const IMPACT = PBP ? rapm(PBP.rows) : null;
+if (rawPbp.size) {
+  console.log(`✓ Play-by-play: ${pbpOk.length} of ${rawPbp.size} games match the box score exactly and are used for on/off, lineups and impact`);
+  for (const b of pbpBad.slice(0, 8)) console.log('  left out: ' + b);
+}
+const onOffOf = (id) => {
+  const o = PBP?.onoff.get(id);
+  if (!o) return null;
+  const off = { secs: o.teamTot.secs - o.on.secs, poss: o.teamTot.poss - o.on.poss, pf: o.teamTot.pf - o.on.pf, pa: o.teamTot.pa - o.on.pa };
+  const net = (x) => (x.poss > 0 ? 100 * (x.pf - x.pa) / x.poss : null);
+  return { onMin: o.on.secs / 60, offMin: off.secs / 60, onNet: net(o.on), offNet: net(off), swing: net(o.on) != null && net(off) != null && off.poss >= 20 ? net(o.on) - net(off) : null };
+};
 const avg = (arr, k) => arr.reduce((s, x) => s + x[k], 0) / (arr.length || 1);
 const teamName = new Map(teams.map((t) => [t.code, t.name]));
 // "FC BARCELONA" -> "FC Barcelona", "LDLC ASVEL VILLEURBANNE" -> "LDLC ASVEL Villeurbanne"
@@ -245,6 +270,22 @@ for (const t of teams) {
   const form = list.slice(0, 5).reverse().map((g) => `<span class="form ${g.win ? 'w' : 'l'}" title="${g.win ? 'Win' : 'Loss'} ${g.isHome ? 'vs' : 'at'} ${esc(g.opp.tv)} ${g.for}–${g.against}">${g.win ? 'W' : 'L'}</span>`).join('');
   const best = Object.entries(t.ranks).filter(([k]) => ['ortg', 'drtg', 'net', 'efg', 'efgD', 'tov100D', 'orebPct', 'drebPct', 'threePct', 'twoPct'].includes(k)).sort((a, b) => a[1] - b[1])[0];
   const LBL = { ortg: 'offence', drtg: 'defence', net: 'net rating', efg: 'shooting (eFG%)', efgD: 'shooting defence', tov100D: 'forcing turnovers', orebPct: 'offensive rebounding', drebPct: 'defensive rebounding', threePct: '3-point shooting', twoPct: '2-point shooting' };
+  const nameOf = new Map(players.map((q) => [q.id, q.name]));
+  const short = (id) => { const n = nameOf.get(id) || id; const parts = n.split(' '); return parts.length > 1 ? parts.slice(1).join(' ') : n; };
+  const sg = (v) => (v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1));
+  let lineupCard = '', onoffTeamCard = '';
+  if (PBP) {
+    const L = PBP.lineups.filter((l) => l.team === t.code && l.secs >= 300).sort((a, b) => b.secs - a.secs).slice(0, 12);
+    if (L.length) lineupCard = `<section class="card"><h2>Lineups</h2><p class="muted">Five-man groups with at least 5 minutes together, most used first. Ratings are points per 100 possessions.</p>
+<div class="scroll"><table><thead><tr><th scope="col">Lineup</th><th scope="col" class="num">MIN</th><th scope="col" class="num">Poss</th><th scope="col" class="num">ORtg</th><th scope="col" class="num">DRtg</th><th scope="col" class="num">Net</th></tr></thead><tbody>
+${L.map((l) => { const o = l.poss ? 100 * l.pf / l.poss : 0, d = l.poss ? 100 * l.pa / l.poss : 0; return `<tr><td class="team">${l.ids.map((id) => `<a href="${playerHref(id)}">${esc(short(id))}</a>`).join('<span class="muted"> · </span>')}</td><td class="num">${f1(l.secs / 60)}</td><td class="num">${Math.round(l.poss)}</td><td class="num">${f1(o)}</td><td class="num">${f1(d)}</td><td class="num ${o - d >= 0 ? 'pos' : 'neg'}">${sg(o - d)}</td></tr>`; }).join('')}
+</tbody></table></div><p class="muted small">Lineups with few minutes swing a lot from game to game. Treat them as clues, not verdicts.</p></section>`;
+    const R = roster.map((q) => ({ q, oo: onOffOf(q.id), imp: IMPACT?.values.get(q.id) })).filter((x) => x.oo);
+    if (R.length) onoffTeamCard = `<section class="card"><h2>With and without</h2><p class="muted">Team margin per 100 possessions with each player on the court and on the bench (games he played), and his impact rating.</p>
+<div class="scroll"><table><thead><tr><th scope="col">Player</th><th scope="col" class="num">MIN on</th><th scope="col" class="num">On</th><th scope="col" class="num">Off</th><th scope="col" class="num">Swing</th><th scope="col" class="num">Impact</th></tr></thead><tbody>
+${R.map(({ q, oo, imp }) => `<tr><td><a href="${playerHref(q.id)}">${esc(q.name)}</a></td><td class="num">${Math.round(oo.onMin)}</td><td class="num">${sg(oo.onNet)}</td><td class="num">${sg(oo.offNet)}</td><td class="num ${oo.swing == null ? '' : oo.swing >= 0 ? 'pos' : 'neg'}">${sg(oo.swing)}</td><td class="num">${imp == null ? '–' : sg(imp)}</td></tr>`).join('')}
+</tbody></table></div></section>`;
+  }
   const teamHero = cover({
     crumbs: `<a href="teams.html">Teams</a> / Scouting report`,
     kicker: best && best[1] <= 3 ? `${ord(best[1])} in the league in ${LBL[best[0]]}` : `${ord(t.rank)} in the standings`,
@@ -288,6 +329,7 @@ ${factorRow('Assisted baskets %', 'astRate', null)}
 <div class="scroll"><table><thead><tr>${['Player', 'GP', 'GS', 'MIN', 'PTS', 'REB', 'AST', 'STL', 'TOV', 'PIR', 'USG%', 'TS%', '3PA', '3P%', 'FT%'].map((h, i) => `<th scope="col"${i ? ' class="num"' : ''}>${h}</th>`).join('')}</tr></thead><tbody>
 ${roster.map((p) => `<tr><td><a href="${playerHref(p.id)}">${esc(p.name)}</a></td><td class="num">${p.gp}</td><td class="num">${p.gs}</td><td class="num">${f1(p.mpg)}</td><td class="num">${f1(p.ppg)}</td><td class="num">${f1(p.rpg)}</td><td class="num">${f1(p.apg)}</td><td class="num">${f1(p.spg)}</td><td class="num">${f1(p.tpg)}</td><td class="num">${f1(p.pirpg)}</td><td class="num">${f1(p.usg)}</td><td class="num">${f1(p.ts)}</td><td class="num">${f1(p.threeApg)}</td><td class="num">${f1(p.threePct)}</td><td class="num">${f1(p.ftPct)}</td></tr>`).join('')}
 </tbody></table></div></section>
+${lineupCard}${onoffTeamCard}
 <section class="card"><h2>Results</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
 ${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}">${badge(g.opp.code, g.opp.tv)} ${esc(titleCase(g.opp.name))}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td></tr>`).join('')}
@@ -376,12 +418,30 @@ for (const p of players) {
     .map((x) => ({ x, rank: isQual ? (qualRank[p.id]?.[x[0]] ?? [...qual].sort((a, b) => b[x[0]] - a[x[0]]).findIndex((q) => q.id === p.id) + 1) : 0 }))
     .sort((a, b) => a.rank - b.rank)[0].x;
   if (isQual && r[fourth[0]] == null) r[fourth[0]] = [...qual].sort((a, b) => b[fourth[0]] - a[fourth[0]]).findIndex((q) => q.id === p.id) + 1;
-  const tiles = `<div class="tiles">
+  const oo = onOffOf(p.id), imp = IMPACT?.values.get(p.id);
+  const rankIn = (map) => { if (!isQual || map == null) return null; const list = qual.map((q) => [q.id, map(q)]).filter(([, v]) => v != null).sort((x, y) => y[1] - x[1]); const i = list.findIndex(([id]) => id === p.id); return i < 0 ? null : { r: i + 1, n: list.length }; };
+  const chipR = (rk) => !rk ? '<span class="chip">Not enough minutes yet</span>' : `<span class="chip ${rk.r <= 3 ? 'hot' : rk.r <= 20 ? 'warm' : ''}">${ord(rk.r)} in the league</span>`;
+  const sgn = (v) => (v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1));
+  const tiles = (oo && imp != null) ? `<div class="tiles">
+<div class="tile"><span class="label">Scoring</span><span class="big">${f1(p.ppg)}</span><span class="sub">points per game</span>${chip('ppg')}</div>
+<div class="tile"><span class="label">Impact rating</span><span class="big">${sgn(imp)}</span><span class="sub">RAPM, points per 100 possessions</span>${chipR(rankIn((q) => IMPACT.values.get(q.id) ?? null))}</div>
+<div class="tile"><span class="label">On / off swing</span><span class="big">${sgn(oo.swing)}</span><span class="sub">team margin per 100, on v off</span>${chipR(oo.swing == null ? null : rankIn((q) => onOffOf(q.id)?.swing ?? null))}</div>
+<div class="tile"><span class="label">All-round</span><span class="big">${f1(p.pirpg)}</span><span class="sub">PIR per game</span>${chip('pirpg')}</div>
+</div>` : `<div class="tiles">
 <div class="tile"><span class="label">Scoring</span><span class="big">${f1(p.ppg)}</span><span class="sub">points per game</span>${chip('ppg')}</div>
 <div class="tile"><span class="label">All-round</span><span class="big">${f1(p.pirpg)}</span><span class="sub">PIR per game</span>${chip('pirpg')}</div>
 <div class="tile"><span class="label">Efficiency</span><span class="big">${f1(p.ts)}</span><span class="sub">true shooting %</span>${chip('ts')}</div>
 <div class="tile"><span class="label">${fourth[1]}</span><span class="big">${f1(p[fourth[0]])}</span><span class="sub">${fourth[2]}</span>${chip(fourth[0])}</div>
 </div>`;
+  const teamShort = esc(teamT ? titleCase(teamT.name) : p.tv);
+  const onoffCard = (oo && oo.onNet != null && oo.offNet != null) ? (() => {
+    const max = Math.max(10, Math.abs(oo.onNet), Math.abs(oo.offNet));
+    const bar = (v) => `<div class="oo-track"><span class="oo-mid"></span><span class="oo-fill ${v >= 0 ? 'up' : 'down'}" style="${v >= 0 ? 'left:50%' : `right:50%`};width:${(50 * Math.abs(v) / max).toFixed(1)}%"></span></div>`;
+    return `<section class="card oo"><h2>${teamShort} with him, and without him</h2><p class="muted">Points the team wins or loses by per 100 possessions, in the games he played.</p>
+<div class="oo-row"><div><strong>On the floor</strong><span class="muted small">${Math.round(oo.onMin)} minutes</span></div>${bar(oo.onNet)}<span class="oo-val ${oo.onNet >= 0 ? 'pos' : 'neg'}">${sgn(oo.onNet)}</span></div>
+<div class="oo-row"><div><strong>On the bench</strong><span class="muted small">${Math.round(oo.offMin)} minutes</span></div>${bar(oo.offNet)}<span class="oo-val ${oo.offNet >= 0 ? 'pos' : 'neg'}">${sgn(oo.offNet)}</span></div>
+${oo.offMin < 30 ? '<p class="muted small">Few bench minutes so far, so the "without him" number is a small sample.</p>' : ''}</section>`;
+  })() : '';
 
   // Game by game: last 10 games, oldest left
   const recent = log.slice(0, 10).reverse();
@@ -432,7 +492,8 @@ ${stackList.map((q) => `<tr${q.id === p.id ? ' class="me"' : ''}><td><a href="${
 
   writePage(`player-${safe(p.id)}.html`, p.name, `
 ${tiles}
-<div class="row">${gbg}${pctlCard}</div>
+<div class="row">${onoffCard}${gbg}</div>
+<div class="row">${pctlCard}</div>
 ${stack}
 <div class="row">
 <section class="card"><h2>Profile</h2><dl class="bio">${bio.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
@@ -490,6 +551,13 @@ writePage('method.html', 'How we calculate', `
 <dt>PIR</dt><dd>The EuroLeague's official Performance Index Rating, taken directly from the box score.</dd>
 <dt>PRA</dt><dd>Points + rebounds + assists per game.</dd>
 <dt>Stocks</dt><dd>Steals + blocks per game.</dd>
+</dl>
+<h2>On/off, lineups and impact</h2>
+<p>From the official play-by-play we track exactly which ten players are on the court at every moment. A game is only used if this reproduces the official final score and every player's official +/- and minutes; otherwise it is left out of these numbers.</p>
+<dl>
+<dt>On / off</dt><dd>The team's points scored minus points allowed per 100 possessions with the player on the court, and with him on the bench, in the games he played. The swing is the difference.</dd>
+<dt>Lineups</dt><dd>The same, for each five-man group that played together.</dd>
+<dt>Impact rating (RAPM)</dt><dd>Regularised adjusted plus-minus: a ridge regression over every stint of the season that estimates how many points per 100 possessions each player adds, after accounting for his teammates and opponents. It is pulled towards zero on purpose, so early in the season most values are small. Players with fewer than 150 possessions are not rated.</dd>
 </dl>
 <h2>Leaderboards</h2>
 <p>${qualNote}</p>
