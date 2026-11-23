@@ -68,12 +68,19 @@
 
   // ---------- GitHub upload (one commit with all files) ----------
   async function gh(path, opts = {}) {
-    const r = await fetch('https://api.github.com/repos/' + CFG.repo + path, {
-      ...opts, headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + getToken(), 'X-GitHub-Api-Version': '2022-11-28', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }
-    });
+    let r;
+    try {
+      r = await fetch('https://api.github.com/repos/' + CFG.repo + path, {
+        ...opts, headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + getToken(), 'X-GitHub-Api-Version': '2022-11-28', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }
+      });
+    } catch { throw new Error('could not reach GitHub. Check the internet connection, or an ad blocker that blocks api.github.com'); }
     if (!r.ok) {
-      const why = r.status === 401 ? 'the GitHub key is wrong or expired' : r.status === 403 || r.status === 404 ? 'the GitHub key has no permission to write to the site (it needs Contents: Read and write on ' + CFG.repo + ')' : 'GitHub answered ' + r.status;
-      throw new Error(why);
+      let detail = ''; try { detail = (await r.json()).message || ''; } catch { /* no body */ }
+      const why = r.status === 401 ? 'GitHub does not recognise this key (it may be mistyped, expired or deleted)'
+        : r.status === 404 ? `this key cannot see ${CFG.repo}. When creating it, choose “Only select repositories” and pick ${String(CFG.repo).split('/')[1]}`
+        : r.status === 403 ? `this key is read-only. Edit it on GitHub: Permissions → Contents → “Read and write”, and repository access → ${String(CFG.repo).split('/')[1]}`
+        : r.status === 422 ? 'GitHub rejected the upload' : 'GitHub answered ' + r.status;
+      throw new Error(why + (detail ? ` (GitHub: “${detail}”)` : ''));
     }
     return r.status === 204 ? null : r.json();
   }
@@ -220,15 +227,21 @@
       el('summary', {}, getToken() ? '✓ This device can upload directly. Change or disconnect' : 'Connect this device for one-click upload (once per device)'),
       el('ol', {},
         el('li', {}, 'Sign in to GitHub as a staff member with access to the site, then ', el('a', { href: 'https://github.com/settings/personal-access-tokens/new', target: '_blank', rel: 'noopener' }, 'create a fine-grained access key'), '.'),
-        el('li', {}, `Name: “HTA LAB upload”. Repository access: Only select repositories → ${String(CFG.repo).split('/')[1]}.`),
-        el('li', {}, 'Permissions → Repository permissions → Contents: Read and write. Then Generate token and copy it.'),
+        el('li', {}, 'Token name: HTA LAB upload. Expiration: choose 1 year (or “No expiration”).'),
+        el('li', {}, el('strong', {}, 'Repository access: choose “Only select repositories”'), ` and pick ${String(CFG.repo).split('/')[1]}. (The default, “Public repositories”, is read-only and will not work.)`),
+        el('li', {}, el('strong', {}, 'Permissions → Repository permissions → Contents → “Read and write”'), '. Leave everything else as it is.'),
+        el('li', {}, 'Click “Generate token”, then copy the key (it starts with github_pat_).'),
         el('li', {}, 'Paste it below. It is saved in this browser only.')),
       el('label', { for: 'gh-token' }, 'GitHub access key'), input,
       el('div', { class: 'row-btns' },
         el('button', { type: 'button', class: 'btn', onclick: async () => {
           const t = input.value.trim(); if (!t) return;
           setToken(t); msg.textContent = 'Checking…';
-          try { const r = await gh(''); if (!r.permissions?.push) throw new Error('this key cannot write to the site'); msg.textContent = '✓ Connected. You can now upload with one click.'; input.value = ''; onDone(); }
+          try {
+            const r = await gh('');
+            if (r.permissions && r.permissions.push === false) throw new Error(`this key is read-only. Edit it on GitHub: repository access → Only select repositories → ${String(CFG.repo).split('/')[1]}, and Permissions → Contents → “Read and write”`);
+            msg.textContent = '✓ Connected. You can now upload with one click.'; input.value = ''; onDone();
+          }
           catch (err) { setToken(''); msg.textContent = 'Not connected: ' + err.message + '.'; }
         } }, 'Connect'),
         getToken() ? el('button', { type: 'button', class: 'btn ghost', onclick: () => { setToken(''); onDone(); } }, 'Disconnect this device') : null),
