@@ -146,7 +146,7 @@ const homeHero = cover({
   lede: lead ? `<strong>${esc(titleCase(lead.name))}</strong> lead the league at ${lead.w}–${lead.l}. ` +
     (topBy('pirpg') ? `<strong>${esc(topBy('pirpg').name)}</strong> tops the PIR chart at ${f1(topBy('pirpg').pirpg)} a game.` : '') : '',
   strip: [[info.games, 'games played'], [esc(bestO?.tv || ''), `best offence, ${f1(bestO?.ortg)}`], [esc(bestD?.tv || ''), `best defence, ${f1(bestD?.drtg)}`]],
-  side: cfg.leagueLogo ? `<div class="side league-badge"><img src="${esc(cfg.leagueLogo)}" alt="EuroLeague" width="300" height="68"></div>` : ''
+  side: cfg.leagueLogo ? `<div class="side league-badge"><img src="${esc(cfg.leagueLogo)}" alt="EuroLeague" width="190" height="43"></div>` : ''
 });
 writePage('index.html', cfg.seasonLabel, `
 <div class="tiles">
