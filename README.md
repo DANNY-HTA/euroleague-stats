@@ -58,8 +58,8 @@ updating instead of showing wrong numbers.
 ## HAPOEL – INTERNAL (staff documents)
 
 1. On the website, open **Hapoel Internal → + Add document**.
-2. The first time, choose the team password: at least 12 characters, ideally a
-   long passphrase. Everyone on the staff uses the same password.
+2. The first time, set the team password (at least 8 characters). Everyone on
+   the staff uses the same password. A longer password is much harder to guess.
 3. Fill in the title, category and notes, and/or attach a file (up to 18 MB),
    then click **Lock and download**. Your browser saves a locked `.enc` file.
 4. Click **Open upload folder on GitHub**, drag the `.enc` file in and click

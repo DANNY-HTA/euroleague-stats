@@ -56,13 +56,13 @@
   }
 
   function lockScreen(onKey, { confirm = false, note = '' } = {}) {
-    const pw = el('input', { type: 'password', id: 'pw', autocomplete: 'current-password', required: true, minlength: '12' });
+    const pw = el('input', { type: 'password', id: 'pw', autocomplete: 'current-password', required: true, minlength: '8' });
     const pw2 = confirm ? el('input', { type: 'password', id: 'pw2', autocomplete: 'new-password', required: true }) : null;
     const msg = el('p', { class: 'form-msg', role: 'alert' });
     const btn = el('button', { type: 'submit', class: 'btn' }, 'Unlock');
     const form = el('form', { class: 'lock card', onsubmit: async (e) => {
       e.preventDefault(); msg.textContent = '';
-      if (pw.value.length < 12) { msg.textContent = 'The team password is at least 12 characters.'; return; }
+      if (pw.value.length < 8) { msg.textContent = 'The team password is at least 8 characters.'; return; }
       if (pw2 && pw.value !== pw2.value) { msg.textContent = 'The two passwords are different.'; return; }
       btn.disabled = true; btn.textContent = 'Checking…';
       try {
@@ -155,7 +155,7 @@
     const k = await loadKey();
     if (k && await go(k)) return;
     forget();
-    lockScreen(go, files.length ? {} : { confirm: true, note: 'No documents yet, so this sets the team password. Use a long passphrase of at least 12 characters, for example four random words and a number. Everyone on the staff will use the same password.' });
+    lockScreen(go, files.length ? {} : { confirm: true, note: 'No documents yet, so this sets the team password. Type the team password chosen by the staff (at least 8 characters). Everyone on the staff uses the same password.' });
   }
 
   function uploadForm(key) {
