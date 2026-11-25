@@ -63,7 +63,7 @@ for (const g of games) {
   const raw = rawPbp.get(g.gameCode);
   if (!raw) continue;
   const r = buildStints(g, raw);
-  if (r.ok) { const fix = repairPlusMinus(g, r.stints); if (fix) { pmRepaired.set(g.gameCode, fix.fixed); console.log(`  game ${g.gameCode} (${g.home.tv}–${g.away.tv}): official +/- is wrong for ${fix.fixed} players, recalculated from the play-by-play`); } }
+  if (r.ok) { const fix = repairPlusMinus(g, r.stints); if (fix) { pmRepaired.set(g.gameCode, fix.fixed); console.log(`  game ${g.gameCode} (${g.home.tv}–${g.away.tv}): official +/- is wrong for ${fix.fixed} players (off by up to ${fix.maxDiff}), recalculated from the play-by-play`); } }
   const why = r.ok ? checkStints(g, r.stints) : r.reason;
   if (why && r.ok && !why.startsWith('play-by-play score')) pbpNear.set(g.gameCode, { stints: r.stints, why });
   if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints });
