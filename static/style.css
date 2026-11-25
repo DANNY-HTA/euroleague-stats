@@ -623,3 +623,8 @@ td.stars, .sc-stars button.on { color: #e8a317; }
 @media (min-width: 1000px) and (max-width: 1560px) { .logo-sub { display: none; } }
 .league-switch a { font-size: 12px; padding: 6px 9px; }
 @media (min-width: 1000px) and (max-width: 1560px) { nav a { font-size: 14px; padding: 9px 8px; } .top .wrap { gap: 6px 10px; } nav a.nav-internal::before { margin-right: 5px; } }
+/* Header: give the menu the full width so logo, league switch and menu stay on one line */
+.top .wrap { max-width: 1560px; flex-wrap: nowrap; }
+.top nav { display: flex; flex-wrap: nowrap; gap: 2px; }
+.top .logo-sub { display: none; }
+@media (max-width: 1180px) { .top .wrap { flex-wrap: wrap; } .top nav { flex-wrap: wrap; } }
