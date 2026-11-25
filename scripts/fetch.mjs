@@ -119,6 +119,21 @@ async function main() {
     console.warn('Could not download the club list (the site will show team codes instead): ' + err.message);
   }
 
+  // Full season schedule (dates, times, venues) for upcoming games. Optional.
+  try {
+    const raw = await getJson(`https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/games`);
+    const side = (x) => ({ code: x?.club?.code, tv: x?.club?.tvCode, name: x?.club?.name });
+    const sched = (raw?.data || []).filter((g) => g.gameCode && g.local?.club && g.road?.club).map((g) => ({
+      c: g.gameCode, r: g.round, rn: g.roundName || '', utc: g.utcDate || null, ok: !!(g.confirmedDate && g.confirmedHour),
+      played: !!g.played, h: side(g.local), a: side(g.road), venue: g.venue?.name || ''
+    }));
+    await writeFile(join(OUT, '_schedule.json'), JSON.stringify(sched));
+    console.log(`Schedule saved: ${sched.length} games (${sched.filter((g) => !g.played).length} still to play)`);
+  } catch (err) {
+    console.warn('Could not download the schedule: ' + err.message);
+  }
+  await sleep(DELAY_MS);
+
   const people = [];
   const sources = [
     ...clubs.map((c) => `https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/clubs/${encodeURIComponent(c.code)}/people`),

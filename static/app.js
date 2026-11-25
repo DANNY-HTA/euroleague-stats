@@ -73,3 +73,15 @@
   round.addEventListener('change', apply);
   apply();
 })();
+
+// Show game times in the visitor's own time zone.
+(() => {
+  const day = (d) => { const a = new Date(); a.setHours(0, 0, 0, 0); const b = new Date(d); b.setHours(0, 0, 0, 0); return Math.round((b - a) / 86400000); };
+  document.querySelectorAll('time[data-utc]').forEach((el) => {
+    const v = el.dataset.utc; if (!v) return;
+    const d = new Date(v); if (isNaN(d)) return;
+    const n = day(d);
+    const date = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    el.textContent = `${date} · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  });
+})();

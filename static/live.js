@@ -35,24 +35,42 @@ const quarterName = (h) => { const q = Number(t(h.Quarter)) || 0; return q ? (q 
 // ---------- Game list ----------
 let headers = new Map(), selected = null, timer = null;
 async function loadList() {
-  const codes = [];
-  for (let c = CFG.firstCode; c < CFG.firstCode + 14; c++) codes.push(c);
-  if (selected && !codes.includes(selected)) codes.push(selected);
-  const got = await Promise.all(codes.map((c) => get('Header', c).then((h) => [c, h]).catch(() => [c, null])));
+  const soon = CFG.schedule.filter((x) => !x.utc || new Date(x.utc).getTime() - Date.now() < 3 * 86400000);
+  const codes = new Set(soon.map((x) => x.c));
+  for (let c = CFG.firstCode; c < CFG.firstCode + 6; c++) codes.add(c);
+  if (selected) codes.add(selected);
+  const got = await Promise.all([...codes].map((c) => get('Header', c).then((h) => [c, h]).catch(() => [c, null])));
   headers = new Map(got.filter(([, h]) => h && t(h.TeamA)));
 }
+const when = (utc) => {
+  if (!utc) return 'Time to be confirmed';
+  const d = new Date(utc), a = new Date(); a.setHours(0, 0, 0, 0); const b = new Date(d); b.setHours(0, 0, 0, 0);
+  const n = Math.round((b - a) / 86400000);
+  return `${n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+};
 function listView() {
-  const games = [...headers].sort((a, b) => (status(b[1]) === 'live') - (status(a[1]) === 'live') || a[0] - b[0]);
-  if (!games.length) return el('section', { class: 'card' }, el('h2', {}, 'No games right now'), el('p', { class: 'muted' }, 'The next games are not in the league\'s live feed yet. They appear here as soon as the league adds them, and update automatically once they tip off.'));
-  return el('section', { class: 'card' }, el('h2', {}, 'Games'), el('p', { class: 'muted' }, 'Live games update every 15 seconds. Click a game to follow it.'),
-    el('div', { class: 'gcards' }, games.map(([code, h]) => {
-      const st = status(h), hw = Number(h.ScoreA) > Number(h.ScoreB);
-      const line = (w, name, c, score, win) => el('span', { class: `gl ${win ? 'w' : ''}` }, crest(c, 22) || el('i'), el('span', { class: 'gn' }, titleCase(name)), el('b', {}, st === 'upcoming' ? '' : String(score)));
-      return el('a', { class: `gcard ${st === 'live' ? 'is-live' : ''}`, href: `?game=${code}` },
-        el('span', { class: 'gd' }, st === 'live' ? el('span', { class: 'live-dot' }, `LIVE · ${quarterName(h)} ${t(h.RemainingPartialTime) || ''}`) : st === 'final' ? `Final · Rd ${t(h.Round)}` : `Rd ${t(h.Round)} · ${t(h.Date)} · ${t(h.Hour)}`),
-        line('A', h.TeamA, t(h.CodeTeamA), t(h.ScoreA), st !== 'upcoming' && hw),
-        line('B', h.TeamB, t(h.CodeTeamB), t(h.ScoreB), st !== 'upcoming' && !hw));
-    })));
+  // Every game we know of: the schedule, plus anything the live feed shows.
+  const all = new Map();
+  for (const x of CFG.schedule) all.set(x.c, { c: x.c, sched: x, h: headers.get(x.c) || null });
+  for (const [c, h] of headers) if (!all.has(c)) all.set(c, { c, sched: null, h });
+  const items = [...all.values()].map((g) => ({ ...g, st: g.h && status(g.h) !== 'upcoming' ? status(g.h) : 'upcoming', ts: g.sched?.utc ? new Date(g.sched.utc).getTime() : Infinity }));
+  const live = items.filter((g) => g.st === 'live');
+  const done = items.filter((g) => g.st === 'final');
+  const next = items.filter((g) => g.st === 'upcoming').sort((a, b) => a.ts - b.ts || a.c - b.c).slice(0, 20);
+  const side = (g, w) => g.sched ? (w === 'A' ? g.sched.h : g.sched.a) : { code: t(g.h['CodeTeam' + w]), name: g.h['Team' + w] };
+  const card = (g) => {
+    const H = side(g, 'A'), A = side(g, 'B'), sA = g.h ? Number(g.h.ScoreA) : 0, sB = g.h ? Number(g.h.ScoreB) : 0, played = g.st !== 'upcoming';
+    const line = (s, sc, win) => el('span', { class: `gl ${win ? 'w' : ''}` }, crest(s.code, 22) || el('i'), el('span', { class: 'gn' }, titleCase(s.name || s.code)), el('b', {}, played ? String(sc) : ''));
+    const top = g.st === 'live' ? el('span', { class: 'live-dot' }, `LIVE · ${quarterName(g.h)} ${t(g.h.RemainingPartialTime) || ''}`) : g.st === 'final' ? `Final${g.sched ? ` · Rd ${g.sched.r}` : ''}` : `${g.sched ? `Rd ${g.sched.r} · ` : ''}${when(g.sched?.utc)}`;
+    return el('a', { class: `gcard ${g.st === 'live' ? 'is-live' : ''} ${g.st === 'upcoming' ? 'upcoming' : ''}`, href: `?game=${g.c}` }, el('span', { class: 'gd' }, top), line(H, sA, played && sA > sB), line(A, sB, played && sB > sA), g.sched?.venue && g.st === 'upcoming' ? el('span', { class: 'gm' }, g.sched.venue) : null);
+  };
+  const block = (title, sub, list) => list.length ? el('section', { class: 'card' }, el('h2', {}, title), sub ? el('p', { class: 'muted' }, sub) : null, el('div', { class: 'gcards' }, list.map(card))) : null;
+  const out = [
+    block('Live now', 'Updates every 15 seconds. Click to follow the game.', live),
+    block('Upcoming games', 'Times in your time zone. Each game goes live here automatically at tip-off — click one to open it and leave the page open.', next),
+    block('Just finished', '', done)
+  ].filter(Boolean);
+  return out.length ? out : [el('section', { class: 'card' }, el('h2', {}, 'No games scheduled'), el('p', { class: 'muted' }, 'There are no upcoming games in the league schedule right now.'))];
 }
 
 // ---------- One game ----------
@@ -162,11 +180,19 @@ async function tick() {
   try {
     if (selected) {
       const raw = await loadGame(selected);
-      if (!raw.header || !t(raw.header.TeamA)) host.replaceChildren(el('section', { class: 'card' }, el('p', {}, 'This game is not in the live feed yet.'), el('a', { href: 'live.html' }, '← All games')));
+      if (!raw.header || !t(raw.header.TeamA)) {
+        const x = CFG.schedule.find((y) => y.c === selected);
+        host.replaceChildren(el('section', { class: 'live-board' },
+          el('div', { class: 'lb-top' }, el('a', { href: 'live.html', class: 'lb-back' }, '← All games'), el('span', { class: 'lb-st' }, x ? when(x.utc) : 'NOT STARTED'), el('span', { class: 'lb-upd' }, 'This page checks for tip-off every minute')),
+          x ? el('div', { class: 'scoreboard' },
+            el('div', { class: 'sb-team' }, CFG.crests[x.h.code] ? el('span', { class: 'sb-crest' }, el('img', { src: CFG.crests[x.h.code], alt: '' })) : null, el('span', { class: 'sb-name' }, titleCase(x.h.name)), el('span', { class: 'muted-w' }, 'Home')),
+            el('div', { class: 'sb-score' }, el('span', { class: 'dash' }, 'vs'), el('small', {}, x.venue || '')),
+            el('div', { class: 'sb-team' }, CFG.crests[x.a.code] ? el('span', { class: 'sb-crest' }, el('img', { src: CFG.crests[x.a.code], alt: '' })) : null, el('span', { class: 'sb-name' }, titleCase(x.a.name)), el('span', { class: 'muted-w' }, 'Away'))) : el('p', {}, 'This game is not in the live feed yet.')));
+      }
       else { host.replaceChildren(...gameView(selected, raw, new Date()).filter(Boolean)); if (status(raw.header) === 'live') next = 15000; else if (status(raw.header) === 'final') next = 0; }
     } else {
       await loadList();
-      host.replaceChildren(listView());
+      host.replaceChildren(...listView());
       if ([...headers.values()].some((h) => status(h) === 'live')) next = 30000;
     }
   } catch (e) {

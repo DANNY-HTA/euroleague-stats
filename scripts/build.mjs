@@ -34,6 +34,9 @@ try {
     if (c.code && typeof c.crest === 'string' && /^https:\/\/[^\s"'<>]+$/.test(c.crest)) crests.set(c.code, c.crest);
   }
 } catch { /* no crest file: team codes are shown instead */ }
+// Season schedule (optional): upcoming games with date, time and venue.
+let schedule = [];
+try { schedule = JSON.parse(readFileSync(join(dataDir, '_schedule.json'))); } catch { /* no schedule: only played games are shown */ }
 // Player details (optional). Never includes photos.
 let peopleIndex = indexPeople([]);
 try { peopleIndex = indexPeople(JSON.parse(readFileSync(join(dataDir, '_people.json')))); } catch { /* stats-only player pages */ }
@@ -322,17 +325,26 @@ const roundMvpSection = roundMvps.length ? `<section class="card"><h2>MVP of eac
 ${roundMvps.map((x) => `<tr><td class="num">${x.r}</td><td><a href="${playerHref(x.p.id)}">${esc(x.p.name)}</a> <span class="muted">${badge(x.s.code, x.s.tv)}${esc(x.s.tv)}</span></td><td class="num">${x.p.pts}</td><td class="num">${x.p.reb}</td><td class="num">${x.p.ast}</td><td class="num"><strong>${x.p.pir}</strong></td><td><a href="${gameHref(x.g.gameCode)}">${esc(x.g.home.tv)} ${x.g.home.score}–${x.g.away.score} ${esc(x.g.away.tv)}</a></td></tr>`).join('')}
 </tbody></table></div></section>` : '';
 // ---- Home: every game of the season ----
-const roundsList = [...new Set(games.map((g) => g.round).filter(Boolean))].sort((a, b) => a - b);
+const playedCodes = new Set(games.map((g) => Number(g.gameCode)));
+const upcoming = schedule.filter((x) => !playedCodes.has(Number(x.c)) && x.h?.code && x.a?.code).sort((a, b) => String(a.utc).localeCompare(String(b.utc)) || a.c - b.c);
+const roundsList = [...new Set([...games.map((g) => g.round), ...upcoming.map((x) => x.r)].filter(Boolean))].sort((a, b) => a - b);
+const currentRound = upcoming.length ? upcoming[0].r : roundsList[roundsList.length - 1];
+const timeTag = (x) => `<time data-utc="${esc(x.utc || '')}" datetime="${esc(x.utc || '')}">${esc(x.utc ? x.utc.slice(0, 16).replace('T', ' ') + ' UTC' : 'Date to be confirmed')}</time>`;
+const upcomingCard = (x) => {
+  const line = (s) => `<span class="gl">${crests.has(s.code) ? `<img src="${esc(crests.get(s.code))}" alt="" width="22" height="22">` : '<i></i>'}<span class="gn">${esc(titleCase(s.name || s.code))}</span><b></b></span>`;
+  return `<a class="gcard upcoming" href="live.html?game=${Number(x.c)}" data-r="${x.r || 0}" data-t="${esc(x.h.code)} ${esc(x.a.code)}"><span class="gd">Rd ${x.r} · ${timeTag(x)}</span>${line(x.h)}${line(x.a)}<span class="gm">${x.venue ? esc(titleCase(x.venue)) : ''}${x.ok ? '' : ' · time to be confirmed'}</span></a>`;
+};
+
 const gameCard = (g) => {
   const hw = g.home.score > g.away.score, m = gameMvp(g);
   const line = (s, w) => `<span class="gl ${w ? 'w' : ''}">${crests.has(s.code) ? `<img src="${esc(crests.get(s.code))}" alt="" width="22" height="22">` : '<i></i>'}<span class="gn">${esc(titleCase(s.name))}</span><b>${s.score}</b></span>`;
   return `<a class="gcard" href="${gameHref(g.gameCode)}" data-r="${g.round || 0}" data-t="${esc(g.home.code)} ${esc(g.away.code)}"><span class="gd">${g.round ? `Rd ${g.round} · ` : ''}${esc(fmtDate(g.date))}</span>${line(g.home, hw)}${line(g.away, !hw)}${m ? `<span class="gm">MVP ${esc(m.p.name)} · ${m.p.pir} PIR</span>` : ''}</a>`;
 };
-const gamesSection = `<section class="card" id="games"><h2>All games</h2><p class="muted">Every game of the season. Click a game for the full picture: box scores, game flow, lineups, connections and play-by-play.</p>
+const gamesSection = `<section class="card" id="games"><h2>All games</h2><p class="muted">Every game of the season, played and still to come (times in your time zone). Click a played game for the full picture; click an upcoming game to follow it live.</p>
 <div class="filters" id="games-filter"><label>Team <select data-g="team"><option value="">All teams</option>${teams.slice().sort((a, b) => a.name.localeCompare(b.name)).map((t) => `<option value="${esc(t.code)}">${esc(titleCase(t.name))}</option>`).join('')}</select></label>
-<label>Round <select data-g="round"><option value="">All rounds</option>${roundsList.map((r) => `<option value="${r}"${r === roundsList[roundsList.length - 1] ? ' selected' : ''}>Round ${r}</option>`).join('')}</select></label>
+<label>Round <select data-g="round"><option value="">All rounds</option>${roundsList.map((r) => `<option value="${r}"${r === currentRound ? ' selected' : ''}>Round ${r}</option>`).join('')}</select></label>
 <span class="muted small" data-g="count"></span></div>
-<div class="gcards">${[...sortedGames].reverse().map(gameCard).join('')}</div></section>`;
+<div class="gcards">${upcoming.map(upcomingCard).join('')}${[...sortedGames].reverse().map(gameCard).join('')}</div></section>`;
 
 const standingsRows = teams.map((t) => `<tr>
 <td class="num muted">${t.rank}</td>
@@ -584,6 +596,10 @@ ${roster.map((p) => `<tr><td><a href="${playerHref(p.id)}">${esc(p.name)}</a></t
 </noscript><p class="muted">Loading…</p></div></section>
 <script type="application/json" id="teambox-data">${boxJson}</script>
 ${onoffTeamCard}${PBP ? `<section class="lu-embed"><h2 class="sec-title">All lineups</h2><p class="muted">Every five-man unit and 2-, 3- and 4-man combination this team has used. Filter by home/away, wins/losses and dates.</p><div id="lineups-app" data-team="${esc(t.code)}" data-lock="1" data-min-poss="0"><p class="muted">Loading lineups…</p></div></section>` : ""}
+${(() => { const up = upcoming.filter((x) => x.h.code === t.code || x.a.code === t.code); return up.length ? `<section class="card"><h2>Upcoming games</h2>
+<div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Venue</th><th scope="col"></th></tr></thead><tbody>
+${up.map((x) => { const home = x.h.code === t.code, o = home ? x.a : x.h; return `<tr><td>${timeTag(x)}</td><td class="num">${x.r}</td><td class="muted">${home ? 'vs' : 'at'}</td><td><a href="${teamHref(o.code)}">${badge(o.code, o.tv)} ${esc(titleCase(o.name || o.code))}</a></td><td class="muted">${esc(titleCase(x.venue || ''))}</td><td><a href="live.html?game=${Number(x.c)}">Follow live ›</a></td></tr>`; }).join('')}
+</tbody></table></div></section>` : ''; })()}
 <section class="card"><h2>Results</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
 ${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}">${badge(g.opp.code, g.opp.tv)} ${esc(titleCase(g.opp.name))}</a></td><td><a class="${g.win ? 'pos' : 'neg'}" href="${gameHref(g.gameCode)}">${g.win ? 'W' : 'L'} ${g.for}–${g.against} ›</a></td></tr>`).join('')}
@@ -870,6 +886,7 @@ writePage('live.html', 'Live', `<div id="live-app"><p class="muted">Connecting t
 <script type="application/json" id="live-config">${JSON.stringify({
   season: cfg.seasonCode,
   firstCode: Math.max(0, ...games.map((g) => Number(g.gameCode) || 0)) + 1,
+  schedule: upcoming.slice(0, 40).map((x) => ({ c: Number(x.c), r: x.r, utc: x.utc, ok: x.ok, venue: x.venue ? titleCase(x.venue) : '', h: x.h, a: x.a })),
   crests: Object.fromEntries([...crests]),
   players: Object.fromEntries(players.map((q) => [q.id, playerHref(q.id)]))
 }).replace(/</g, '\\u003c')}</script>`, 'live.html',

@@ -486,3 +486,4 @@ ul.oc-list { list-style: none; padding: 0; margin: 0; }
 ul.oc-list li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .lv-crest { object-fit: contain; vertical-align: middle; }
 #live-app > * + * { margin-top: 22px; }
+.gcard.upcoming { border-style: dashed; background: var(--soft); } .gcard.upcoming .gl { color: var(--ink); }
