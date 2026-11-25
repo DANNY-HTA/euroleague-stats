@@ -865,6 +865,17 @@ writePage('lineups.html', 'Lineups', `<div id="lineups-app"><p class="muted">Loa
   cover({ kicker: esc(roundLine), title: 'Lineups', lede: 'Every five-man unit, and every 2-, 3- and 4-man combination, built from the official play-by-play. Filter, sort any column, and switch between totals, per game, per 40 minutes and per 100 possessions.' }),
   { scripts: `<script src="lineups.js?v=${assetVersion()}" defer></script>` });
 
+// ---- Live games (read from the official live feed in the browser) ----
+writePage('live.html', 'Live', `<div id="live-app"><p class="muted">Connecting to the EuroLeague live feed…</p></div>
+<script type="application/json" id="live-config">${JSON.stringify({
+  season: cfg.seasonCode,
+  firstCode: Math.max(0, ...games.map((g) => Number(g.gameCode) || 0)) + 1,
+  crests: Object.fromEntries([...crests]),
+  players: Object.fromEntries(players.map((q) => [q.id, playerHref(q.id)]))
+}).replace(/</g, '\\u003c')}</script>`, 'live.html',
+  cover({ kicker: 'Live', title: 'Live games', lede: 'Follow any EuroLeague game as it happens: score, box scores, who is on the court, game flow and every play, straight from the official live feed.' }),
+  { scripts: `<script type="module" src="live.js?v=${assetVersion()}"></script>` });
+
 // ---- Glossary ----
 {
   const all = GLOSSARY.flatMap(([, items]) => items);
@@ -962,6 +973,9 @@ copyFileSync('static/teambox.js', join(OUT, 'teambox.js'));
 copyFileSync('static/share.js', join(OUT, 'share.js'));
 copyFileSync('static/game.js', join(OUT, 'game.js'));
 copyFileSync('static/mvp.js', join(OUT, 'mvp.js'));
+copyFileSync('static/live.js', join(OUT, 'live.js'));
+mkdirSync(join(OUT, 'lib'), { recursive: true });
+for (const f of ['parse.mjs', 'pbp.mjs', 'game.mjs']) copyFileSync(join('lib', f), join(OUT, 'lib', f));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   id: p.id, name: p.name, team: teamName.get(p.team) ? titleCase(teamName.get(p.team)) : p.team, tv: p.tv, gp: p.gp,
   stats: [['PTS', p.ppg], ['REB', p.rpg], ['AST', p.apg], ['STL', p.spg], ['BLK', p.bpg], ['PIR', p.pirpg], ['MIN', p.mpg], ['TS%', p.ts], ['USG%', p.usg]].map(([k, v]) => [k, f1(v)])

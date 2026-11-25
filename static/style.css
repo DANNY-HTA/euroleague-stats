@@ -467,3 +467,22 @@ table.units td:first-child { white-space: normal; min-width: 260px; }
 .w-in input { width: 58px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
 .mvp-controls input[type=search] { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; min-width: 220px; font: inherit; }
 .badge-img { vertical-align: -4px; object-fit: contain; }
+/* ---- Live ---- */
+nav a.nav-live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 7px; vertical-align: 1px; animation: livepulse 1.6s infinite; }
+@keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+.live-dot { color: var(--red); font-weight: 800; }
+.live-dot::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--red); margin-right: 6px; animation: livepulse 1.2s infinite; }
+.gcard.is-live { border-color: var(--red); box-shadow: 0 0 0 2px var(--red-soft); }
+.live-board { background: linear-gradient(180deg, var(--red) 0%, var(--red-dark) 100%); color: #fff; border-radius: var(--r); padding: 18px 22px 24px; }
+.lb-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; }
+.lb-back { color: #fff; font-weight: 700; } .lb-back:hover { color: #fff; }
+.lb-st { font: 800 14px/1 var(--display); letter-spacing: .1em; background: #fff; color: var(--red); padding: 6px 10px; border-radius: 999px; }
+.live-board .live-dot.big { background: #fff; color: var(--red); padding: 6px 12px; border-radius: 999px; font: 800 14px/1 var(--display); letter-spacing: .12em; }
+.lb-upd { margin-left: auto; opacity: .8; }
+table.gbox tr.on-court td { background: #f0faf3; }
+.oc { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pos); margin-right: 6px; }
+.foul-warn { color: var(--red); font-weight: 800; font-size: 12px; }
+ul.oc-list { list-style: none; padding: 0; margin: 0; }
+ul.oc-list li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.lv-crest { object-fit: contain; vertical-align: middle; }
+#live-app > * + * { margin-top: 22px; }
