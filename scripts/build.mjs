@@ -11,7 +11,7 @@ import { validateSeason } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, leaders, seasonInfo, teamGames, quarterAverages, playerGameLogs } from '../lib/stats.mjs';
 import { esc, f1, signed, scatter, page, fmtDate, assetVersion } from '../lib/render.mjs';
 import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
-import { buildStints, checkStints, aggregate, rapm, BOX_KEYS } from '../lib/pbp.mjs';
+import { buildStints, checkStints, aggregate, rapm, BOX_KEYS, repairPlusMinus } from '../lib/pbp.mjs';
 import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
 import { playerRates } from '../lib/advanced.mjs';
@@ -57,23 +57,25 @@ if (errors.length) {
 }
 console.log(`✓ ${games.length} games passed all accuracy checks`);
 
+// ---- Play-by-play: on/off, lineups, impact (only games that match the box score exactly) ----
+const pbpOk = [], pbpBad = [], pbpNear = new Map(), pmRepaired = new Map();
+for (const g of games) {
+  const raw = rawPbp.get(g.gameCode);
+  if (!raw) continue;
+  const r = buildStints(g, raw);
+  if (r.ok) { const fix = repairPlusMinus(g, r.stints); if (fix) { pmRepaired.set(g.gameCode, fix.fixed); console.log(`  game ${g.gameCode} (${g.home.tv}–${g.away.tv}): official +/- is wrong for ${fix.fixed} players, recalculated from the play-by-play`); } }
+  const why = r.ok ? checkStints(g, r.stints) : r.reason;
+  if (why && r.ok && !why.startsWith('play-by-play score')) pbpNear.set(g.gameCode, { stints: r.stints, why });
+  if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints });
+}
+const PBP = pbpOk.length ? aggregate(pbpOk) : null;
+
 // ---- 2. Stats ----
 const teams = teamTable(games);
 const players = playerTable(games);
 const qual = qualified(players, teams, cfg);
 const info = seasonInfo(games);
 
-// ---- Play-by-play: on/off, lineups, impact (only games that match the box score exactly) ----
-const pbpOk = [], pbpBad = [], pbpNear = new Map();
-for (const g of games) {
-  const raw = rawPbp.get(g.gameCode);
-  if (!raw) continue;
-  const r = buildStints(g, raw);
-  const why = r.ok ? checkStints(g, r.stints) : r.reason;
-  if (why && r.ok && !why.startsWith('play-by-play score')) pbpNear.set(g.gameCode, { stints: r.stints, why });
-  if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints });
-}
-const PBP = pbpOk.length ? aggregate(pbpOk) : null;
 const IMPACT = PBP ? rapm(PBP.rows) : null;
 if (rawPbp.size) {
   console.log(`✓ Play-by-play: ${pbpOk.length} of ${rawPbp.size} games match the box score exactly and are used for on/off, lineups and impact`);
@@ -277,7 +279,7 @@ ${flow ? `<section class="card"><h2>Game flow</h2><p class="muted">The score mar
 <section class="card"><h2>Top performers</h2><div class="perf-head"><span>${badge(H.code, H.tv)} ${esc(H.tv)}</span><span></span><span>${esc(A.tv)} ${badge(A.code, A.tv)}</span></div>${perf}</section>
 <section class="card"><h2>Team comparison</h2><div class="perf-head"><span>${badge(H.code, H.tv)} ${esc(H.tv)}</span><span>${f1(cmp.P)} possessions</span><span>${esc(A.tv)} ${badge(A.code, A.tv)}</span></div>${cmp.html}</section>
 </div>
-<section class="card"><h2>Box score</h2>${sideHead(H)}${gameBox(H)}${sideHead(A)}${gameBox(A)}<p class="muted small">Click any column to sort. PIR = Performance Index Rating.</p></section>
+<section class="card"><h2>Box score</h2>${pmRepaired.has(g.gameCode) ? `<p class="note-warn">The league's published +/- for this game is wrong (${pmRepaired.get(g.gameCode)} players). The +/- shown here is recalculated from the official play-by-play, which reproduces the final score and every player's minutes.</p>` : ''}${sideHead(H)}${gameBox(H)}${sideHead(A)}${gameBox(A)}<p class="muted small">Click any column to sort. PIR = Performance Index Rating.</p></section>
 ${stints ? lineupBlock(g, stints, near ? `Small difference with the official box score in this game (${esc(near.why)}). These lineups are shown for this game only and are not used in the season lineup, on/off or impact numbers.` : '') : raw ? '<p class="muted small">Lineups are not available for this game: the official play-by-play does not say who was on the court at every moment.</p>' : ''}
 ${log ? `<section class="card"><h2>Best connections</h2><p class="muted">Who assisted whom, by points created.</p><div class="row two">${['H', 'A'].map((s) => `<div>${sideHead(s === 'H' ? H : A)}${connList(s)}</div>`).join('')}</div></section>
 <section class="card"><h2>Play-by-play</h2><div id="pbp-app"><p class="muted">Loading…</p></div></section>

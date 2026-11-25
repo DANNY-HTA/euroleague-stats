@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStints, checkStints, aggregate, rapm, flattenPlays } from '../lib/pbp.mjs';
+import { buildStints, checkStints, aggregate, rapm, flattenPlays, repairPlusMinus } from '../lib/pbp.mjs';
 
 // A tiny game: A1–A5 v B1–B5 start. A1 scores 2 at 9:30, A6 replaces A5 at 5:00, B1 hits a three at 4:00.
 // Nothing else happens. Final 2–3. Expected +/-: A1–A4 −1, A5 +2, A6 −3, B1–B5 +1.
@@ -69,4 +69,24 @@ test('impact model: a player whose lineups win gets a positive value', () => {
   const r = rapm(rows, { lambda: 500, minPoss: 1 });
   assert.ok(r.values.get('S') > r.values.get('z'));
   assert.ok(r.values.get('S') > 0);
+});
+
+test('broken official +/- is rebuilt from the play-by-play', () => {
+  const g = tinyGame();
+  // League bug pattern: starters get the final margin, bench 0
+  for (const p of g.home.players) p.pm = p.starter ? -1 : 0;
+  for (const p of g.away.players) p.pm = 1;
+  g.home.players[0].pm = 5; g.home.players[1].pm = 5; g.home.players[2].pm = 5; // several clearly wrong values
+  const r = buildStints(g, tinyPbp());
+  const fix = repairPlusMinus(g, r.stints);
+  assert.ok(fix);
+  assert.deepEqual(g.home.players.map((p) => p.pm), [-1, -1, -1, -1, 2, -3]);
+  assert.equal(checkStints(g, r.stints), null);
+});
+
+test('a one-point difference keeps the official +/-', () => {
+  const g = tinyGame(); g.home.players[5].pm = -2;
+  const r = buildStints(g, tinyPbp());
+  assert.equal(repairPlusMinus(g, r.stints), null);
+  assert.equal(g.home.players[5].pm, -2);
 });
