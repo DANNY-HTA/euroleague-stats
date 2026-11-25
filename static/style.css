@@ -497,3 +497,4 @@ ul.oc-list li { display: flex; justify-content: space-between; gap: 10px; paddin
 .bar.stack span:first-child { border-radius: 3px 0 0 3px; }
 .parts { display: flex; gap: 10px; margin-top: 3px; font: 700 12px/1 var(--body); font-variant-numeric: tabular-nums; }
 .parts .c1 { color: var(--part1); } .parts .c2 { color: var(--part2); } .parts .c3 { color: #b07a00; }
+.sec-sub { margin: 4px 0 4px; }

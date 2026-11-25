@@ -14,6 +14,7 @@ import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
 import { buildStints, checkStints, aggregate, rapm, BOX_KEYS } from '../lib/pbp.mjs';
 import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
+import { playerRates } from '../lib/advanced.mjs';
 import { playLog, flowStats, connections, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
 const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
@@ -360,6 +361,35 @@ const teamChart = scatter(teams.map((t) => ({
   title: `${titleCase(t.name)}: ${t.w}–${t.l}, offensive rating ${f1(t.ortg)}, defensive rating ${f1(t.drtg)}, net ${signed(t.net)}`
 })), { xLabel: 'Points scored per 100 possessions', yLabel: 'Points allowed per 100', invertY: true, big: true, avgX: avg(teams, 'ortg'), avgY: avg(teams, 'drtg'), cornerGood: 'Good at both ends', cornerBad: 'Struggling at both ends' });
 
+// Per-40 and defensive boards
+const RATES = playerRates(games);
+const defOf = (id) => {
+  const o = PBP?.onoff.get(id);
+  if (!o || o.on.poss < 150) return null;
+  const off = { poss: o.teamTot.poss - o.on.poss, pa: o.teamTot.pa - o.on.pa };
+  const on = 100 * o.on.pa / o.on.poss;
+  return { onDrtg: on, defSwing: off.poss >= 50 ? 100 * off.pa / off.poss - on : null };
+};
+function rateBoard(title, sub, val, { fmt = f1, asc = false, pool = qual } = {}) {
+  const list = pool.map((p) => ({ p, v: val(p) })).filter((x) => x.v != null && Number.isFinite(x.v))
+    .sort((a, b) => (asc ? a.v - b.v : b.v - a.v) || a.p.name.localeCompare(b.p.name)).slice(0, 10);
+  if (!list.length) return '';
+  const vals = list.map((x) => x.v), hi = Math.max(...vals), lo = Math.min(...vals);
+  const width = (v) => (asc ? (hi === lo ? 100 : 30 + 70 * (hi - v) / (hi - lo)) : 100 * v / (hi || 1));
+  return `<section class="card board"><h2>${title}</h2><p class="muted">${sub}</p><ol>
+${list.map(({ p, v }, i) => `<li><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span><div class="bar"><span style="width:${Math.max(3, width(v)).toFixed(1)}%"></span></div></div><strong class="num">${fmt(v)}</strong></li>`).join('')}
+</ol></section>`;
+}
+const R = (k) => (p) => RATES.get(p.id)?.[k] ?? null;
+const per40Section = `<h2 class="sec-title" id="per40">Per 40 minutes</h2>
+<p class="muted sec-sub">What each player produces for every 40 minutes on the court, so bench players and starters can be compared. ${qualNote}</p>
+<div class="row">${rateBoard('PIR per 40', 'Performance Index Rating per 40 minutes', R('pir40'))}${rateBoard('Points per 40', 'Points per 40 minutes', R('pts40'))}</div>
+<div class="row">${rateBoard('Rebounds per 40', 'Rebounds per 40 minutes', R('reb40'))}${rateBoard('Assists per 40', 'Assists per 40 minutes', R('ast40'))}</div>`;
+const defenseSection = `<h2 class="sec-title" id="defense">Defense</h2>
+<p class="muted sec-sub">Advanced defensive stats. Steal, block and defensive rebound % estimate how many of the chances available while the player was on the court he converted.</p>
+<div class="row">${rateBoard('Steal %', 'Share of opponent possessions ending in his steal while he plays', R('stlPct'))}${rateBoard('Block %', "Share of opponent 2-point shots he blocked while he plays", R('blkPct'))}</div>
+<div class="row">${rateBoard('Defensive rebound %', 'Share of available defensive rebounds he grabbed while he plays', R('drebPct'))}${rateBoard('Stocks per 40', 'Steals + blocks per 40 minutes', R('stocks40'))}</div>
+${PBP ? `<div class="row">${rateBoard('On-court defense', 'Points allowed per 100 possessions by his team with him on the court. Lower is better. At least 150 possessions.', (p) => defOf(p.id)?.onDrtg ?? null, { asc: true, pool: players })}${rateBoard('Defensive on/off', 'How many fewer points per 100 possessions his team allows with him on the court than off it', (p) => defOf(p.id)?.defSwing ?? null, { fmt: signed, pool: players })}</div>` : ''}`;
 // Composite boards (PRA, Stocks): each part gets its own colour.
 const PARTS = { pra: [['ppg', 'Points', 'c1'], ['rpg', 'Rebounds', 'c2'], ['apg', 'Assists', 'c3']], stocks: [['spg', 'Steals', 'c1'], ['bpg', 'Blocks', 'c2']] };
 function board(title, sub, key, fmt = f1) {
@@ -420,7 +450,9 @@ ${board('PIR', 'Performance Index Rating per game', 'pirpg')}
 ${board('PRA', 'Points + rebounds + assists per game', 'pra')}
 ${board('Stocks', 'Steals + blocks per game', 'stocks')}
 </div>
-<p class="muted small">${qualNote}</p>`, 'index.html', homeHero, { scripts: `<script src="mvp.js?v=${assetVersion()}" defer></script>` });
+<p class="muted small">${qualNote}</p>
+${per40Section}
+${defenseSection}`, 'index.html', homeHero, { scripts: `<script src="mvp.js?v=${assetVersion()}" defer></script>` });
 
 
 // Players page
