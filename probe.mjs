@@ -1,22 +1,19 @@
 const UA = { 'User-Agent': 'Mozilla/5.0 (HTA LAB research)' };
 const get = async (u) => (await fetch(u, { headers: UA })).text();
-/** Decode the Next.js RSC payload strings pushed in the page. */
-function rsc(html) {
-  let out = '';
-  for (const m of html.matchAll(/self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)/g)) { try { out += JSON.parse(m[1]); } catch {} }
-  return out;
-}
+function rsc(html) { let out = ''; for (const m of html.matchAll(/self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)/g)) { try { out += JSON.parse(m[1]); } catch {} } return out; }
 const base = 'https://live.acb.com/es/partidos/real-madrid-vs-asisa-joventut-105455/';
+const html = await get(base + 'estadisticas');
+const tables = [...html.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/g)].map((m) => m[0]);
+console.log('tables', tables.length);
+const text = (s) => s.replace(/<!--.*?-->/g, '').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|').trim();
+for (const t of tables.slice(0, 2)) { const rows = [...t.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]; console.log('--- rows', rows.length); for (const r of rows) console.log((r[0].match(/<tr[^>]*>/)[0]).slice(0, 120), text(r[1]).slice(0, 220)); }
+// section titles near tables
+for (const m of html.matchAll(/(Real Madrid|Asisa Joventut)[^<]{0,40}<\/(h2|h3|span|div)>/g)) { console.log('TITLE', m[0].slice(0, 80)); }
 const J = rsc(await get(base + 'jugadas'));
-console.log('decoded jugadas', J.length);
-let i = J.indexOf('{"order":'); console.log('BEFORE FIRST PLAY:', J.slice(Math.max(0, i - 400), i + 50));
-const types = new Map();
-for (const m of J.matchAll(/\{"order":(\d+),"playType":(\d+),"playTag":([^,]*),"quarter":(\d+),"minute":(\d+),"second":(\d+),"local":(true|false|null)/g)) types.set(m[2], (types.get(m[2]) || 0) + 1);
-console.log('playType counts:', [...types].sort((a, b) => a[0] - b[0]).map(([k, v]) => k + ':' + v).join(' '));
-const dict = J.match(/"playTypes?":\{[^}]{0,3000}\}/); console.log('DICT:', dict ? dict[0].slice(0, 2000) : 'none');
-for (const w of ['"description"', '"playTypeName"', '"literal"']) { const k = J.indexOf(w); if (k > 0) console.log('NEAR', w, J.slice(k - 200, k + 300)); }
-const S = rsc(await get(base + 'estadisticas'));
-console.log('\ndecoded estadisticas', S.length);
-for (const w of ['playerLicenseId', '"minutes"', '"plusMinus"', '"valuation"', '"isStarter"', '"starter"']) { const k = S.indexOf(w); console.log('E', w, k, k > 0 ? S.slice(k - 300, k + 600) : ''); }
-// game header
-const h = J.indexOf('initialMatchHeader'); console.log('\nHEADER:', J.slice(h, h + 1500));
+const s = J.indexOf('"plays":['); let depth = 0, k = s + 8, end = k;
+for (; k < J.length; k++) { const c = J[k]; if (c === '[' || c === '{') depth++; else if (c === ']' || c === '}') { depth--; if (depth === 0) { end = k + 1; break; } } else if (c === '"') { k++; while (J[k] !== '"') { if (J[k] === '\\') k++; k++; } } }
+const plays = JSON.parse(J.slice(s + 8, end));
+console.log('plays', plays.length, 'keys', Object.keys(plays[0]).join(','));
+plays.sort((a, b) => a.order - b.order);
+for (const p of plays.slice(0, 40)) console.log(p.order, p.playType, 'Q' + p.quarter, p.minute + ':' + p.second, p.local, p.scoreHome + '-' + p.scoreAway, p.playerLicenseId || '-', p.playerName || '', p.playerNumber || '', JSON.stringify(p.playerStats || {}).slice(0, 0));
+console.log('last', plays.slice(-3).map((p) => [p.order, p.playType, p.quarter, p.minute, p.second, p.scoreHome, p.scoreAway].join(' ')));
