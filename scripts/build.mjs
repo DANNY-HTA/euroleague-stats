@@ -14,6 +14,7 @@ import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
 import { buildStints, checkStints, aggregate, rapm, BOX_KEYS } from '../lib/pbp.mjs';
 import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
+import { playLog, flowStats, connections, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
 const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 const args = process.argv.slice(2);
@@ -107,6 +108,208 @@ ${crumbs ? `<div class="crumbs">${crumbs}</div>` : ''}${kicker ? `<span class="k
 ${strip.length ? `<div class="strip">${strip.map(([b, t]) => `<span><b>${b}</b> ${t}</span>`).join('')}</div>` : ''}${actions ? `<div class="cover-actions">${actions}</div>` : ''}
 </div>${side}</div></section>`;
 const roundLine = info.lastDate ? `Through ${info.lastRound ? `Round ${info.lastRound}, ` : ''}${fmtDate(info.lastDate)}` : 'Season';
+const qualNote = `Players averaging at least ${cfg.minMinutesForLeaders} minutes and playing ${Math.round(cfg.minGamesShare * 100)}% of their team's games.`;
+// ---- Game pages: every game in full (modelled on the EuroLeague Media Game Center) ----
+const gameHref = (code) => `game-${safe(code)}.html`;
+const stintsOf = new Map(pbpOk.map(({ game, stints }) => [game.gameCode, stints]));
+const nameOf = new Map(players.map((q) => [q.id, q.name]));
+const pctTxt = (m, a) => (a ? f1(100 * m / a) : '–');
+const sortTh = (label, num = true, title = '') => `<th scope="col"${num ? ' class="num"' : ''}${title ? ` title="${esc(title)}"` : ''}><button type="button">${label}</button></th>`;
+const GBOX = [['min', 'MIN'], ['pts', 'PTS'], ['fg2', '2P'], ['fg3', '3P'], ['ft', 'FT'], ['oreb', 'OR'], ['dreb', 'DR'], ['reb', 'REB'], ['ast', 'AST'], ['stl', 'STL'], ['tov', 'TOV'], ['blk', 'BLK'], ['pf', 'PF'], ['fd', 'FD'], ['pm', '+/-'], ['pir', 'PIR']];
+const boxCell = (s, k, isTeam) => {
+  if (k === 'min') return isTeam ? `<td class="num">${Math.round(s.min || 200)}</td>` : `<td class="num" data-v="${s.min}">${mmss(s.min)}</td>`;
+  if (k === 'fg2') return `<td class="num" data-v="${s.fgm2 + s.fga2 / 1000}">${s.fgm2}/${s.fga2}</td>`;
+  if (k === 'fg3') return `<td class="num" data-v="${s.fgm3 + s.fga3 / 1000}">${s.fgm3}/${s.fga3}</td>`;
+  if (k === 'ft') return `<td class="num" data-v="${s.ftm + s.fta / 1000}">${s.ftm}/${s.fta}</td>`;
+  if (k === 'pm') return isTeam ? '<td class="num"></td>' : `<td class="num ${s.pm > 0 ? 'pos' : s.pm < 0 ? 'neg' : ''}" data-v="${s.pm}">${s.pm > 0 ? '+' : ''}${s.pm}</td>`;
+  return `<td class="num" data-v="${s[k]}">${k === 'pts' ? `<strong>${s[k]}</strong>` : s[k]}</td>`;
+};
+function gameBox(side) {
+  const ps = side.players.filter((p) => p.min > 0).sort((a, b) => b.starter - a.starter || b.min - a.min);
+  const dnp = side.players.filter((p) => p.min <= 0);
+  const T = side.totals;
+  return `<div class="scroll"><table class="sortable gbox"><thead><tr>${sortTh('#')}${sortTh('Player', false)}${GBOX.map(([, l]) => sortTh(l)).join('')}</tr></thead><tbody>
+${ps.map((p) => `<tr><td class="num muted" data-v="${Number(p.number) || 0}">${esc(p.number ?? '')}</td><td data-v="${esc(p.name)}"><a href="${playerHref(p.id)}">${esc(p.name)}</a>${p.starter ? '<span class="muted">*</span>' : ''}</td>${GBOX.map(([k]) => boxCell(p, k)).join('')}</tr>`).join('')}
+</tbody><tfoot><tr><td></td><th scope="row">Team</th>${GBOX.map(([k]) => boxCell({ ...T, min: side.teamMinutes }, k, true)).join('')}</tr>
+<tr class="muted"><td></td><th scope="row">Shooting</th><td></td><td></td><td class="num">${pctTxt(T.fgm2, T.fga2)}%</td><td class="num">${pctTxt(T.fgm3, T.fga3)}%</td><td class="num">${pctTxt(T.ftm, T.fta)}%</td><td colspan="11"></td></tr></tfoot></table></div>
+${dnp.length ? `<p class="muted small">Did not play: ${dnp.map((p) => esc(p.name)).join(', ')}. * started.</p>` : '<p class="muted small">* started.</p>'}`;
+}
+function flowSvg(line, periods, hTv, aTv) {
+  const W = 900, H = 240, L = 40, R = 10, T = 14, B = 26;
+  const total = periods <= 4 ? 2400 : 2400 + (periods - 4) * 300;
+  const m = Math.max(10, ...line.map(([, v]) => Math.abs(v)));
+  const top = Math.ceil(m / 5) * 5;
+  const sx = (t) => L + (Math.min(t, total) / total) * (W - L - R);
+  const sy = (v) => T + ((top - v) / (2 * top)) * (H - T - B);
+  let d = `M${sx(0)},${sy(0)}`;
+  for (const [t, v] of line) d += ` H${sx(t).toFixed(1)} V${sy(v).toFixed(1)}`;
+  d += ` H${sx(total)}`;
+  const area = `${d} V${sy(0)} H${sx(0)} Z`;
+  const marks = [];
+  for (let p = 1; p < periods; p++) marks.push(p <= 4 ? p * 600 : 2400 + (p - 4) * 300);
+  const labels = Array.from({ length: periods }, (_, i) => { const s = i < 4 ? i * 600 : 2400 + (i - 4) * 300, e = i < 4 ? s + 600 : s + 300; return [(s + e) / 2, i < 4 ? `Q${i + 1}` : `OT${i - 3}`]; });
+  const ticks = [top, top / 2, 0, -top / 2, -top];
+  return `<svg class="flow" viewBox="0 0 ${W} ${H}" role="img" aria-label="Score margin through the game. Above the line ${esc(hTv)} lead, below it ${esc(aTv)} lead.">
+<defs><clipPath id="fl-up"><rect x="0" y="0" width="${W}" height="${sy(0)}"/></clipPath><clipPath id="fl-dn"><rect x="0" y="${sy(0)}" width="${W}" height="${H}"/></clipPath></defs>
+${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" class="${v === 0 ? 'zero' : 'grid'}"/><text x="${L - 6}" y="${sy(v) + 4}" text-anchor="end">${v > 0 ? '+' + v : v < 0 ? '+' + -v : '0'}</text>`).join('')}
+${marks.map((t) => `<line x1="${sx(t)}" x2="${sx(t)}" y1="${T}" y2="${H - B}" class="grid"/>`).join('')}
+${labels.map(([t, l]) => `<text x="${sx(t)}" y="${H - 8}" text-anchor="middle">${l}</text>`).join('')}
+<path d="${area}" class="fa-h" clip-path="url(#fl-up)"/><path d="${area}" class="fa-a" clip-path="url(#fl-dn)"/><path d="${d}" class="fl"/>
+<text x="${L + 6}" y="${T + 12}" class="lbl">${esc(hTv)} ahead</text><text x="${L + 6}" y="${H - B - 6}" class="lbl">${esc(aTv)} ahead</text></svg>`;
+}
+const per100 = (pts, poss) => (poss ? 100 * pts / poss : 0);
+function compareRows(g) {
+  const h = g.home.totals, a = g.away.totals;
+  const poss = (t, o) => t.fga2 + t.fga3 - t.oreb + t.tov + 0.44 * t.fta;
+  const P = (poss(h) + poss(a)) / 2;
+  const efg = (t) => (t.fga2 + t.fga3 ? 100 * (t.fgm2 + t.fgm3 + 0.5 * t.fgm3) / (t.fga2 + t.fga3) : 0);
+  const ts = (t) => (t.fga2 + t.fga3 + 0.44 * t.fta ? 100 * t.pts / (2 * (t.fga2 + t.fga3 + 0.44 * t.fta)) : 0);
+  const pct = (m, x) => (x ? 100 * m / x : 0);
+  const rows = [
+    ['Points', h.pts, a.pts], ['Points per 100 possessions', per100(h.pts, P), per100(a.pts, P), 1],
+    ['2-point %', pct(h.fgm2, h.fga2), pct(a.fgm2, a.fga2), 1, `${h.fgm2}/${h.fga2}`, `${a.fgm2}/${a.fga2}`],
+    ['3-point %', pct(h.fgm3, h.fga3), pct(a.fgm3, a.fga3), 1, `${h.fgm3}/${h.fga3}`, `${a.fgm3}/${a.fga3}`],
+    ['Free throw %', pct(h.ftm, h.fta), pct(a.ftm, a.fta), 1, `${h.ftm}/${h.fta}`, `${a.ftm}/${a.fta}`],
+    ['Effective FG %', efg(h), efg(a), 1], ['True shooting %', ts(h), ts(a), 1],
+    ['Rebounds', h.reb, a.reb], ['Offensive rebounds', h.oreb, a.oreb], ['Defensive rebounds', h.dreb, a.dreb],
+    ['Assists', h.ast, a.ast], ['Steals', h.stl, a.stl], ['Blocks', h.blk, a.blk],
+    ['Turnovers', h.tov, a.tov, 0, '', '', true], ['Fouls', h.pf, a.pf, 0, '', '', true], ['PIR', h.pir, a.pir]
+  ];
+  return { P, html: rows.map(([label, x, y, dec, sx, sy, low]) => {
+    const tot = Math.abs(x) + Math.abs(y) || 1, wx = (100 * Math.abs(x) / tot).toFixed(1);
+    const better = x === y ? '' : (low ? x < y : x > y) ? 'h' : 'a';
+    const fx = dec ? f1(x) : x, fy = dec ? f1(y) : y;
+    return `<div class="cmp ${better ? 'b-' + better : ''}"><span class="v h">${fx}${sx ? ` <small>${sx}</small>` : ''}</span><span class="lab">${label}${low ? ' <small>(fewer is better)</small>' : ''}</span><span class="v a">${fy}${sy ? ` <small>${sy}</small>` : ''}</span><div class="split"><i style="width:${wx}%"></i><i style="width:${(100 - wx).toFixed(1)}%"></i></div></div>`;
+  }).join('') };
+}
+function gameUnits(g, stints, size) {
+  const out = { H: new Map(), A: new Map() };
+  const A = g.home.code, B = g.away.code;
+  const combos = (ids, k) => { if (k === 5) return [ids]; const r = []; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) r.push([ids[i], ids[j]]); return r; };
+  for (const s of stints) for (const [side, ids, me, op] of [['H', s.home, A, B], ['A', s.away, B, A]]) for (const c of combos(ids, size)) {
+    const k = c.join(','); if (!out[side].has(k)) out[side].set(k, { ids: c, secs: 0, pf: 0, pa: 0 });
+    const e = out[side].get(k); e.secs += s.secs; e.pf += s.pts[me]; e.pa += s.pts[op];
+  }
+  for (const s of ['H', 'A']) out[s] = [...out[s].values()].filter((e) => e.secs > 0).sort((x, y) => y.secs - x.secs);
+  return out;
+}
+const unitTable = (list, n) => `<table class="units"><thead><tr><th scope="col">Players</th><th scope="col" class="num">MIN</th><th scope="col" class="num">Score</th><th scope="col" class="num">+/-</th></tr></thead><tbody>
+${list.slice(0, n).map((u) => `<tr><td>${u.ids.map((id) => `<a href="${playerHref(id)}">${esc(nameOf.get(id) || id)}</a>`).join('<span class="muted"> · </span>')}</td><td class="num">${mmss(u.secs / 60)}</td><td class="num">${u.pf}–${u.pa}</td><td class="num ${u.pf > u.pa ? 'pos' : u.pf < u.pa ? 'neg' : ''}">${u.pf > u.pa ? '+' : ''}${u.pf - u.pa}</td></tr>`).join('')}</tbody></table>`;
+const gameMvp = (g) => {
+  const win = g.home.score > g.away.score ? g.home.code : g.away.code;
+  return [g.home, g.away].flatMap((s) => s.players.map((p) => ({ p, s }))).filter((x) => x.p.min > 0)
+    .sort((x, y) => y.p.pir - x.p.pir || (y.s.code === win) - (x.s.code === win) || y.p.pts - x.p.pts)[0];
+};
+const sortedGames = [...games].sort((a, b) => a.date.localeCompare(b.date) || a.gameCode - b.gameCode);
+for (const g of sortedGames) {
+  const H = g.home, A = g.away, raw = rawPbp.get(g.gameCode);
+  const log = raw ? playLog(g, raw) : null;
+  const flow = log ? flowStats(log.plays) : null;
+  const periods = log ? Math.max(4, ...log.plays.map((p) => p[0])) : 4;
+  const stints = stintsOf.get(g.gameCode);
+  const hWin = H.score > A.score;
+  const qs = (s) => { const q = s.quarters || []; const ot = q.length ? s.score - q.reduce((x, y) => x + y, 0) : 0; return [...q, ...(periods > 4 || ot ? [ot] : [])]; };
+  const qH = qs(H), qA = qs(A);
+  const mvp = gameMvp(g);
+  const cmp = compareRows(g);
+  const best = (side, k) => side.players.filter((p) => p.min > 0).sort((x, y) => y[k] - x[k] || y.pir - x.pir)[0];
+  const perf = [['pts', 'Points'], ['reb', 'Rebounds'], ['ast', 'Assists'], ['pir', 'PIR']].map(([k, l]) => {
+    const x = best(H, k), y = best(A, k);
+    const cell = (p) => p ? `<a href="${playerHref(p.id)}">${esc(p.name)}</a><strong>${p[k]}</strong>` : '';
+    return `<div class="perf"><span class="ph">${cell(x)}</span><span class="lab">${l}</span><span class="pa">${cell(y)}</span></div>`;
+  }).join('');
+  const conn = log ? connections(log.plays) : [];
+  const connList = (side) => { const l = conn.filter((c) => c.side === side).slice(0, 6); return l.length ? `<ol class="conn">${l.map((c) => `<li><span>${esc(nameOf.get(c.from) || log.names[c.from] || c.from)} <span class="muted">→</span> ${esc(nameOf.get(c.to) || log.names[c.to] || c.to)}</span><strong>${c.pts} pts</strong><span class="muted small">${c.n} assist${c.n > 1 ? 's' : ''}</span></li>`).join('')}</ol>` : '<p class="muted">No assisted baskets recorded.</p>'; };
+  const units5 = stints ? gameUnits(g, stints, 5) : null, units2 = stints ? gameUnits(g, stints, 2) : null;
+  const pbpJson = log ? JSON.stringify({
+    H: H.tv, A: A.tv, hName: titleCase(H.name), aName: titleCase(A.name),
+    names: Object.fromEntries([...H.players, ...A.players].map((p) => [p.id, p.name])),
+    plays: log.plays.map((p) => p.slice(0, 7)), labels: PLAY_LABEL, groups: PLAY_GROUP
+  }).replace(/</g, '\\u003c') : null;
+  const sideHead = (s) => `<h3 class="side-h">${badge(s.code, s.tv)} ${esc(titleCase(s.name))}</h3>`;
+  const hero = `<section class="cover game-cover"><div class="wrap gc-wrap">
+<div class="crumbs"><a href="index.html#games">Games</a> / ${g.round ? `Round ${g.round}` : esc(g.phase || '')}</div>
+<span class="kicker">${g.round ? `Round ${g.round} · ` : ''}${esc(fmtDate(g.date))}</span>
+<div class="scoreboard">
+<a class="sb-team" href="${teamHref(H.code)}">${crests.has(H.code) ? `<span class="sb-crest"><img src="${esc(crests.get(H.code))}" alt=""></span>` : ''}<span class="sb-name">${esc(titleCase(H.name))}</span><span class="muted-w">Home</span></a>
+<div class="sb-score"><span class="${hWin ? 'win' : ''}">${H.score}</span><span class="dash">–</span><span class="${hWin ? '' : 'win'}">${A.score}</span><small>Final${periods > 4 ? ` · ${periods > 5 ? (periods - 4) + ' OT' : 'OT'}` : ''}</small></div>
+<a class="sb-team" href="${teamHref(A.code)}">${crests.has(A.code) ? `<span class="sb-crest"><img src="${esc(crests.get(A.code))}" alt=""></span>` : ''}<span class="sb-name">${esc(titleCase(A.name))}</span><span class="muted-w">Away</span></a>
+</div>
+${qH.length ? `<table class="qtable"><thead><tr><th scope="col"></th>${qH.map((_, i) => `<th scope="col">${i < 4 ? 'Q' + (i + 1) : 'OT'}</th>`).join('')}<th scope="col">Final</th></tr></thead><tbody>
+<tr><th scope="row">${esc(H.tv)}</th>${qH.map((v, i) => `<td class="${v > (qA[i] ?? 0) ? 'w' : ''}">${v}</td>`).join('')}<td class="w">${H.score}</td></tr>
+<tr><th scope="row">${esc(A.tv)}</th>${qA.map((v, i) => `<td class="${v > (qH[i] ?? 0) ? 'w' : ''}">${v}</td>`).join('')}<td class="w">${A.score}</td></tr></tbody></table>` : ''}
+</div></section>`;
+  writePage(gameHref(g.gameCode), `${H.tv} ${H.score}–${A.score} ${A.tv}`, `
+<div class="tiles">
+${mvp ? `<a class="tile mvp-tile" href="${playerHref(mvp.p.id)}"><span class="label">Game MVP</span><span class="big">${mvp.p.pir}</span><span class="sub">PIR · ${mvp.p.pts} pts, ${mvp.p.reb} reb, ${mvp.p.ast} ast</span><span class="chip hot">${esc(mvp.p.name)} · ${esc(mvp.s.tv)}</span></a>` : ''}
+${flow ? `<div class="tile"><span class="label">Lead changes</span><span class="big">${flow.leadChanges}</span><span class="sub">and ${flow.ties} tie${flow.ties === 1 ? '' : 's'}</span></div>
+<div class="tile"><span class="label">Biggest lead</span><span class="big">${Math.max(flow.maxLead.H, flow.maxLead.A)}</span><span class="sub">${esc(H.tv)} +${flow.maxLead.H} · ${esc(A.tv)} +${flow.maxLead.A}</span></div>
+<div class="tile"><span class="label">Biggest run</span><span class="big">${Math.max(flow.bestRun.H, flow.bestRun.A)}–0</span><span class="sub">${esc(H.tv)} ${flow.bestRun.H}–0 · ${esc(A.tv)} ${flow.bestRun.A}–0</span></div>` : `<div class="tile"><span class="label">Possessions</span><span class="big">${f1(cmp.P)}</span><span class="sub">per team</span></div>`}
+</div>
+${flow ? `<section class="card"><h2>Game flow</h2><p class="muted">The score margin after every basket. Red: ${esc(H.tv)} ahead. Dark: ${esc(A.tv)} ahead.</p>${flowSvg(flow.line, periods, H.tv, A.tv)}</section>` : ''}
+<div class="row">
+<section class="card"><h2>Top performers</h2><div class="perf-head"><span>${badge(H.code, H.tv)} ${esc(H.tv)}</span><span></span><span>${esc(A.tv)} ${badge(A.code, A.tv)}</span></div>${perf}</section>
+<section class="card"><h2>Team comparison</h2><div class="perf-head"><span>${badge(H.code, H.tv)} ${esc(H.tv)}</span><span>${f1(cmp.P)} possessions</span><span>${esc(A.tv)} ${badge(A.code, A.tv)}</span></div>${cmp.html}</section>
+</div>
+<section class="card"><h2>Box score</h2>${sideHead(H)}${gameBox(H)}${sideHead(A)}${gameBox(A)}<p class="muted small">Click any column to sort. PIR = Performance Index Rating.</p></section>
+${units5 ? `<div class="row">
+<section class="card"><h2>Lineups</h2><p class="muted">Five-man units by time on court, with the score while they played.</p>${sideHead(H)}${unitTable(units5.H, 6)}${sideHead(A)}${unitTable(units5.A, 6)}</section>
+<section class="card"><h2>Pairs</h2><p class="muted">Two players on court together.</p>${sideHead(H)}${unitTable(units2.H, 6)}${sideHead(A)}${unitTable(units2.A, 6)}</section>
+</div>` : raw ? '<p class="muted small">Lineups are not shown for this game: the official play-by-play does not reproduce every player\'s minutes and +/- exactly.</p>' : ''}
+${log ? `<section class="card"><h2>Best connections</h2><p class="muted">Who assisted whom, by points created.</p><div class="row two">${['H', 'A'].map((s) => `<div>${sideHead(s === 'H' ? H : A)}${connList(s)}</div>`).join('')}</div></section>
+<section class="card"><h2>Play-by-play</h2><div id="pbp-app"><p class="muted">Loading…</p></div></section>
+<script type="application/json" id="pbp-data">${pbpJson}</script>` : ''}`, 'index.html', hero, { scripts: `<script src="game.js?v=${assetVersion()}" defer></script>` });
+}
+console.log(`✓ Game pages: ${sortedGames.length}`);
+// ---- Home: MVP race (several factors) and MVP of each round ----
+const MVP_F = [
+  ['pirpg', 'PIR', 0.30, (p) => p.pirpg, f1],
+  ['imp', 'Impact', 0.20, (p) => IMPACT?.values.get(p.id) ?? null, signed],
+  ['win', 'Team win %', 0.15, (p) => { const t = teams.find((x) => x.code === p.team); return t && t.gp ? 100 * t.w / t.gp : null; }, (v) => f1(v)],
+  ['ppg', 'Points', 0.15, (p) => p.ppg, f1],
+  ['ts', 'TS%', 0.10, (p) => p.ts, f1],
+  ['swing', 'On/off', 0.10, (p) => onOffOf(p.id)?.swing ?? null, signed]
+];
+const mvpRows = (() => {
+  const vals = MVP_F.map(([, , , get]) => qual.map(get));
+  const stat = vals.map((arr) => { const v = arr.filter((x) => x != null && Number.isFinite(x)); const m = v.reduce((s, x) => s + x, 0) / (v.length || 1); const sd = Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / (v.length || 1)) || 1; return { m, sd }; });
+  return qual.map((p, i) => {
+    const f = MVP_F.map((F, j) => { const v = vals[j][i]; return { v, z: v == null || !Number.isFinite(v) ? 0 : (v - stat[j].m) / stat[j].sd }; });
+    return { p, f, score: f.reduce((s, x, j) => s + x.z * MVP_F[j][2], 0) };
+  }).sort((a, b) => b.score - a.score);
+})();
+const roundMvps = (() => {
+  const by = new Map();
+  for (const g of games) { if (!g.round) continue; if (!by.has(g.round)) by.set(g.round, []); by.get(g.round).push(g); }
+  return [...by].sort((a, b) => b[0] - a[0]).map(([r, gs]) => {
+    const best = gs.map((g) => ({ g, ...gameMvp(g) })).filter((x) => x.p).sort((x, y) => y.p.pir - x.p.pir || y.p.pts - x.p.pts)[0];
+    return { r, ...best };
+  }).filter((x) => x.p);
+})();
+const mvpCount = new Map();
+for (const x of roundMvps) mvpCount.set(x.p.id, (mvpCount.get(x.p.id) || 0) + 1);
+const mvpTop = mvpRows.slice(0, 10), mvpMax = Math.max(0.01, mvpTop[0]?.score || 0);
+const mvpSection = mvpTop.length ? `<section class="card mvp-race"><h2>MVP race</h2>
+<p class="muted">HTA LAB MVP index: each factor is compared with every qualified player (z-score) and weighted — PIR 30%, impact rating (RAPM) 20%, team win % 15%, points 15%, true shooting 10%, on/off 10%.</p>
+<div class="scroll"><table class="mvp"><thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col" class="num">Index</th>${MVP_F.map(([, l, w]) => `<th scope="col" class="num">${l} <small class="muted">${Math.round(w * 100)}%</small></th>`).join('')}<th scope="col" class="num" title="Times MVP of a round">Rd MVP</th></tr></thead><tbody>
+${mvpTop.map((x, i) => `<tr${i < 3 ? ` class="rk-row-${i + 1}"` : ''}><td class="num"><span class="mvp-rank r${i + 1}">${i + 1}</span></td><td><a href="${playerHref(x.p.id)}">${esc(x.p.name)}</a> <span class="muted">${badge(x.p.team, x.p.tv)}${esc(x.p.tv)}</span><div class="bar"><span style="width:${Math.max(4, 100 * x.score / mvpMax).toFixed(1)}%"></span></div></td><td class="num"><strong>${x.score.toFixed(2)}</strong></td>${x.f.map((f, j) => `<td class="num ${f.z >= 1 ? 'hi' : f.z <= -0.5 ? 'lo' : ''}">${f.v == null ? '–' : MVP_F[j][4](f.v)}</td>`).join('')}<td class="num">${mvpCount.get(x.p.id) || ''}</td></tr>`).join('')}
+</tbody></table></div><p class="muted small">${qualNote} Green = well above average for that factor.</p></section>` : '';
+const roundMvpSection = roundMvps.length ? `<section class="card"><h2>MVP of each round</h2><p class="muted">Highest PIR of the round.</p>
+<div class="scroll"><table><thead><tr><th scope="col">Rd</th><th scope="col">Player</th><th scope="col" class="num">PTS</th><th scope="col" class="num">REB</th><th scope="col" class="num">AST</th><th scope="col" class="num">PIR</th><th scope="col">Game</th></tr></thead><tbody>
+${roundMvps.map((x) => `<tr><td class="num">${x.r}</td><td><a href="${playerHref(x.p.id)}">${esc(x.p.name)}</a> <span class="muted">${badge(x.s.code, x.s.tv)}${esc(x.s.tv)}</span></td><td class="num">${x.p.pts}</td><td class="num">${x.p.reb}</td><td class="num">${x.p.ast}</td><td class="num"><strong>${x.p.pir}</strong></td><td><a href="${gameHref(x.g.gameCode)}">${esc(x.g.home.tv)} ${x.g.home.score}–${x.g.away.score} ${esc(x.g.away.tv)}</a></td></tr>`).join('')}
+</tbody></table></div></section>` : '';
+// ---- Home: every game of the season ----
+const roundsList = [...new Set(games.map((g) => g.round).filter(Boolean))].sort((a, b) => a - b);
+const gameCard = (g) => {
+  const hw = g.home.score > g.away.score, m = gameMvp(g);
+  const line = (s, w) => `<span class="gl ${w ? 'w' : ''}">${crests.has(s.code) ? `<img src="${esc(crests.get(s.code))}" alt="" width="22" height="22">` : '<i></i>'}<span class="gn">${esc(titleCase(s.name))}</span><b>${s.score}</b></span>`;
+  return `<a class="gcard" href="${gameHref(g.gameCode)}" data-r="${g.round || 0}" data-t="${esc(g.home.code)} ${esc(g.away.code)}"><span class="gd">${g.round ? `Rd ${g.round} · ` : ''}${esc(fmtDate(g.date))}</span>${line(g.home, hw)}${line(g.away, !hw)}${m ? `<span class="gm">MVP ${esc(m.p.name)} · ${m.p.pir} PIR</span>` : ''}</a>`;
+};
+const gamesSection = `<section class="card" id="games"><h2>All games</h2><p class="muted">Every game of the season. Click a game for the full picture: box scores, game flow, lineups, connections and play-by-play.</p>
+<div class="filters" id="games-filter"><label>Team <select data-g="team"><option value="">All teams</option>${teams.slice().sort((a, b) => a.name.localeCompare(b.name)).map((t) => `<option value="${esc(t.code)}">${esc(titleCase(t.name))}</option>`).join('')}</select></label>
+<label>Round <select data-g="round"><option value="">All rounds</option>${roundsList.map((r) => `<option value="${r}"${r === roundsList[roundsList.length - 1] ? ' selected' : ''}>Round ${r}</option>`).join('')}</select></label>
+<span class="muted small" data-g="count"></span></div>
+<div class="gcards">${[...sortedGames].reverse().map(gameCard).join('')}</div></section>`;
 
 const standingsRows = teams.map((t) => `<tr>
 <td class="num muted">${t.rank}</td>
@@ -130,7 +333,6 @@ ${list.map((p, i) => `<li><span class="muted num">${i + 1}</span><div><a href="$
 </ol></section>`;
 }
 
-const qualNote = `Players averaging at least ${cfg.minMinutesForLeaders} minutes and playing ${Math.round(cfg.minGamesShare * 100)}% of their team's games.`;
 
 const lead = teams[0];
 const topBy = (k) => leaders(qual, k, 1)[0];
@@ -156,6 +358,9 @@ ${leaderTile('pirpg', 'All-round', 'PIR per game, 1st in the league')}
 ${leaderTile('rpg', 'Rebounding', 'rebounds per game, 1st in the league')}
 ${leaderTile('apg', 'Playmaking', 'assists per game, 1st in the league')}
 </div>
+${gamesSection}
+${mvpSection}
+${roundMvpSection}
 <div class="row">
 <section class="card"><h2>Standings</h2><p class="muted">Top 6 go to the playoffs, 7–10 to the play-in.</p>
 <div class="scroll"><table class="standings"><thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col" class="num">W–L</th><th scope="col" class="num" title="Points scored per 100 possessions">ORtg</th><th scope="col" class="num" title="Points allowed per 100 possessions">DRtg</th><th scope="col" class="num">Net</th></tr></thead>
@@ -358,7 +563,7 @@ ${roster.map((p) => `<tr><td><a href="${playerHref(p.id)}">${esc(p.name)}</a></t
 ${onoffTeamCard}${PBP ? `<section class="lu-embed"><h2 class="sec-title">All lineups</h2><p class="muted">Every five-man unit and 2-, 3- and 4-man combination this team has used. Filter by home/away, wins/losses and dates.</p><div id="lineups-app" data-team="${esc(t.code)}" data-lock="1" data-min-poss="0"><p class="muted">Loading lineups…</p></div></section>` : ""}
 <section class="card"><h2>Results</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
-${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}">${badge(g.opp.code, g.opp.tv)} ${esc(titleCase(g.opp.name))}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td></tr>`).join('')}
+${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}">${badge(g.opp.code, g.opp.tv)} ${esc(titleCase(g.opp.name))}</a></td><td><a class="${g.win ? 'pos' : 'neg'}" href="${gameHref(g.gameCode)}">${g.win ? 'W' : 'L'} ${g.for}–${g.against} ›</a></td></tr>`).join('')}
 </tbody></table></div></section>`, 'teams.html', teamHero, { scripts: `<script src="teambox.js?v=${assetVersion()}" defer></script>${PBP ? `<script src="lineups.js?v=${assetVersion()}" defer></script>` : ''}` });
 }
 
@@ -558,7 +763,7 @@ ${[['FG%', pct(fgm, fga) + ` <span class="muted">(${fgm}/${fga})</span>`], ['2P%
 </div>
 <section class="card"><h2>Game log</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col">Opponent</th><th scope="col">Result</th>${['MIN', 'PTS', '2P', '3P', 'FT', 'REB', 'AST', 'STL', 'TOV', 'BLK', 'PF', '+/-', 'PIR'].map(th).join('')}</tr></thead><tbody>
-${log.map((g) => { const l = g.line; return `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td><a href="${teamHref(g.opp.code)}"><span class="muted">${g.isHome ? 'vs' : 'at'}&nbsp;</span>${badge(g.opp.code, g.opp.tv)}${esc(g.opp.tv)}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td>
+${log.map((g) => { const l = g.line; return `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td><a href="${teamHref(g.opp.code)}"><span class="muted">${g.isHome ? 'vs' : 'at'}&nbsp;</span>${badge(g.opp.code, g.opp.tv)}${esc(g.opp.tv)}</a></td><td><a class="${g.win ? 'pos' : 'neg'}" href="${gameHref(g.gameCode)}">${g.win ? 'W' : 'L'} ${g.for}–${g.against} ›</a></td>
 <td class="num">${mmss(l.min)}${l.starter ? '<span class="muted">*</span>' : ''}</td><td class="num"><strong>${l.pts}</strong></td><td class="num">${l.fgm2}/${l.fga2}</td><td class="num">${l.fgm3}/${l.fga3}</td><td class="num">${l.ftm}/${l.fta}</td><td class="num">${l.reb}</td><td class="num">${l.ast}</td><td class="num">${l.stl}</td><td class="num">${l.tov}</td><td class="num">${l.blk}</td><td class="num">${l.pf}</td><td class="num">${l.pm > 0 ? '+' : ''}${l.pm}</td><td class="num">${l.pir}</td></tr>`; }).join('')}
 </tbody></table></div><p class="muted small">* started the game.</p></section>
 <script type="application/json" id="share-data">${shareJson}</script>`, 'players.html', hero, { scripts: `<script src="share.js?v=${assetVersion()}" defer></script>` });
@@ -732,6 +937,7 @@ copyFileSync('static/lineups.js', join(OUT, 'lineups.js'));
 copyFileSync('static/teams.js', join(OUT, 'teams.js'));
 copyFileSync('static/teambox.js', join(OUT, 'teambox.js'));
 copyFileSync('static/share.js', join(OUT, 'share.js'));
+copyFileSync('static/game.js', join(OUT, 'game.js'));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   id: p.id, name: p.name, team: teamName.get(p.team) ? titleCase(teamName.get(p.team)) : p.team, tv: p.tv, gp: p.gp,
   stats: [['PTS', p.ppg], ['REB', p.rpg], ['AST', p.apg], ['STL', p.spg], ['BLK', p.bpg], ['PIR', p.pirpg], ['MIN', p.mpg], ['TS%', p.ts], ['USG%', p.usg]].map(([k, v]) => [k, f1(v)])

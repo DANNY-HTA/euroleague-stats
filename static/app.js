@@ -40,7 +40,7 @@
 
   // Sortable tables.
   document.querySelectorAll('table.sortable').forEach((table) => {
-    const heads = [...table.querySelectorAll('th')];
+    const heads = [...table.querySelectorAll('thead th')];
     heads.forEach((th, i) => th.querySelector('button').addEventListener('click', () => {
       const desc = th.getAttribute('aria-sort') !== 'descending';
       heads.forEach((h) => h.removeAttribute('aria-sort'));
@@ -56,4 +56,20 @@
       rows.forEach((r) => body.appendChild(r));
     }));
   });
+})();
+
+// Home page: games browser (team and round filters).
+(() => {
+  const box = document.getElementById('games-filter');
+  if (!box) return;
+  const team = box.querySelector('[data-g="team"]'), round = box.querySelector('[data-g="round"]'), count = box.querySelector('[data-g="count"]');
+  const cards = [...document.querySelectorAll('.gcards .gcard')];
+  const apply = () => {
+    let n = 0;
+    for (const c of cards) { const ok = (!team.value || c.dataset.t.split(' ').includes(team.value)) && (!round.value || c.dataset.r === round.value); c.hidden = !ok; if (ok) n++; }
+    count.textContent = `${n} game${n === 1 ? '' : 's'}`;
+  };
+  team.addEventListener('change', () => { if (team.value) round.value = ''; apply(); });
+  round.addEventListener('change', apply);
+  apply();
 })();
