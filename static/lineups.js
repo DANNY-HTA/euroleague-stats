@@ -12,7 +12,7 @@
     return n;
   };
   const f1 = (v) => (v == null || !Number.isFinite(v) ? '–' : v.toFixed(1));
-  const sg = (v) => (v == null || !Number.isFinite(v) ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1));
+  const sg = (v) => (v == null || !Number.isFinite(v) ? '–' : Math.abs(v) < 0.05 ? '0.0' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(1));
   const div = (a, b) => (b > 0 ? a / b : null);
   function combos(arr, k) {
     if (k === arr.length) return [arr];

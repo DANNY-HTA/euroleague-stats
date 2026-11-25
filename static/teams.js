@@ -13,7 +13,7 @@
   };
   const div = (a, b) => (b > 0 ? a / b : null);
   const f1 = (v) => (v == null || !Number.isFinite(v) ? '–' : v.toFixed(1));
-  const sg = (v) => (v == null || !Number.isFinite(v) ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1));
+  const sg = (v) => (v == null || !Number.isFinite(v) ? '–' : Math.abs(v) < 0.05 ? '0.0' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(1));
   const ord = (n) => n + ((n % 100 >= 11 && n % 100 <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'));
 
   fetch('teams.json').then((r) => r.json()).then((D) => {
