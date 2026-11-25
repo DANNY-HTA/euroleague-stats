@@ -1,8 +1,9 @@
 // Downloads every played game of the season from the official EuroLeague live feed
 // and saves it, unchanged, to data/raw/<season>/<gamecode>.json.
 //
-//   node scripts/fetch.mjs            -> season from config.json
-//   node scripts/fetch.mjs E2025      -> another season
+//   node scripts/fetch.mjs                  -> season from config.json
+//   node scripts/fetch.mjs E2025            -> another season
+//   node scripts/fetch.mjs U2026 --no-pbp   -> EuroCup (U), box scores only (for the scouting pool)
 //
 // It re-downloads every game on each run, so corrections made by the league's
 // stat crew after a game always come through.
@@ -14,7 +15,10 @@ import { isFinishedGame } from '../lib/parse.mjs';
 import { slimPeople } from '../lib/people.mjs';
 
 const config = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
-const season = process.argv[2] || config.seasonCode;
+const argv = process.argv.slice(2);
+const season = argv.find((a) => !a.startsWith('--')) || config.seasonCode;
+const NO_PBP = argv.includes('--no-pbp');
+const COMP = season[0]; // E = EuroLeague, U = EuroCup
 const BASE = 'https://live.euroleague.net/api';
 const OUT = join('data', 'raw', season);
 const MAX_GAMES = 600;          // a full season incl. playoffs is ~400 games
@@ -51,7 +55,7 @@ async function getJson(url, tries = 6) {
 async function cached(file) {
   try {
     const raw = JSON.parse(await readFile(file, 'utf8'));
-    if (!raw.pbp || !raw.header?.Date) return null;
+    if ((!raw.pbp && !NO_PBP) || !raw.header?.Date) return null;
     const m = String(raw.header.Date).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (!m) return null;
     const played = Date.UTC(+m[3], +m[2] - 1, +m[1]);
@@ -90,8 +94,10 @@ async function main() {
     misses = 0;
     // Play-by-play (for on/off, lineups and impact). Optional: a game without it still counts everywhere else.
     let pbp = null;
-    try { pbp = await getJson(`${BASE}/PlaybyPlay?${q}`); } catch (err) { console.warn(`  Game ${code}: no play-by-play (${err.message})`); }
-    await sleep(DELAY_MS);
+    if (!NO_PBP) {
+      try { pbp = await getJson(`${BASE}/PlaybyPlay?${q}`); } catch (err) { console.warn(`  Game ${code}: no play-by-play (${err.message})`); }
+      await sleep(DELAY_MS);
+    }
     const file = `${String(code).padStart(3, '0')}.json`;
     keep.add(file);
     await writeFile(join(OUT, file), JSON.stringify({ season, gameCode: code, fetchedAt: new Date().toISOString(), header, boxscore, pbp }));
@@ -108,7 +114,7 @@ async function main() {
   // nationality). Optional: the site still builds without them. Photos are not saved.
   let clubs = [];
   try {
-    const raw = await getJson(`https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/clubs`);
+    const raw = await getJson(`https://api-live.euroleague.net/v2/competitions/${COMP}/seasons/${season}/clubs`);
     clubs = (raw?.data || []).map((c) => ({
       code: c.code, name: c.name, tvCode: c.tvCode,
       crest: c.images?.crest || c['images.crest'] || null
@@ -121,7 +127,7 @@ async function main() {
 
   // Full season schedule (dates, times, venues) for upcoming games. Optional.
   try {
-    const raw = await getJson(`https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/games`);
+    const raw = await getJson(`https://api-live.euroleague.net/v2/competitions/${COMP}/seasons/${season}/games`);
     const side = (x) => ({ code: x?.club?.code, tv: x?.club?.tvCode, name: x?.club?.name });
     const sched = (raw?.data || []).filter((g) => g.gameCode && g.local?.club && g.road?.club).map((g) => ({
       c: g.gameCode, r: g.round, rn: g.roundName || '', utc: g.utcDate || null, ok: !!(g.confirmedDate && g.confirmedHour),
@@ -136,8 +142,8 @@ async function main() {
 
   const people = [];
   const sources = [
-    ...clubs.map((c) => `https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/clubs/${encodeURIComponent(c.code)}/people`),
-    `https://api-live.euroleague.net/v2/competitions/E/seasons/${season}/people`
+    ...clubs.map((c) => `https://api-live.euroleague.net/v2/competitions/${COMP}/seasons/${season}/clubs/${encodeURIComponent(c.code)}/people`),
+    `https://api-live.euroleague.net/v2/competitions/${COMP}/seasons/${season}/people`
   ];
   for (const url of sources) {
     try {

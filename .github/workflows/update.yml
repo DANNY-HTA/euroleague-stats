@@ -11,6 +11,7 @@ on:
     - cron: "47 6 * * *"   # 08:47 Sofia time, picks up morning corrections
   push:
     branches: [main]
+    paths-ignore: ['scouting/**']   # scouting notes are read straight from the repository
   workflow_dispatch:
 
 permissions:
@@ -40,6 +41,9 @@ jobs:
           restore-keys: euroleague-data-
       - name: Download the official box scores
         run: npm run fetch
+      - name: Download EuroCup box scores (scouting pool, optional)
+        continue-on-error: true
+        run: for s in $(node -p "(require('./config.json').scoutingSeasons||[]).join(' ')"); do node scripts/fetch.mjs $s --no-pbp || true; done
       - name: Remember downloaded games for the next run
         if: always()
         uses: actions/cache/save@v4

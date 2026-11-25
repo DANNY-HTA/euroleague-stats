@@ -14,6 +14,7 @@ import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
 import { buildStints, checkStints, aggregate, rapm, BOX_KEYS, repairPlusMinus } from '../lib/pbp.mjs';
 import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
+import { poolRows, poolFromDir } from '../lib/pool.mjs';
 import { playerRates } from '../lib/advanced.mjs';
 import { playLog, flowStats, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
@@ -1211,6 +1212,27 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
   console.log(`✓ Internal section: ${published.length} encrypted document(s)`);
 }
 
+// ---- Scouting: staff database (encrypted in the repository) + official stats pool ----
+{
+  const IC = cfg.internal || {};
+  const today = new Date().toISOString().slice(0, 10);
+  const el = poolRows(players, { src: 'EL', teamName: (c) => titleCase(teams.find((t) => t.code === c)?.name || c), people: peopleIndex, crests, today });
+  const ecRows = [], ecNotes = [];
+  for (const season of sample ? [] : (cfg.scoutingSeasons || [])) {
+    const r = poolFromDir(join('data', 'raw', season), season[0] === 'U' ? 'EC' : season[0], today);
+    for (const row of r.rows) { row[4] = titleCase(row[4]); ecRows.push(row); }
+    if (r.games) ecNotes.push(`EuroCup: ${r.rows.length} players from ${r.games} games`);
+    console.log(`✓ Scouting pool ${season}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
+  }
+  writeFileSync(join(OUT, 'scouting-pool.json'), JSON.stringify({ note: [`EuroLeague: ${el.length} players from ${info.games} games`, ...ecNotes].join(' · ') + '. Official stats, updated nightly.', players: [...el, ...ecRows] }));
+  const REPO = process.env.GITHUB_REPOSITORY || IC.repo;
+  const BRANCH = process.env.GITHUB_REF_NAME || 'main';
+  const sc = JSON.stringify({ salt: IC.salt, iterations: IC.iterations, repo: REPO, branch: BRANCH, path: 'scouting/db.enc', seasonLabel: cfg.seasonLabel }).replace(/</g, '\\u003c');
+  writePage('scouting.html', 'Scouting', `<div id="scouting-app"><p class="muted">Loading…</p></div><noscript><p>The scouting section needs JavaScript.</p></noscript>`, 'scouting.html',
+    cover({ kicker: 'Staff only', title: 'Scouting', lede: 'Every EuroLeague and EuroCup player with official stats, plus anyone in the world you add or import. Build folders, rate players, write notes — locked with the team password and shared with the whole staff.' }),
+    { head: '<meta name="robots" content="noindex, nofollow">', scripts: `<script>window.HTA_SCOUT = ${sc};</script>\n<script src="scouting.js?v=${assetVersion()}" defer></script>` });
+}
+
 // Static files + data for the browser
 mkdirSync(OUT, { recursive: true });
 copyFileSync('static/style.css', join(OUT, 'style.css'));
@@ -1226,6 +1248,7 @@ copyFileSync('static/mvp.js', join(OUT, 'mvp.js'));
 copyFileSync('static/boards.js', join(OUT, 'boards.js'));
 copyFileSync('static/charges.js', join(OUT, 'charges.js'));
 copyFileSync('static/players.js', join(OUT, 'players.js'));
+copyFileSync('static/scouting.js', join(OUT, 'scouting.js'));
 copyFileSync('static/live.js', join(OUT, 'live.js'));
 mkdirSync(join(OUT, 'lib'), { recursive: true });
 for (const f of ['parse.mjs', 'pbp.mjs', 'game.mjs']) copyFileSync(join('lib', f), join(OUT, 'lib', f));

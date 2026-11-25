@@ -22,5 +22,8 @@
     ],
     "repo": "hta-lab/hta-lab.github.io"
   },
-  "leagueLogo": "https://media-cdn.cortextech.io/d99bef12-2cef-4c40-8f68-0477e1ee7131.svg"
+  "leagueLogo": "https://media-cdn.cortextech.io/d99bef12-2cef-4c40-8f68-0477e1ee7131.svg",
+  "scoutingSeasons": [
+    "U2026"
+  ]
 }
