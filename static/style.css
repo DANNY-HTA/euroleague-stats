@@ -343,3 +343,16 @@ nav a.nav-internal::before { content: ""; display: inline-block; width: 11px; he
 @media (max-width: 640px) { .viewer-head { flex-direction: column; } .pdf-frame { height: 70vh; min-height: 400px; } }
 .league-badge { display: grid; place-items: center; }
 .league-badge img { width: clamp(220px, 26vw, 360px); height: auto; display: block; filter: drop-shadow(0 6px 18px rgba(0,0,0,.25)); }
+
+/* ---------- Teams stats tool ---------- */
+.tm-controls { display: flex; flex-direction: column; gap: 12px; }
+.tm-tabs { border-radius: 14px; }
+.tm-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.tm-row .small { margin: 0 !important; }
+.tm-scroll { max-height: 78vh; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+.tm-table { font-size: 13.5px; }
+.tm-table thead th { position: sticky; top: 0; background: #fff; z-index: 2; }
+.tm-table td:nth-child(2), .tm-table th:nth-child(2) { position: sticky; left: 0; background: #fff; z-index: 1; min-width: 210px; }
+.tm-table thead th:nth-child(2) { z-index: 3; }
+td.rk-top { background: var(--red) !important; color: #fff; font-weight: 700; }
+td.rk-bot { background: var(--ink) !important; color: #fff; }

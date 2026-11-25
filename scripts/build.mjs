@@ -13,6 +13,7 @@ import { esc, f1, signed, scatter, page, fmtDate, assetVersion } from '../lib/re
 import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
 import { buildStints, checkStints, aggregate, rapm, BOX_KEYS } from '../lib/pbp.mjs';
 import { GLOSSARY } from '../lib/glossary.mjs';
+import { teamSplits } from '../lib/teamsplits.mjs';
 
 const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 const args = process.argv.slice(2);
@@ -212,9 +213,19 @@ writePage('players.html', 'Players', `
 
 // Teams page
 const tcols = [['name', 'Team', 's'], ['gp', 'GP'], ['w', 'W'], ['l', 'L'], ['ppg', 'PTS'], ['oppg', 'OPP'], ['ortg', 'ORtg'], ['drtg', 'DRtg'], ['net', 'Net'], ['pace', 'Pace'], ['ts', 'TS%'], ['efg', 'eFG%'], ['tov100', 'TOV/100'], ['orebPct', 'OREB%']];
-writePage('teams.html', 'Teams', `
-<section class="card"><div class="scroll"><table class="sortable"><thead><tr>${tcols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}><button type="button" data-key="${k}">${l}</button></th>`).join('')}</tr></thead>
-<tbody>${teams.map((t) => `<tr>${tcols.map(([k, , ty]) => ty === 's' ? `<td data-v="${esc(t.name)}"><a href="team-${esc(String(t.code).replace(/[^A-Za-z0-9]/g, ''))}.html">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a></td>` : `<td class="num" data-v="${t[k].toFixed(3)}">${['gp', 'w', 'l'].includes(k) ? t[k] : k === 'net' ? signed(t[k]) : f1(t[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`, 'teams.html', cover({ kicker: esc(roundLine), title: 'Teams', lede: 'Every club, every rating. Click a column to sort, or a team for its scouting report.', strip: [[teams.length, 'clubs'], [f1(avg(teams, 'ortg')), 'league ORtg'], [f1(avg(teams, 'pace')), 'possessions per 40 min']] }));
+{
+  const splits = teamSplits(games, teams);
+  writeFileSync(join(OUT, 'teams.json'), JSON.stringify({
+    note: `${info.games} games, ${roundLine.toLowerCase()}. Calculated from the official EuroLeague box scores.`,
+    teams: teams.map((t) => ({ code: t.code, tv: t.tv, name: titleCase(t.name), crest: crests.get(t.code) || null, href: teamHref(t.code), gp: t.gp, w: t.w, l: t.l, raw: t.raw, split: splits[t.code] }))
+  }));
+  // A simple table stays in the page for browsers without JavaScript.
+  const tcols = [['name', 'Team', 's'], ['gp', 'GP'], ['w', 'W'], ['l', 'L'], ['ppg', 'PTS'], ['oppg', 'OPP'], ['ortg', 'ORtg'], ['drtg', 'DRtg'], ['net', 'Net'], ['pace', 'Pace']];
+  writePage('teams.html', 'Teams', `<div id="teams-app"><p class="muted">Loading team stats…</p></div>
+<noscript><section class="card"><div class="scroll"><table><thead><tr>${tcols.map(([, l]) => `<th scope="col">${l}</th>`).join('')}</tr></thead><tbody>${teams.map((t) => `<tr>${tcols.map(([k, , ty]) => ty === 's' ? `<td><a href="${teamHref(t.code)}">${esc(titleCase(t.name))}</a></td>` : `<td class="num">${['gp', 'w', 'l'].includes(k) ? t[k] : f1(t[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section></noscript>`,
+    'teams.html', cover({ kicker: esc(roundLine), title: 'Teams', lede: 'Every team stat: traditional, opponents, advanced, four factors, shooting profile and splits. Per game, totals or per 100 possessions, coloured by league rank. Click a team for its scouting report.', strip: [[teams.length, 'clubs'], [f1(avg(teams, 'ortg')), 'league ORtg'], [f1(avg(teams, 'pace')), 'possessions per 40 min']] }),
+    { scripts: `<script src="teams.js?v=${assetVersion()}" defer></script>` });
+}
 
 // Scouting page for every team
 function scoutNotes(t, roster, qa) {
@@ -704,6 +715,7 @@ copyFileSync('static/app.js', join(OUT, 'app.js'));
 copyFileSync('static/internal.js', join(OUT, 'internal.js'));
 copyFileSync('static/matchup.js', join(OUT, 'matchup.js'));
 copyFileSync('static/lineups.js', join(OUT, 'lineups.js'));
+copyFileSync('static/teams.js', join(OUT, 'teams.js'));
 copyFileSync('static/share.js', join(OUT, 'share.js'));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   id: p.id, name: p.name, team: teamName.get(p.team) ? titleCase(teamName.get(p.team)) : p.team, tv: p.tv, gp: p.gp,
