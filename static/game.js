@@ -55,3 +55,12 @@
   }
   draw();
 })();
+
+// Lineup size switcher
+(() => {
+  const btns = [...document.querySelectorAll('#lineups .seg button')];
+  btns.forEach((b) => b.addEventListener('click', () => {
+    btns.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    document.querySelectorAll('#lineups .unit-size').forEach((d) => { d.hidden = d.dataset.size !== b.dataset.size; });
+  }));
+})();

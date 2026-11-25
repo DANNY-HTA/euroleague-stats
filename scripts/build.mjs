@@ -60,12 +60,13 @@ const qual = qualified(players, teams, cfg);
 const info = seasonInfo(games);
 
 // ---- Play-by-play: on/off, lineups, impact (only games that match the box score exactly) ----
-const pbpOk = [], pbpBad = [];
+const pbpOk = [], pbpBad = [], pbpNear = new Map();
 for (const g of games) {
   const raw = rawPbp.get(g.gameCode);
   if (!raw) continue;
   const r = buildStints(g, raw);
   const why = r.ok ? checkStints(g, r.stints) : r.reason;
+  if (why && r.ok && !why.startsWith('play-by-play score')) pbpNear.set(g.gameCode, { stints: r.stints, why });
   if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints });
 }
 const PBP = pbpOk.length ? aggregate(pbpOk) : null;
@@ -182,23 +183,45 @@ function compareRows(g) {
     return `<div class="cmp ${better ? 'b-' + better : ''}"><span class="v h">${fx}${sx ? ` <small>${sx}</small>` : ''}</span><span class="lab">${label}${low ? ' <small>(fewer is better)</small>' : ''}</span><span class="v a">${fy}${sy ? ` <small>${sy}</small>` : ''}</span><div class="split"><i style="width:${wx}%"></i><i style="width:${(100 - wx).toFixed(1)}%"></i></div></div>`;
   }).join('') };
 }
+const sideHead = (s) => `<h3 class="side-h">${badge(s.code, s.tv)} ${esc(titleCase(s.name))}</h3>`;
 function gameUnits(g, stints, size) {
   const out = { H: new Map(), A: new Map() };
   const A = g.home.code, B = g.away.code;
-  const combos = (ids, k) => { if (k === 5) return [ids]; const r = []; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) r.push([ids[i], ids[j]]); return r; };
-  for (const s of stints) for (const [side, ids, me, op] of [['H', s.home, A, B], ['A', s.away, B, A]]) for (const c of combos(ids, size)) {
-    const k = c.join(','); if (!out[side].has(k)) out[side].set(k, { ids: c, secs: 0, pf: 0, pa: 0 });
-    const e = out[side].get(k); e.secs += s.secs; e.pf += s.pts[me]; e.pa += s.pts[op];
+  const combos = (ids, k) => { const r = []; const rec = (st, acc) => { if (acc.length === k) { r.push(acc); return; } for (let i = st; i < ids.length; i++) rec(i + 1, [...acc, ids[i]]); }; rec(0, []); return r; };
+  const zero = () => Object.fromEntries(BOX_KEYS.map((k) => [k, 0]));
+  for (const s of stints) for (const [side, ids, me, op, poss, oposs] of [['H', s.home, A, B, s.possH, s.possA], ['A', s.away, B, A, s.possA, s.possH]]) for (const c of combos(ids, size)) {
+    const k = c.join(','); if (!out[side].has(k)) out[side].set(k, { ids: c, secs: 0, pf: 0, pa: 0, poss: 0, oposs: 0, me: zero(), op: zero() });
+    const e = out[side].get(k); e.secs += s.secs; e.pf += s.pts[me]; e.pa += s.pts[op]; e.poss += poss; e.oposs += oposs;
+    for (const x of BOX_KEYS) { e.me[x] += s.box[me][x]; e.op[x] += s.box[op][x]; }
   }
-  for (const s of ['H', 'A']) out[s] = [...out[s].values()].filter((e) => e.secs > 0).sort((x, y) => y.secs - x.secs);
+  for (const s of ['H', 'A']) out[s] = [...out[s].values()].filter((e) => e.secs > 0 || e.pf || e.pa).sort((x, y) => y.secs - x.secs);
   return out;
 }
-const unitTable = (list, n) => `<table class="units"><thead><tr><th scope="col">Players</th><th scope="col" class="num">MIN</th><th scope="col" class="num">Score</th><th scope="col" class="num">+/-</th></tr></thead><tbody>
-${list.slice(0, n).map((u) => `<tr><td>${u.ids.map((id) => `<a href="${playerHref(id)}">${esc(nameOf.get(id) || id)}</a>`).join('<span class="muted"> · </span>')}</td><td class="num">${mmss(u.secs / 60)}</td><td class="num">${u.pf}–${u.pa}</td><td class="num ${u.pf > u.pa ? 'pos' : u.pf < u.pa ? 'neg' : ''}">${u.pf > u.pa ? '+' : ''}${u.pf - u.pa}</td></tr>`).join('')}</tbody></table>`;
+const UCOLS = [['MIN', 'Minutes together'], ['PTS', 'Points scored'], ['OPP', 'Points allowed'], ['+/-', 'Plus-minus'], ['POSS', 'Possessions (average of both teams)'], ['ORtg', 'Points scored per 100 possessions'], ['DRtg', 'Points allowed per 100 possessions'], ['Net', 'ORtg minus DRtg'], ['2P', '2-pointers made/attempted'], ['3P', '3-pointers made/attempted'], ['FT', 'Free throws made/attempted'], ['eFG%', 'Effective field goal %'], ['OR', 'Offensive rebounds'], ['DR', 'Defensive rebounds'], ['AST', 'Assists'], ['TOV', 'Turnovers'], ['STL', 'Steals'], ['BLK', 'Blocks'], ['PF', 'Fouls'], ['OPP 3P', 'Opponent 3-pointers'], ['OPP TOV', 'Opponent turnovers'], ['OPP OR', 'Opponent offensive rebounds']];
+const unitTable = (list) => {
+  const td = (v, txt = v, cls = '') => `<td class="num ${cls}" data-v="${v}">${txt}</td>`;
+  const fr = (m, a) => td(m + a / 1000, `${m}/${a}`);
+  return `<div class="scroll"><table class="sortable units"><thead><tr>${sortTh('Players', false)}${UCOLS.map(([l, t]) => sortTh(l, true, t)).join('')}</tr></thead><tbody>
+${list.map((u) => {
+    const P = (u.poss + u.oposs) / 2, o = P ? 100 * u.pf / P : null, d = P ? 100 * u.pa / P : null, m = u.me, x = u.op;
+    const fga = m.fga2 + m.fga3, efg = fga ? 100 * (m.fgm2 + 1.5 * m.fgm3) / fga : null, pm = u.pf - u.pa;
+    const n = (v, f = f1) => (v == null ? td(-999, '–') : td(v.toFixed(2), f(v)));
+    return `<tr><td data-v="${esc(u.ids.map((id) => nameOf.get(id) || id).join(' '))}">${u.ids.map((id) => `<a href="${playerHref(id)}">${esc(nameOf.get(id) || id)}</a>`).join('<span class="muted"> · </span>')}</td>${td(u.secs, mmss(u.secs / 60))}${td(u.pf)}${td(u.pa)}${td(pm, `${pm > 0 ? '+' : ''}${pm}`, pm > 0 ? 'pos' : pm < 0 ? 'neg' : '')}${td(P.toFixed(1), f1(P))}${n(o)}${n(d)}${o == null ? td(-999, '–') : td((o - d).toFixed(2), signed(o - d), o > d ? 'pos' : o < d ? 'neg' : '')}${fr(m.fgm2, m.fga2)}${fr(m.fgm3, m.fga3)}${fr(m.ftm, m.fta)}${n(efg)}${td(m.oreb)}${td(m.dreb)}${td(m.ast)}${td(m.tov)}${td(m.stl)}${td(m.blk)}${td(m.pf)}${fr(x.fgm3, x.fga3)}${td(x.tov)}${td(x.oreb)}</tr>`;
+  }).join('')}</tbody></table></div>`;
+};
+function lineupBlock(g, stints, note) {
+  const sizes = [5, 4, 3, 2], U = Object.fromEntries(sizes.map((k) => [k, gameUnits(g, stints, k)]));
+  const name = { 5: 'Five-man lineups', 4: '4-man', 3: '3-man', 2: 'Pairs' };
+  return `<section class="card" id="lineups"><h2>Lineups</h2><p class="muted">Every unit that played in this game, with the full stats while it was on the court. Click any column to sort.</p>
+${note ? `<p class="note-warn">${note}</p>` : ''}
+<div class="seg" role="group" aria-label="Lineup size">${sizes.map((k, i) => `<button type="button" data-size="${k}" aria-pressed="${i === 0}">${name[k]}</button>`).join('')}</div>
+${sizes.map((k, i) => `<div class="unit-size" data-size="${k}"${i ? ' hidden' : ''}>${sideHead(g.home)}${unitTable(U[k].H)}${sideHead(g.away)}${unitTable(U[k].A)}</div>`).join('')}
+</section>`;
+}
 const gameMvp = (g) => {
-  const win = g.home.score > g.away.score ? g.home.code : g.away.code;
-  return [g.home, g.away].flatMap((s) => s.players.map((p) => ({ p, s }))).filter((x) => x.p.min > 0)
-    .sort((x, y) => y.p.pir - x.p.pir || (y.s.code === win) - (x.s.code === win) || y.p.pts - x.p.pts)[0];
+  const win = g.home.score > g.away.score ? g.home : g.away;
+  const p = win.players.filter((x) => x.min > 0).sort((x, y) => y.pir - x.pir || y.pts - x.pts)[0];
+  return p ? { p, s: win } : null;
 };
 const sortedGames = [...games].sort((a, b) => a.date.localeCompare(b.date) || a.gameCode - b.gameCode);
 for (const g of sortedGames) {
@@ -206,7 +229,8 @@ for (const g of sortedGames) {
   const log = raw ? playLog(g, raw) : null;
   const flow = log ? flowStats(log.plays) : null;
   const periods = log ? Math.max(4, ...log.plays.map((p) => p[0])) : 4;
-  const stints = stintsOf.get(g.gameCode);
+  const near = pbpNear.get(g.gameCode);
+  const stints = stintsOf.get(g.gameCode) || near?.stints;
   const hWin = H.score > A.score;
   const qs = (s) => { const q = s.quarters || []; const ot = q.length ? s.score - q.reduce((x, y) => x + y, 0) : 0; return [...q, ...(periods > 4 || ot ? [ot] : [])]; };
   const qH = qs(H), qA = qs(A);
@@ -220,13 +244,11 @@ for (const g of sortedGames) {
   }).join('');
   const conn = log ? connections(log.plays) : [];
   const connList = (side) => { const l = conn.filter((c) => c.side === side).slice(0, 6); return l.length ? `<ol class="conn">${l.map((c) => `<li><span>${esc(nameOf.get(c.from) || log.names[c.from] || c.from)} <span class="muted">→</span> ${esc(nameOf.get(c.to) || log.names[c.to] || c.to)}</span><strong>${c.pts} pts</strong><span class="muted small">${c.n} assist${c.n > 1 ? 's' : ''}</span></li>`).join('')}</ol>` : '<p class="muted">No assisted baskets recorded.</p>'; };
-  const units5 = stints ? gameUnits(g, stints, 5) : null, units2 = stints ? gameUnits(g, stints, 2) : null;
   const pbpJson = log ? JSON.stringify({
     H: H.tv, A: A.tv, hName: titleCase(H.name), aName: titleCase(A.name),
     names: Object.fromEntries([...H.players, ...A.players].map((p) => [p.id, p.name])),
     plays: log.plays.map((p) => p.slice(0, 7)), labels: PLAY_LABEL, groups: PLAY_GROUP
   }).replace(/</g, '\\u003c') : null;
-  const sideHead = (s) => `<h3 class="side-h">${badge(s.code, s.tv)} ${esc(titleCase(s.name))}</h3>`;
   const hero = `<section class="cover game-cover"><div class="wrap gc-wrap">
 <div class="crumbs"><a href="index.html#games">Games</a> / ${g.round ? `Round ${g.round}` : esc(g.phase || '')}</div>
 <span class="kicker">${g.round ? `Round ${g.round} · ` : ''}${esc(fmtDate(g.date))}</span>
@@ -252,10 +274,7 @@ ${flow ? `<section class="card"><h2>Game flow</h2><p class="muted">The score mar
 <section class="card"><h2>Team comparison</h2><div class="perf-head"><span>${badge(H.code, H.tv)} ${esc(H.tv)}</span><span>${f1(cmp.P)} possessions</span><span>${esc(A.tv)} ${badge(A.code, A.tv)}</span></div>${cmp.html}</section>
 </div>
 <section class="card"><h2>Box score</h2>${sideHead(H)}${gameBox(H)}${sideHead(A)}${gameBox(A)}<p class="muted small">Click any column to sort. PIR = Performance Index Rating.</p></section>
-${units5 ? `<div class="row">
-<section class="card"><h2>Lineups</h2><p class="muted">Five-man units by time on court, with the score while they played.</p>${sideHead(H)}${unitTable(units5.H, 6)}${sideHead(A)}${unitTable(units5.A, 6)}</section>
-<section class="card"><h2>Pairs</h2><p class="muted">Two players on court together.</p>${sideHead(H)}${unitTable(units2.H, 6)}${sideHead(A)}${unitTable(units2.A, 6)}</section>
-</div>` : raw ? '<p class="muted small">Lineups are not shown for this game: the official play-by-play does not reproduce every player\'s minutes and +/- exactly.</p>' : ''}
+${stints ? lineupBlock(g, stints, near ? `Small difference with the official box score in this game (${esc(near.why)}). These lineups are shown for this game only and are not used in the season lineup, on/off or impact numbers.` : '') : raw ? '<p class="muted small">Lineups are not available for this game: the official play-by-play does not say who was on the court at every moment.</p>' : ''}
 ${log ? `<section class="card"><h2>Best connections</h2><p class="muted">Who assisted whom, by points created.</p><div class="row two">${['H', 'A'].map((s) => `<div>${sideHead(s === 'H' ? H : A)}${connList(s)}</div>`).join('')}</div></section>
 <section class="card"><h2>Play-by-play</h2><div id="pbp-app"><p class="muted">Loading…</p></div></section>
 <script type="application/json" id="pbp-data">${pbpJson}</script>` : ''}`, 'index.html', hero, { scripts: `<script src="game.js?v=${assetVersion()}" defer></script>` });
@@ -291,10 +310,14 @@ for (const x of roundMvps) mvpCount.set(x.p.id, (mvpCount.get(x.p.id) || 0) + 1)
 const mvpTop = mvpRows.slice(0, 10), mvpMax = Math.max(0.01, mvpTop[0]?.score || 0);
 const mvpSection = mvpTop.length ? `<section class="card mvp-race"><h2>MVP race</h2>
 <p class="muted">HTA LAB MVP index: each factor is compared with every qualified player (z-score) and weighted — PIR 30%, impact rating (RAPM) 20%, team win % 15%, points 15%, true shooting 10%, on/off 10%.</p>
-<div class="scroll"><table class="mvp"><thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col" class="num">Index</th>${MVP_F.map(([, l, w]) => `<th scope="col" class="num">${l} <small class="muted">${Math.round(w * 100)}%</small></th>`).join('')}<th scope="col" class="num" title="Times MVP of a round">Rd MVP</th></tr></thead><tbody>
+<div id="mvp-app"><div class="scroll"><table class="mvp"><thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col" class="num">Index</th>${MVP_F.map(([, l, w]) => `<th scope="col" class="num">${l} <small class="muted">${Math.round(w * 100)}%</small></th>`).join('')}<th scope="col" class="num" title="Times MVP of a round">Rd MVP</th></tr></thead><tbody>
 ${mvpTop.map((x, i) => `<tr${i < 3 ? ` class="rk-row-${i + 1}"` : ''}><td class="num"><span class="mvp-rank r${i + 1}">${i + 1}</span></td><td><a href="${playerHref(x.p.id)}">${esc(x.p.name)}</a> <span class="muted">${badge(x.p.team, x.p.tv)}${esc(x.p.tv)}</span><div class="bar"><span style="width:${Math.max(4, 100 * x.score / mvpMax).toFixed(1)}%"></span></div></td><td class="num"><strong>${x.score.toFixed(2)}</strong></td>${x.f.map((f, j) => `<td class="num ${f.z >= 1 ? 'hi' : f.z <= -0.5 ? 'lo' : ''}">${f.v == null ? '–' : MVP_F[j][4](f.v)}</td>`).join('')}<td class="num">${mvpCount.get(x.p.id) || ''}</td></tr>`).join('')}
-</tbody></table></div><p class="muted small">${qualNote} Green = well above average for that factor.</p></section>` : '';
-const roundMvpSection = roundMvps.length ? `<section class="card"><h2>MVP of each round</h2><p class="muted">Highest PIR of the round.</p>
+</tbody></table></div></div><p class="muted small">${qualNote} Green = well above average for that factor. Impact and on/off come from the play-by-play and are still noisy this early in the season.</p>
+<script type="application/json" id="mvp-data">${JSON.stringify({
+  factors: MVP_F.map(([k, l, w]) => [k, l, Math.round(w * 100), k === 'imp' || k === 'swing' ? 's' : '']),
+  players: mvpRows.map((x) => [x.p.name, x.p.tv, crests.get(x.p.team) || null, playerHref(x.p.id), x.f.map((f) => (f.v == null || !Number.isFinite(f.v) ? null : +f.v.toFixed(2))), mvpCount.get(x.p.id) || 0])
+}).replace(/</g, '\\u003c')}</script></section>` : '';
+const roundMvpSection = roundMvps.length ? `<section class="card"><h2>MVP of each round</h2><p class="muted">Highest PIR of the round among players on the winning team.</p>
 <div class="scroll"><table><thead><tr><th scope="col">Rd</th><th scope="col">Player</th><th scope="col" class="num">PTS</th><th scope="col" class="num">REB</th><th scope="col" class="num">AST</th><th scope="col" class="num">PIR</th><th scope="col">Game</th></tr></thead><tbody>
 ${roundMvps.map((x) => `<tr><td class="num">${x.r}</td><td><a href="${playerHref(x.p.id)}">${esc(x.p.name)}</a> <span class="muted">${badge(x.s.code, x.s.tv)}${esc(x.s.tv)}</span></td><td class="num">${x.p.pts}</td><td class="num">${x.p.reb}</td><td class="num">${x.p.ast}</td><td class="num"><strong>${x.p.pir}</strong></td><td><a href="${gameHref(x.g.gameCode)}">${esc(x.g.home.tv)} ${x.g.home.score}–${x.g.away.score} ${esc(x.g.away.tv)}</a></td></tr>`).join('')}
 </tbody></table></div></section>` : '';
@@ -378,7 +401,7 @@ ${board('PIR', 'Performance Index Rating per game', 'pirpg')}
 ${board('PRA', 'Points + rebounds + assists per game', 'pra')}
 ${board('Stocks', 'Steals + blocks per game', 'stocks')}
 </div>
-<p class="muted small">${qualNote}</p>`, 'index.html', homeHero);
+<p class="muted small">${qualNote}</p>`, 'index.html', homeHero, { scripts: `<script src="mvp.js?v=${assetVersion()}" defer></script>` });
 
 
 // Players page
@@ -938,6 +961,7 @@ copyFileSync('static/teams.js', join(OUT, 'teams.js'));
 copyFileSync('static/teambox.js', join(OUT, 'teambox.js'));
 copyFileSync('static/share.js', join(OUT, 'share.js'));
 copyFileSync('static/game.js', join(OUT, 'game.js'));
+copyFileSync('static/mvp.js', join(OUT, 'mvp.js'));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   id: p.id, name: p.name, team: teamName.get(p.team) ? titleCase(teamName.get(p.team)) : p.team, tv: p.tv, gp: p.gp,
   stats: [['PTS', p.ppg], ['REB', p.rpg], ['AST', p.apg], ['STL', p.spg], ['BLK', p.bpg], ['PIR', p.pirpg], ['MIN', p.mpg], ['TS%', p.ts], ['USG%', p.usg]].map(([k, v]) => [k, f1(v)])

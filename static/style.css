@@ -455,3 +455,15 @@ ol.pbp { list-style: none; padding: 0; margin: 14px 0 0; max-height: 720px; over
 .gcard b { font: 800 22px/1 var(--display); }
 .gcard .gm { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 6px; }
 @media (max-width: 640px) { .perf { grid-template-columns: 1fr 70px 1fr; } .pbp-row { grid-template-columns: 46px 1fr 56px; } .scoreboard { gap: 8px; } }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.seg button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 16px; font: 700 14px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+.note-warn { background: #fff7e0; border-left: 4px solid #f2c230; padding: 10px 14px; border-radius: 6px; font-size: 14px; }
+table.units td, table.units th { white-space: nowrap; }
+table.units td:first-child { white-space: normal; min-width: 260px; }
+.mvp-controls { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 14px; }
+.w-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.w-in { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.w-in input { width: 58px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.mvp-controls input[type=search] { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; min-width: 220px; font: inherit; }
+.badge-img { vertical-align: -4px; object-fit: contain; }
