@@ -365,7 +365,7 @@ const teamChart = scatter(teams.map((t) => ({
 const RATES = playerRates(games);
 const defOf = (id) => {
   const o = PBP?.onoff.get(id);
-  if (!o || o.on.poss < 150) return null;
+  if (!o || o.on.poss < 300) return null;
   const off = { poss: o.teamTot.poss - o.on.poss, pa: o.teamTot.pa - o.on.pa };
   const on = 100 * o.on.pa / o.on.poss;
   return { onDrtg: on, defSwing: off.poss >= 50 ? 100 * off.pa / off.poss - on : null };
@@ -389,7 +389,7 @@ const defenseSection = `<h2 class="sec-title" id="defense">Defense</h2>
 <p class="muted sec-sub">Advanced defensive stats. Steal, block and defensive rebound % estimate how many of the chances available while the player was on the court he converted.</p>
 <div class="row">${rateBoard('Steal %', 'Share of opponent possessions ending in his steal while he plays', R('stlPct'))}${rateBoard('Block %', "Share of opponent 2-point shots he blocked while he plays", R('blkPct'))}</div>
 <div class="row">${rateBoard('Defensive rebound %', 'Share of available defensive rebounds he grabbed while he plays', R('drebPct'))}${rateBoard('Stocks per 40', 'Steals + blocks per 40 minutes', R('stocks40'))}</div>
-${PBP ? `<div class="row">${rateBoard('On-court defense', 'Points allowed per 100 possessions by his team with him on the court. Lower is better. At least 150 possessions.', (p) => defOf(p.id)?.onDrtg ?? null, { asc: true, pool: players })}${rateBoard('Defensive on/off', 'How many fewer points per 100 possessions his team allows with him on the court than off it', (p) => defOf(p.id)?.defSwing ?? null, { fmt: signed, pool: players })}</div>` : ''}`;
+${PBP ? `<div class="row">${rateBoard('On-court defense', 'Points allowed per 100 possessions by his team with him on the court. Lower is better. At least 300 possessions on the court.', (p) => defOf(p.id)?.onDrtg ?? null, { asc: true, pool: players })}${rateBoard('Defensive on/off', 'How many fewer points per 100 possessions his team allows with him on the court than off it. At least 300 possessions on the court.', (p) => defOf(p.id)?.defSwing ?? null, { fmt: signed, pool: players })}</div>` : ''}`;
 // Composite boards (PRA, Stocks): each part gets its own colour.
 const PARTS = { pra: [['ppg', 'Points', 'c1'], ['rpg', 'Rebounds', 'c2'], ['apg', 'Assists', 'c3']], stocks: [['spg', 'Steals', 'c1'], ['bpg', 'Blocks', 'c2']] };
 function board(title, sub, key, fmt = f1) {
