@@ -72,7 +72,7 @@ const PBP = pbpOk.length ? aggregate(pbpOk) : null;
 
 // ---- 2. Stats ----
 // Offensive fouls (incl. charges) drawn and committed, from the play-by-play
-const OFT = new Map(), OFP = new Map(), OFE = [];
+const OFT = new Map(), OFP = new Map(), OFE = [], OFC = new Map();
 for (const g of games) {
   const raw = rawPbp.get(g.gameCode); if (!raw) continue;
   const r = offensiveFouls(playLog(g, raw).plays);
@@ -81,7 +81,7 @@ for (const g of games) {
     const e = OFT.get(code); e.gp++; e.drawn += r.drawn[side]; e.committed += r.committed[side];
   }
   for (const [id, n] of r.drawers) OFP.set(id, (OFP.get(id) || 0) + n);
-  for (const e of r.events) OFE.push({ g, ...e });
+  for (const e of r.events) { OFE.push({ g, ...e }); if (e.committedBy) OFC.set(e.committedBy, (OFC.get(e.committedBy) || 0) + 1); }
 }
 const teams = teamTable(games);
 const players = playerTable(games);
@@ -519,10 +519,41 @@ writePage('players.html', 'Players', `
 <aside class="detail" aria-live="polite"><p class="muted">Hover or tab to a dot to see the player.</p></aside></div>
 <p class="muted small">Chart: ${qualNote} 3-point chart: at least 15 attempts.</p>
 </section>
-<section class="card">
-<div class="scroll"><table class="sortable" id="players"><thead><tr>${cols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}><button type="button" data-key="${k}">${l}</button></th>`).join('')}</tr></thead>
-<tbody>${playerRows}</tbody></table></div>
-</section>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Switch the chart, filter by team, and click any name for the full profile.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']] }));
+<h2 class="sec-title" id="all-stats">All player stats</h2>
+<div id="players-app"><noscript><div class="scroll"><table id="players"><thead><tr>${cols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}>${l}</th>`).join('')}</tr></thead>
+<tbody>${playerRows}</tbody></table></div></noscript><p class="muted">Loading player stats…</p></div>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Every stat we have — traditional, shooting, advanced, defense, on/off and impact, highs and profile — per game, totals or per 40 minutes. Filter by team, position, minutes or games, and click any column to sort.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']] }), { scripts: `<script src="players.js?v=${assetVersion()}" defer></script>` });
+
+// ---- Player stats tool data (player-stats.json): everything we have for every player ----
+{
+  const logsAll = playerGameLogs(games);
+  const isQ = new Set(qual.map((q) => q.id));
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const r2 = (v) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 100) / 100);
+  const TK = ['pts', 'fgm2', 'fga2', 'fgm3', 'fga3', 'ftm', 'fta', 'oreb', 'dreb', 'reb', 'ast', 'stl', 'tov', 'blk', 'blka', 'pf', 'fd', 'pir'];
+  const out = players.map((p) => {
+    const person = findPerson(peopleIndex, p), rt = RATES.get(p.id), o = PBP?.onoff.get(p.id), lg = logsAll.get(p.id) || [];
+    let pb = null;
+    if (o && o.on.poss > 0) {
+      const off = { poss: o.teamTot.poss - o.on.poss, pf: o.teamTot.pf - o.on.pf, pa: o.teamTot.pa - o.on.pa };
+      const onO = 100 * o.on.pf / o.on.poss, onD = 100 * o.on.pa / o.on.poss;
+      const offO = off.poss > 0 ? 100 * off.pf / off.poss : null, offD = off.poss > 0 ? 100 * off.pa / off.poss : null;
+      pb = [r2(o.on.secs / 60), r2(o.on.poss), r2(onO), r2(onD), r2(offO), r2(offD), r2(IMPACT?.values.get(p.id) ?? null)];
+    }
+    const dd = lg.filter((g) => [g.line.pts, g.line.reb, g.line.ast, g.line.stl, g.line.blk].filter((v) => v >= 10).length >= 2).length;
+    const td = lg.filter((g) => [g.line.pts, g.line.reb, g.line.ast, g.line.stl, g.line.blk].filter((v) => v >= 10).length >= 3).length;
+    const hi = (k) => (lg.length ? Math.max(...lg.map((g) => g.line[k])) : null);
+    return [p.name, p.tv, p.team, playerHref(p.id), person?.position || '', person?.height || null, person?.weight || null, person ? ageOn(person.birthDate, todayISO) : null, person?.country || '', p.number || person?.dorsal || '',
+      p.gp, p.gs, r2(p.totalMin), p.totalPm, isQ.has(p.id) ? 1 : 0, TK.map((k) => p.totals[k]), r2(p.usg),
+      rt ? [r2(rt.ctx.oppPoss), r2(rt.ctx.opp2a), r2(rt.ctx.drebCh), r2(rt.ctx.orebCh), r2(rt.ctx.rebCh), r2(rt.ctx.teamFgm)] : null,
+      pb, [OFP.get(p.id) || 0, OFC.get(p.id) || 0], [dd, td, lg.filter((g) => g.line.pts >= 20).length, hi('pts'), hi('reb'), hi('ast'), hi('pir')], p.teams.length > 1 ? 1 : 0];
+  });
+  mkdirSync(OUT, { recursive: true });
+  writeFileSync(join(OUT, 'player-stats.json'), JSON.stringify({
+    note: `${info.games} games, ${roundLine.toLowerCase()}.`, tk: TK, pbpGames: pbpOk.length, games: info.games,
+    teams: teams.slice().sort((a, b) => a.name.localeCompare(b.name)).map((t) => [t.code, titleCase(t.name), crests.get(t.code) || null]),
+    players: out
+  }));
+}
 
 // Teams page
 const TEAM_SPLITS = teamSplits(games, teams);
@@ -1194,6 +1225,7 @@ copyFileSync('static/game.js', join(OUT, 'game.js'));
 copyFileSync('static/mvp.js', join(OUT, 'mvp.js'));
 copyFileSync('static/boards.js', join(OUT, 'boards.js'));
 copyFileSync('static/charges.js', join(OUT, 'charges.js'));
+copyFileSync('static/players.js', join(OUT, 'players.js'));
 copyFileSync('static/live.js', join(OUT, 'live.js'));
 mkdirSync(join(OUT, 'lib'), { recursive: true });
 for (const f of ['parse.mjs', 'pbp.mjs', 'game.mjs']) copyFileSync(join('lib', f), join(OUT, 'lib', f));

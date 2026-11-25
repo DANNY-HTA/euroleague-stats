@@ -557,3 +557,4 @@ table.rtab tbody tr:nth-child(even) td { background: #fafafb; }
 .ch-filters select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-weight: 500; background: #fff; }
 table.ch-table th button { all: unset; cursor: pointer; } table.ch-table th[aria-sort] button { color: var(--red); }
 table.ch-table .crest { vertical-align: -5px; }
+.pl-filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; } .pl-filters label { font-size: 13px; font-weight: 700; color: var(--ink-2); } .pl-filters select, .pl-filters input[type=search] { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-weight: 500; background: #fff; } .pl-filters input[type=search] { border-radius: 999px; min-width: 200px; } .pl-table .crest { vertical-align: -4px; } .pl-table td { white-space: nowrap; }
