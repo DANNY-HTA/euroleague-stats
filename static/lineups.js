@@ -25,7 +25,9 @@
   fetch('lineups.json').then((r) => { if (!r.ok) throw new Error('none'); return r.json(); }).then((D) => {
     const K = D.keys, NK = K.length, ix = Object.fromEntries(K.map((k, i) => [k, i]));
     const params = new URLSearchParams(location.search);
-    const S = { team: D.teams[params.get('team')] ? params.get('team') : '', player: '', size: 5, outcome: '', loc: '', from: '', to: '', minMin: 0, minPoss: 15, mode: 'total', sort: 'min', dir: -1, page: 0 };
+    const preset = root.dataset.team && D.teams[root.dataset.team] ? root.dataset.team : (D.teams[params.get('team')] ? params.get('team') : '');
+    const locked = root.dataset.lock === '1' && !!preset;
+    const S = { team: preset, player: '', size: 5, outcome: '', loc: '', from: '', to: '', minMin: 0, minPoss: root.dataset.minPoss != null ? Number(root.dataset.minPoss) || 0 : 15, mode: 'total', sort: 'min', dir: -1, page: 0 };
     const PER = 50;
 
     // Columns: [key, label, kind]  kind: c = count (scaled by per mode), p = percentage / rating, s = signed count, i = integer, r = rating
@@ -116,7 +118,7 @@
     const filters = el('div', { class: 'card lu-filters' },
       el('div', { class: 'lu-row' }, sizeTabs, modeTabs),
       el('div', { class: 'lu-grid' },
-        mkSel(teamOpts, S.team, (e) => { S.team = e.target.value; S.page = 0; fillPlayers(); draw(); }, 'Team'),
+        locked ? null : mkSel(teamOpts, S.team, (e) => { S.team = e.target.value; S.page = 0; fillPlayers(); draw(); }, 'Team'),
         playerSel,
         mkSel([['', 'Wins and losses'], ['W', 'Wins only'], ['L', 'Losses only']], '', (e) => { S.outcome = e.target.value; S.page = 0; draw(); }, 'Outcome'),
         mkSel([['', 'Home and away'], ['H', 'Home only'], ['A', 'Away only']], '', (e) => { S.loc = e.target.value; S.page = 0; draw(); }, 'Location'),
@@ -137,7 +139,7 @@
       const shown = all.slice(S.page * PER, S.page * PER + PER);
       const head = el('tr', {}, el('th', { scope: 'col', class: 'num' }, '#'), el('th', { scope: 'col' }, 'Lineup'),
         COLS.map(([k, l]) => el('th', { scope: 'col', class: 'num', title: TIPS[k] || null, 'aria-sort': S.sort === k ? (S.dir < 0 ? 'descending' : 'ascending') : null },
-          el('button', { type: 'button', onclick: () => { if (S.sort === k) S.dir = -S.dir; else { S.sort = k; S.dir = (k === 'drtg' || k === 'tovp' || k === 'opefg' || k === 'oppts') ? 1 : -1; } draw(); } }, l))));
+          el('button', { type: 'button', onclick: () => { if (S.sort === k) S.dir = -S.dir; else { S.sort = k; S.dir = -1; } draw(); } }, l))));
       const body = shown.map((x, i) => {
         const t = D.teams[x.code];
         return el('tr', {}, el('td', { class: 'num muted' }, String(S.page * PER + i + 1)),

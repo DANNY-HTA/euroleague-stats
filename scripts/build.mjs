@@ -298,6 +298,17 @@ ${L.map((l) => { const o = l.poss ? 100 * l.pf / l.poss : 0, d = l.poss ? 100 * 
 ${R.map(({ q, oo, imp }) => `<tr><td><a href="${playerHref(q.id)}">${esc(q.name)}</a></td><td class="num">${Math.round(oo.onMin)}</td><td class="num">${sg(oo.onNet)}</td><td class="num">${sg(oo.offNet)}</td><td class="num ${oo.swing == null ? '' : oo.swing >= 0 ? 'pos' : 'neg'}">${sg(oo.swing)}</td><td class="num">${imp == null ? '–' : sg(imp)}</td></tr>`).join('')}
 </tbody></table></div></section>`;
   }
+  const BOXK = ['pts', 'fgm2', 'fga2', 'fgm3', 'fga3', 'ftm', 'fta', 'oreb', 'dreb', 'reb', 'ast', 'stl', 'tov', 'blk', 'blka', 'pf', 'fd', 'pir'];
+  const boxJson = JSON.stringify({
+    keys: BOXK,
+    players: Object.fromEntries(players.filter((q) => list.some((g) => (g.isHome ? games.find((x) => x.gameCode === g.gameCode).home : games.find((x) => x.gameCode === g.gameCode).away).players.some((pl) => pl.id === q.id))).map((q) => [q.id, [q.name, playerHref(q.id)]])),
+    games: list.map((g) => {
+      const gm = games.find((x) => x.gameCode === g.gameCode), me = g.isHome ? gm.home : gm.away;
+      return { h: g.isHome ? 1 : 0, w: g.win ? 1 : 0, d: g.date, o: g.opp.tv,
+        team: BOXK.map((k) => me.totals[k]), min: me.teamMinutes || 200, pm: g.for - g.against,
+        p: me.players.filter((pl) => pl.min > 0).map((pl) => [pl.id, pl.starter ? 1 : 0, +pl.min.toFixed(2), pl.pm, ...BOXK.map((k) => pl[k])]) };
+    })
+  }).replace(/</g, '\\u003c');
   const teamHero = cover({
     crumbs: `<a href="teams.html">Teams</a> / Scouting report`,
     kicker: best && best[1] <= 3 ? `${ord(best[1])} in the league in ${LBL[best[0]]}` : `${ord(t.rank)} in the standings`,
@@ -337,15 +348,18 @@ ${factorRow('2P%', 'twoPct', 'twoPctD')}
 ${factorRow('FT%', 'ftPct', null)}
 ${factorRow('Assisted baskets %', 'astRate', null)}
 </tbody></table></div></section>
-<section class="card"><h2>Rotation</h2><p class="muted">Sorted by total minutes played. Season stats for players whose most recent game was for this team.</p>
+<section class="card"><h2>Season box score</h2><p class="muted">Every player's cumulative stats for this team. Filter by home, away, wins or losses, switch totals and per game, and click any column to sort from highest to lowest.</p>
+<div id="teambox-app"><noscript><div><p class="muted">Sorted by total minutes played. Season stats for players whose most recent game was for this team.</p>
 <div class="scroll"><table><thead><tr>${['Player', 'GP', 'GS', 'MIN', 'PTS', 'REB', 'AST', 'STL', 'TOV', 'PIR', 'USG%', 'TS%', '3PA', '3P%', 'FT%'].map((h, i) => `<th scope="col"${i ? ' class="num"' : ''}>${h}</th>`).join('')}</tr></thead><tbody>
 ${roster.map((p) => `<tr><td><a href="${playerHref(p.id)}">${esc(p.name)}</a></td><td class="num">${p.gp}</td><td class="num">${p.gs}</td><td class="num">${f1(p.mpg)}</td><td class="num">${f1(p.ppg)}</td><td class="num">${f1(p.rpg)}</td><td class="num">${f1(p.apg)}</td><td class="num">${f1(p.spg)}</td><td class="num">${f1(p.tpg)}</td><td class="num">${f1(p.pirpg)}</td><td class="num">${f1(p.usg)}</td><td class="num">${f1(p.ts)}</td><td class="num">${f1(p.threeApg)}</td><td class="num">${f1(p.threePct)}</td><td class="num">${f1(p.ftPct)}</td></tr>`).join('')}
-</tbody></table></div></section>
-${lineupCard}${onoffTeamCard}
+</tbody></table></div></div>
+</noscript><p class="muted">Loading…</p></div></section>
+<script type="application/json" id="teambox-data">${boxJson}</script>
+${onoffTeamCard}${PBP ? `<section class="lu-embed"><h2 class="sec-title">All lineups</h2><p class="muted">Every five-man unit and 2-, 3- and 4-man combination this team has used. Filter by home/away, wins/losses and dates.</p><div id="lineups-app" data-team="${esc(t.code)}" data-lock="1" data-min-poss="0"><p class="muted">Loading lineups…</p></div></section>` : ""}
 <section class="card"><h2>Results</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
 ${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}">${badge(g.opp.code, g.opp.tv)} ${esc(titleCase(g.opp.name))}</a></td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td></tr>`).join('')}
-</tbody></table></div></section>`, 'teams.html', teamHero);
+</tbody></table></div></section>`, 'teams.html', teamHero, { scripts: `<script src="teambox.js?v=${assetVersion()}" defer></script>${PBP ? `<script src="lineups.js?v=${assetVersion()}" defer></script>` : ''}` });
 }
 
 // ---- Player pages ----
@@ -716,6 +730,7 @@ copyFileSync('static/internal.js', join(OUT, 'internal.js'));
 copyFileSync('static/matchup.js', join(OUT, 'matchup.js'));
 copyFileSync('static/lineups.js', join(OUT, 'lineups.js'));
 copyFileSync('static/teams.js', join(OUT, 'teams.js'));
+copyFileSync('static/teambox.js', join(OUT, 'teambox.js'));
 copyFileSync('static/share.js', join(OUT, 'share.js'));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   id: p.id, name: p.name, team: teamName.get(p.team) ? titleCase(teamName.get(p.team)) : p.team, tv: p.tv, gp: p.gp,

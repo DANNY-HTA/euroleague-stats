@@ -141,7 +141,7 @@
       const N = rows.length;
       const head = el('tr', {}, el('th', { scope: 'col', class: 'num' }, '#'), el('th', { scope: 'col' }, 'Team'),
         cols.map((c) => el('th', { scope: 'col', class: 'num', title: c[4] || null, 'aria-sort': S.sort === c[0] ? (S.dir < 0 ? 'descending' : 'ascending') : null },
-          el('button', { type: 'button', onclick: () => { if (S.sort === c[0]) S.dir = -S.dir; else { S.sort = c[0]; S.dir = c[3] === 0 ? 1 : -1; } draw(); } }, c[1]))));
+          el('button', { type: 'button', onclick: () => { if (S.sort === c[0]) S.dir = -S.dir; else { S.sort = c[0]; S.dir = -1; } draw(); } }, c[1]))));
       const trs = list.map((x, i) => el('tr', {}, el('td', { class: 'num muted' }, String(i + 1)),
         el('td', { class: 'team' }, el('a', { href: x.T.href }, x.T.crest ? el('img', { class: 'crest', src: x.T.crest, alt: '', width: '24', height: '24', loading: 'lazy' }) : el('span', { class: 'code' }, x.T.tv), x.T.name)),
         cols.map((c) => {
