@@ -628,3 +628,22 @@ td.stars, .sc-stars button.on { color: #e8a317; }
 .top nav { display: flex; flex-wrap: nowrap; gap: 2px; }
 .top .logo-sub { display: none; }
 @media (max-width: 1180px) { .top .wrap { flex-wrap: wrap; } .top nav { flex-wrap: wrap; } }
+/* ---- Hapoel schedule ---- */
+.hs-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.hs-bar .filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; } .hs-bar label { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.hs-bar select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-weight: 500; background: #fff; }
+.hs-month { font: 800 20px/1 var(--display); text-transform: uppercase; margin: 26px 0 10px !important; }
+.hs-list { display: flex; flex-direction: column; gap: 6px; }
+.hs-row { display: grid; grid-template-columns: 150px 170px 30px minmax(0, 1fr) minmax(0, 220px) 110px; gap: 12px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); text-decoration: none; background: #fff; }
+a.hs-row:hover { border-color: var(--red); color: var(--ink); box-shadow: 0 6px 16px rgba(215,24,42,.1); }
+.hs-row[hidden], .hs-month[hidden] { display: none; }
+.hs-row.hs-isnext { border: 2px solid var(--red); background: var(--red-soft); }
+.hs-date { font-weight: 700; font-variant-numeric: tabular-nums; }
+.hs-comp { font: 800 12px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; justify-self: start; }
+.hs-comp.el { background: var(--ink); color: #fff; } .hs-comp.il { background: #e8a317; color: #14161b; }
+.hs-ha { color: var(--muted); font-weight: 700; text-align: center; }
+.hs-opp { display: flex; align-items: center; gap: 10px; min-width: 0; } .hs-opp img { object-fit: contain; } .hs-opp i { width: 26px; } .hs-opp b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-venue { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-res { font: 800 16px/1 var(--display); text-align: right; } .hs-res.w { color: #0f7a3a; } .hs-res.l { color: var(--red); } .hs-res.up { color: var(--muted); font-size: 13px; }
+.hs-next { font-size: 30px !important; }
+@media (max-width: 820px) { .hs-row { grid-template-columns: 1fr auto; } .hs-comp, .hs-venue, .hs-ha { display: none; } .hs-date { grid-column: 1 / -1; font-size: 13px; } }

@@ -1179,6 +1179,108 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
     { scripts: `<script src="matchup.js?v=${assetVersion()}" defer></script>` });
 }
 
+// ---- HAPOEL – SCHEDULE: every Hapoel Tel Aviv game of the season, EuroLeague + Winner League ----
+if (IS_EL) {
+  const H_EL = cfg.hapoelCode || 'HTA';
+  const rows = [];
+  const byCode = new Map(games.map((g) => [Number(g.gameCode), g]));
+  // EuroLeague: the schedule has every game (played and to play) with its time; results from the box scores.
+  for (const x of schedule) {
+    if (x.h?.code !== H_EL && x.a?.code !== H_EL) continue;
+    const g = byCode.get(Number(x.c)), home = x.h.code === H_EL, opp = home ? x.a : x.h;
+    const me = g ? (home ? g.home : g.away) : null, op = g ? (home ? g.away : g.home) : null;
+    rows.push({ comp: 'EL', utc: x.utc, round: x.r, home, opp: { name: titleCase(opp.name || opp.code), crest: crests.get(opp.code) || null, href: teamHref(opp.code) }, venue: x.venue ? titleCase(x.venue) : '',
+      result: me ? { for: me.score, against: op.score } : null, href: g ? gameHref(g.gameCode) : null });
+  }
+  // EuroLeague games played but missing from the schedule file (should not happen, but never lose a result).
+  for (const g of games) if ((g.home.code === H_EL || g.away.code === H_EL) && !schedule.some((x) => Number(x.c) === Number(g.gameCode))) {
+    const home = g.home.code === H_EL, me = home ? g.home : g.away, op = home ? g.away : g.home;
+    rows.push({ comp: 'EL', utc: g.date + 'T18:00:00Z', dateOnly: true, round: g.round, home, opp: { name: titleCase(op.name), crest: crests.get(op.code) || null, href: teamHref(op.code) }, venue: '', result: { for: me.score, against: op.score }, href: gameHref(g.gameCode) });
+  }
+  // Winner League (Israel): same data the /il/ pages are built from.
+  let ilNote = '';
+  const ilDir = join('data', 'raw', 'ISR' + (cfg.leagues?.il?.year || '2027'));
+  if (!sample && existsSync(join(ilDir, '_schedule.json'))) {
+    try {
+      const ilClubs = JSON.parse(readFileSync(join(ilDir, '_clubs.json')));
+      const me = ilClubs.find((c) => /hapoel/i.test(c.name) && /tel[ -]?aviv/i.test(c.name));
+      const ilCrest = new Map(ilClubs.map((c) => [c.code, c.crest]));
+      if (me) for (const x of JSON.parse(readFileSync(join(ilDir, '_schedule.json')))) {
+        if (x.h?.code !== me.code && x.a?.code !== me.code) continue;
+        const home = x.h.code === me.code, opp = home ? x.a : x.h;
+        let result = null;
+        const f = join(ilDir, `${x.c}.json`);
+        if (x.played && existsSync(f)) { const g = parseGame(JSON.parse(readFileSync(f))); const mine = home ? g.home : g.away, theirs = home ? g.away : g.home; result = { for: mine.score, against: theirs.score }; }
+        rows.push({ comp: 'IL', utc: x.utc, round: x.r, home, opp: { name: titleCase(opp.name || opp.code), crest: ilCrest.get(opp.code) || null, href: `il/team-${safe(opp.code)}.html` }, venue: x.venue || '',
+          result, href: result ? `il/game-${safe(String(x.c))}.html` : null });
+      }
+      else ilNote = 'Hapoel Tel Aviv was not found in the Winner League team list.';
+    } catch (err) { ilNote = 'The Winner League schedule could not be read: ' + err.message; }
+  }
+  rows.sort((a, b) => String(a.utc || '9').localeCompare(String(b.utc || '9')));
+  const COMP = { EL: 'EuroLeague', IL: 'Winner League' };
+  const rec = (c) => { const r = rows.filter((x) => x.result && (!c || x.comp === c)); const w = r.filter((x) => x.result.for > x.result.against).length; return `${w}–${r.length - w}`; };
+  const next = rows.find((x) => !x.result && x.utc && Date.parse(x.utc) > Date.now() - 3 * 3600000);
+  const last = [...rows].reverse().find((x) => x.result);
+  const months = new Map();
+  for (const x of rows) { const k = (x.utc || '').slice(0, 7) || 'tbd'; if (!months.has(k)) months.set(k, []); months.get(k).push(x); }
+  const monthName = (k) => (k === 'tbd' ? 'Date to be confirmed' : new Date(k + '-15T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }));
+  const row = (x) => {
+    const res = x.result ? `<span class="hs-res ${x.result.for > x.result.against ? 'w' : 'l'}">${x.result.for > x.result.against ? 'W' : 'L'} ${x.result.for}–${x.result.against}</span>` : `<span class="hs-res up">${x.utc ? 'Upcoming' : 'TBD'}</span>`;
+    const inner = `<span class="hs-date">${x.dateOnly ? esc(fmtDate(x.utc.slice(0, 10))) : x.utc ? `<time data-utc="${esc(x.utc)}" datetime="${esc(x.utc)}">${esc(x.utc.slice(0, 10))}</time>` : 'TBD'}</span>
+<span class="hs-comp ${x.comp.toLowerCase()}">${COMP[x.comp]}${x.round ? ` · Rd ${x.round}` : ''}</span>
+<span class="hs-ha">${x.home ? 'vs' : '@'}</span>
+<span class="hs-opp">${x.opp.crest ? `<img src="${esc(x.opp.crest)}" alt="" width="26" height="26" loading="lazy">` : '<i></i>'}<b>${esc(x.opp.name)}</b></span>
+<span class="hs-venue">${esc(x.venue || (x.home ? 'Home' : 'Away'))}</span>${res}`;
+    return x.href ? `<a class="hs-row" href="${esc(x.href)}" data-c="${x.comp}" data-h="${x.home ? 1 : 0}" data-p="${x.result ? 1 : 0}">${inner}</a>`
+      : `<div class="hs-row" data-c="${x.comp}" data-h="${x.home ? 1 : 0}" data-p="0">${inner}</div>`;
+  };
+  // Calendar file for phones and Outlook (times in UTC; every calendar shows them in local time).
+  const icsDate = (iso) => iso.replace(/[-:]/g, '').replace(/\.\d+/, '').replace(/Z?$/, 'Z');
+  const icsEsc = (t) => String(t).replace(/[\;,]/g, (m) => '\\' + m).replace(/\n/g, '\\n');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//HTA LAB//Hapoel schedule//EN', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:Hapoel Tel Aviv 2026-27',
+    ...rows.filter((x) => x.utc && !x.dateOnly).flatMap((x) => {
+      const end = new Date(Date.parse(x.utc) + 2 * 3600000).toISOString();
+      return ['BEGIN:VEVENT', `UID:hta-${x.comp}-${x.utc}@hta-lab.github.io`, `DTSTAMP:${icsDate(new Date().toISOString())}`, `DTSTART:${icsDate(x.utc)}`, `DTEND:${icsDate(end)}`,
+        `SUMMARY:${icsEsc((x.home ? 'Hapoel Tel Aviv vs ' : x.opp.name + ' vs ') + (x.home ? x.opp.name : 'Hapoel Tel Aviv') + ` (${COMP[x.comp]})` + (x.result ? ` ${x.result.for}–${x.result.against}` : ''))}`,
+        ...(x.venue ? [`LOCATION:${icsEsc(x.venue)}`] : []), 'END:VEVENT'];
+    }), 'END:VCALENDAR'].join('\r\n');
+  writeFileSync(join(OUT, 'hapoel-schedule.ics'), ics);
+  writePage('hapoel-schedule.html', 'Hapoel schedule', `
+<div class="tiles">
+<div class="tile"><span class="label">Season record</span><span class="big">${rec()}</span><span class="sub">EuroLeague ${rec('EL')} · Winner League ${rec('IL')}</span></div>
+${next ? `<div class="tile mvp-tile"><span class="label">Next game</span><span class="big hs-next">${next.home ? 'vs' : '@'} ${esc(next.opp.name)}</span><span class="sub"><time data-utc="${esc(next.utc)}">${esc(next.utc.slice(0, 10))}</time> · ${COMP[next.comp]}</span></div>` : ''}
+${last ? `<a class="tile" href="${esc(last.href || '#')}"><span class="label">Last game</span><span class="big">${last.result.for > last.result.against ? 'W' : 'L'} ${last.result.for}–${last.result.against}</span><span class="sub">${last.home ? 'vs' : '@'} ${esc(last.opp.name)} · ${COMP[last.comp]}</span></a>` : ''}
+<div class="tile"><span class="label">Games</span><span class="big">${rows.length}</span><span class="sub">${rows.filter((x) => x.result).length} played · ${rows.filter((x) => !x.result).length} to play</span></div>
+</div>
+<section class="card">
+<div class="hs-bar"><div class="filters" id="hs-filter">
+<label>Competition <select data-f="c"><option value="">All</option><option value="EL">EuroLeague</option><option value="IL">Winner League</option></select></label>
+<label>Venue <select data-f="h"><option value="">Home and away</option><option value="1">Home</option><option value="0">Away</option></select></label>
+<label>Games <select data-f="p"><option value="">All</option><option value="0">Still to play</option><option value="1">Played</option></select></label>
+<span class="muted small" data-f="n"></span></div>
+<a class="btn" href="hapoel-schedule.ics" download>Add to my calendar (.ics)</a></div>
+${ilNote ? `<p class="note-warn">${esc(ilNote)}</p>` : ''}
+${[...months].map(([k, list]) => `<h2 class="hs-month">${esc(monthName(k))}</h2><div class="hs-list">${list.map(row).join('')}</div>`).join('')}
+<p class="muted small">Times in your time zone. Click a played game for the full box score and analysis. The calendar file works with iPhone, Google Calendar and Outlook; download it again later to get time changes.</p>
+</section>
+<script>
+(() => {
+  const box = document.getElementById('hs-filter'); if (!box) return;
+  const f = (k) => box.querySelector('[data-f="' + k + '"]');
+  const apply = () => {
+    let n = 0;
+    document.querySelectorAll('.hs-row').forEach((r) => { const ok = (!f('c').value || r.dataset.c === f('c').value) && (!f('h').value || r.dataset.h === f('h').value) && (!f('p').value || r.dataset.p === f('p').value); r.hidden = !ok; if (ok) n++; });
+    document.querySelectorAll('.hs-month').forEach((h) => { const list = h.nextElementSibling; h.hidden = ![...list.children].some((r) => !r.hidden); });
+    f('n').textContent = n + ' game' + (n === 1 ? '' : 's');
+  };
+  box.addEventListener('change', apply); apply();
+  const nx = [...document.querySelectorAll('.hs-row[data-p="0"]')][0]; if (nx) nx.classList.add('hs-isnext');
+})();
+</script>`, 'hapoel-schedule.html', cover({ kicker: 'Hapoel Tel Aviv', title: 'Hapoel schedule', lede: 'Every game of the season in one place — EuroLeague and Winner League — with results, upcoming games in your time zone and a calendar file for your phone.' }));
+  console.log(`✓ Hapoel schedule: ${rows.length} games (${rows.filter((x) => x.comp === 'EL').length} EuroLeague, ${rows.filter((x) => x.comp === 'IL').length} Winner League)`);
+}
+
 // ---- HAPOEL – INTERNAL (password-protected, encrypted in the browser) ----
 if (IS_EL) {
   const IC = cfg.internal || {};
