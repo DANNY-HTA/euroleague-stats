@@ -65,6 +65,18 @@
       "dropInvalid": true,
       "poolCode": "ES",
       "fetch": "node scripts/fetch-acb.mjs 2026"
+    },
+    "bbl": {
+      "seasonLabel": "easyCredit BBL 2026–27",
+      "leagueName": "Basketball Bundesliga (Germany)",
+      "shortName": "BBL",
+      "sourceText": "the official easyCredit BBL (easycredit-bbl.de) box scores",
+      "leagueLogo": "",
+      "dataDir": "BBL2026",
+      "root": "../",
+      "dropInvalid": true,
+      "poolCode": "DE",
+      "fetch": "node scripts/fetch-bbl.mjs 2026"
     }
   },
   "nameFixes": {
