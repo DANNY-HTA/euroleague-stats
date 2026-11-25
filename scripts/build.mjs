@@ -361,6 +361,7 @@ const teamChart = scatter(teams.map((t) => ({
   title: `${titleCase(t.name)}: ${t.w}–${t.l}, offensive rating ${f1(t.ortg)}, defensive rating ${f1(t.drtg)}, net ${signed(t.net)}`
 })), { xLabel: 'Points scored per 100 possessions', yLabel: 'Points allowed per 100', invertY: true, big: true, avgX: avg(teams, 'ortg'), avgY: avg(teams, 'drtg'), cornerGood: 'Good at both ends', cornerBad: 'Struggling at both ends' });
 
+const moreBtn = (n) => (n > 10 ? `<button type="button" class="btn-ghost board-more" data-n="${n}" aria-expanded="false">Show all ${n} players</button>` : '');
 // Per-40 and defensive boards
 const RATES = playerRates(games);
 const defOf = (id) => {
@@ -372,13 +373,13 @@ const defOf = (id) => {
 };
 function rateBoard(title, sub, val, { fmt = f1, asc = false, pool = qual } = {}) {
   const list = pool.map((p) => ({ p, v: val(p) })).filter((x) => x.v != null && Number.isFinite(x.v))
-    .sort((a, b) => (asc ? a.v - b.v : b.v - a.v) || a.p.name.localeCompare(b.p.name)).slice(0, 10);
+    .sort((a, b) => (asc ? a.v - b.v : b.v - a.v) || a.p.name.localeCompare(b.p.name));
   if (!list.length) return '';
   const vals = list.map((x) => x.v), hi = Math.max(...vals), lo = Math.min(...vals);
-  const width = (v) => (asc ? (hi === lo ? 100 : 30 + 70 * (hi - v) / (hi - lo)) : 100 * v / (hi || 1));
+  const width = (v) => (asc ? (hi === lo ? 100 : 5 + 95 * (hi - v) / (hi - lo)) : 100 * v / (hi || 1));
   return `<section class="card board"><h2>${title}</h2><p class="muted">${sub}</p><ol>
-${list.map(({ p, v }, i) => `<li><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span><div class="bar"><span style="width:${Math.max(3, width(v)).toFixed(1)}%"></span></div></div><strong class="num">${fmt(v)}</strong></li>`).join('')}
-</ol></section>`;
+${list.map(({ p, v }, i) => `<li${i >= 10 ? ' class="more"' : ''}><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span><div class="bar"><span style="width:${Math.max(3, width(v)).toFixed(1)}%"></span></div></div><strong class="num">${fmt(v)}</strong></li>`).join('')}
+</ol>${moreBtn(list.length)}</section>`;
 }
 const R = (k) => (p) => RATES.get(p.id)?.[k] ?? null;
 const per40Section = `<h2 class="sec-title" id="per40">Per 40 minutes</h2>
@@ -393,7 +394,7 @@ ${PBP ? `<div class="row">${rateBoard('On-court defense', 'Points allowed per 10
 // Composite boards (PRA, Stocks): each part gets its own colour.
 const PARTS = { pra: [['ppg', 'Points', 'c1'], ['rpg', 'Rebounds', 'c2'], ['apg', 'Assists', 'c3']], stocks: [['spg', 'Steals', 'c1'], ['bpg', 'Blocks', 'c2']] };
 function board(title, sub, key, fmt = f1) {
-  const list = leaders(qual, key, 10);
+  const list = leaders(qual, key, Infinity);
   const top = list[0]?.[key] || 1;
   const parts = PARTS[key];
   const legend = parts ? `<div class="legend">${parts.map(([, l, c]) => `<span><i class="${c}"></i>${l}</span>`).join('')}</div>` : '';
@@ -401,8 +402,8 @@ function board(title, sub, key, fmt = f1) {
     ? `<div class="bar stack" title="${esc(parts.map(([k, l]) => `${l} ${f1(p[k])}`).join(' · '))}">${parts.map(([k, , c]) => `<span class="${c}" style="width:${(100 * p[k] / top).toFixed(1)}%"></span>`).join('')}</div><div class="parts">${parts.map(([k, l, c]) => `<span class="${c}" title="${l}">${f1(p[k])}</span>`).join('')}</div>`
     : `<div class="bar"><span style="width:${(100 * p[key] / top).toFixed(1)}%"></span></div>`;
   return `<section class="card board"><h2>${title}</h2><p class="muted">${sub}</p>${legend}<ol>
-${list.map((p, i) => `<li><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span>${bar(p)}</div><strong class="num">${fmt(p[key])}</strong></li>`).join('')}
-</ol></section>`;
+${list.map((p, i) => `<li${i >= 10 ? ' class="more"' : ''}><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span>${bar(p)}</div><strong class="num">${fmt(p[key])}</strong></li>`).join('')}
+</ol>${moreBtn(list.length)}</section>`;
 }
 
 

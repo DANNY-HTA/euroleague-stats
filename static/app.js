@@ -85,3 +85,11 @@
     el.textContent = `${date} · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
   });
 })();
+
+// Home boards: show the full list on demand.
+document.querySelectorAll('.board-more').forEach((b) => b.addEventListener('click', () => {
+  const card = b.closest('.board'), open = card.classList.toggle('open');
+  b.setAttribute('aria-expanded', String(open));
+  b.textContent = open ? 'Show top 10' : `Show all ${b.dataset.n} players`;
+  if (!open) card.scrollIntoView({ block: 'nearest' });
+}));
