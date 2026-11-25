@@ -53,6 +53,18 @@
       "dropInvalid": true,
       "poolCode": "IT",
       "fetch": "node scripts/fetch-lba.mjs 2026"
+    },
+    "acb": {
+      "seasonLabel": "Liga Endesa 2026–27",
+      "leagueName": "Liga Endesa (ACB)",
+      "shortName": "ACB",
+      "sourceText": "the official Liga Endesa (acb.com) box scores",
+      "leagueLogo": "",
+      "dataDir": "ACB2026",
+      "root": "../",
+      "dropInvalid": true,
+      "poolCode": "ES",
+      "fetch": "node scripts/fetch-acb.mjs 2026"
     }
   },
   "nameFixes": {
