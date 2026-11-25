@@ -41,5 +41,8 @@
       "root": "../",
       "dropInvalid": true
     }
+  },
+  "nameFixes": {
+    "Dan Otoru": "Dan Oturu"
   }
 }

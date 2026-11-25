@@ -101,9 +101,29 @@ for (const t of teams) {
       || mine.find(([, p]) => { const [last, first] = p.name.split(',').map((x) => x.trim()); return `${first} ${last}`.toUpperCase() === eng; });
     if (!hit) continue;
     const b = dmy(r.birth_date), h = Number(String(r.Height || '').replace(',', '.'));
-    people.push({ code: hit[0], name: hit[1].name, birthDate: b ? `${b[2]}-${b[1]}-${b[0]}` : null, height: h ? Math.round(h < 3 ? h * 100 : h) : null, weight: null,
+    people.push({ code: hit[0], name: hit[1].name, engName: String(r.name_eng || '').trim() || null, birthDate: b ? `${b[2]}-${b[1]}-${b[0]}` : null, height: h ? Math.round(h < 3 ? h * 100 : h) : null, weight: null,
       country: null, birthCountry: null, position: POS(r.position_eng), dorsal: String(r.jersy || ''), club: code, active: String(r.isReplaced) !== 'True', startDate: null });
   }
 }
 await writeFile(join(OUT, '_people.json'), JSON.stringify(people));
+
+// Spell names as the league's roster does (LiveStats sometimes misspells, e.g. "Otoru" for Oturu),
+// plus any fixes listed in config.json ("nameFixes": { "Wrong Name": "Right Name" }).
+const fixes = JSON.parse(await readFile(new URL('../config.json', import.meta.url), 'utf8')).nameFixes || {};
+const rosterName = new Map(people.map((p) => [p.code, p.engName]).filter(([, n]) => n));
+const fixName = (id, player) => {
+  let name = rosterName.get(id) || player;
+  const shown = name.includes(',') ? name.split(',').map((x) => x.trim()).reverse().join(' ') : name;
+  for (const [wrong, right] of Object.entries(fixes)) if (shown.toUpperCase() === wrong.toUpperCase()) name = right;
+  return name;
+};
+let renamed = 0;
+for (const f of (await readdir(OUT)).filter((x) => /^\d+\.json$/.test(x))) {
+  const raw = JSON.parse(await readFile(join(OUT, f), 'utf8'));
+  let changed = false;
+  for (const s of raw.boxscore.Stats) for (const p of s.PlayersStats) { const n = fixName(p.Player_ID, p.Player); if (n !== p.Player) { p.Player = n; changed = true; } }
+  for (const k of Object.keys(raw.pbp || {})) if (Array.isArray(raw.pbp[k])) for (const r of raw.pbp[k]) if (r.PLAYER_ID) { const n = fixName(r.PLAYER_ID, r.PLAYER); if (n !== r.PLAYER) { r.PLAYER = n; changed = true; } }
+  if (changed) { await writeFile(join(OUT, f), JSON.stringify(raw)); renamed++; }
+}
+if (renamed) console.log(`  names updated in ${renamed} game files`);
 console.log(`Done: ${games.filter(played).length} played Winner League games for ${year} (${fresh} downloaded, ${kept} kept, ${missing} without a finished LiveStats file); ${people.length} roster entries`);
