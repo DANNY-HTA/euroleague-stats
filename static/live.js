@@ -119,9 +119,9 @@ function gameView(code, raw, updated) {
   const head = el('section', { class: 'live-board' },
     el('div', { class: 'lb-top' }, el('a', { href: 'live.html', class: 'lb-back' }, '← All games'), st === 'live' ? el('span', { class: 'live-dot big' }, 'LIVE') : el('span', { class: 'lb-st' }, st === 'final' ? 'FINAL' : `${t(h.Date)} · ${t(h.Hour)}`), el('span', { class: 'lb-upd' }, `Updated ${updated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}${st === 'live' ? ' · refreshes every 15 s' : ''}`)),
     el('div', { class: 'scoreboard' },
-      el('div', { class: 'sb-team' }, CFG.crests[A] ? el('span', { class: 'sb-crest' }, el('img', { src: CFG.crests[A], alt: '' })) : null, el('span', { class: 'sb-name' }, titleCase(h.TeamA)), el('span', { class: 'muted-w' }, `Fouls ${t(h.FoultsA) || 0} · TO left ${t(h.TimeoutsA) || '–'}`)),
+      el('div', { class: 'sb-team' }, CFG.crests[A] ? el('span', { class: 'sb-crest' }, el('img', { src: CFG.crests[A], alt: '' })) : null, el('span', { class: 'sb-name' }, titleCase(h.TeamA)), el('span', { class: 'muted-w' }, `Fouls ${t(h.FoultsA) || 0} · Timeouts ${t(h.TimeoutsA) || 0}`)),
       el('div', { class: 'sb-score' }, el('span', { class: sA >= sB ? 'win' : '' }, String(sA)), el('span', { class: 'dash' }, '–'), el('span', { class: sB >= sA ? 'win' : '' }, String(sB)), el('small', {}, st === 'live' ? `${quarterName(h)} · ${t(h.RemainingPartialTime)}` : st === 'final' ? 'Final' : 'Not started')),
-      el('div', { class: 'sb-team' }, CFG.crests[B] ? el('span', { class: 'sb-crest' }, el('img', { src: CFG.crests[B], alt: '' })) : null, el('span', { class: 'sb-name' }, titleCase(h.TeamB)), el('span', { class: 'muted-w' }, `Fouls ${t(h.FoultsB) || 0} · TO left ${t(h.TimeoutsB) || '–'}`))),
+      el('div', { class: 'sb-team' }, CFG.crests[B] ? el('span', { class: 'sb-crest' }, el('img', { src: CFG.crests[B], alt: '' })) : null, el('span', { class: 'sb-name' }, titleCase(h.TeamB)), el('span', { class: 'muted-w' }, `Fouls ${t(h.FoultsB) || 0} · Timeouts ${t(h.TimeoutsB) || 0}`))),
     qA.some((v) => v != null) ? el('table', { class: 'qtable' }, el('thead', {}, el('tr', {}, el('th'), ['Q1', 'Q2', 'Q3', 'Q4'].map((q) => el('th', { scope: 'col' }, q)))),
       el('tbody', {}, [[t(h.TVCodeA), qA, qB], [t(h.TVCodeB), qB, qA]].map(([tv, me, op]) => el('tr', {}, el('th', { scope: 'row' }, tv), me.map((v, i) => el('td', { class: v != null && v > (op[i] ?? -1) ? 'w' : '' }, v == null ? '' : String(v))))))) : null);
   if (!g) return [head, el('section', { class: 'card' }, el('p', { class: 'muted' }, 'Stats appear here when the game starts.'))];
@@ -163,7 +163,7 @@ async function tick() {
     if (selected) {
       const raw = await loadGame(selected);
       if (!raw.header || !t(raw.header.TeamA)) host.replaceChildren(el('section', { class: 'card' }, el('p', {}, 'This game is not in the live feed yet.'), el('a', { href: 'live.html' }, '← All games')));
-      else { host.replaceChildren(...gameView(selected, raw, new Date())); if (status(raw.header) === 'live') next = 15000; else if (status(raw.header) === 'final') next = 0; }
+      else { host.replaceChildren(...gameView(selected, raw, new Date()).filter(Boolean)); if (status(raw.header) === 'live') next = 15000; else if (status(raw.header) === 'final') next = 0; }
     } else {
       await loadList();
       host.replaceChildren(listView());
