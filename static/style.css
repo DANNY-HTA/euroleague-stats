@@ -552,3 +552,8 @@ table.rtab tbody tr:nth-child(even) td { background: #fafafb; }
   .scroll { overflow: visible !important; }
   a { color: inherit; text-decoration: none; }
 }
+.ch-filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 10px; }
+.ch-filters label { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.ch-filters select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-weight: 500; background: #fff; }
+table.ch-table th button { all: unset; cursor: pointer; } table.ch-table th[aria-sort] button { color: var(--red); }
+table.ch-table .crest { vertical-align: -5px; }

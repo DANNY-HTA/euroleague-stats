@@ -72,7 +72,7 @@ const PBP = pbpOk.length ? aggregate(pbpOk) : null;
 
 // ---- 2. Stats ----
 // Offensive fouls (incl. charges) drawn and committed, from the play-by-play
-const OFT = new Map(), OFP = new Map();
+const OFT = new Map(), OFP = new Map(), OFE = [];
 for (const g of games) {
   const raw = rawPbp.get(g.gameCode); if (!raw) continue;
   const r = offensiveFouls(playLog(g, raw).plays);
@@ -81,6 +81,7 @@ for (const g of games) {
     const e = OFT.get(code); e.gp++; e.drawn += r.drawn[side]; e.committed += r.committed[side];
   }
   for (const [id, n] of r.drawers) OFP.set(id, (OFP.get(id) || 0) + n);
+  for (const e of r.events) OFE.push({ g, ...e });
 }
 const teams = teamTable(games);
 const players = playerTable(games);
@@ -411,12 +412,12 @@ const defenseSection = `<h2 class="sec-title" id="defense">Defense</h2>
 <p class="muted sec-sub">Advanced defensive stats. Steal, block and defensive rebound % estimate how many of the chances available while the player was on the court he converted.</p>
 <div class="row">${rateBoard('Steal %', 'Share of opponent possessions ending in his steal while he plays', R('stlPct'))}${rateBoard('Block %', "Share of opponent 2-point shots he blocked while he plays", R('blkPct'))}</div>
 <div class="row">${rateBoard('Defensive rebound %', 'Share of available defensive rebounds he grabbed while he plays', R('drebPct'))}${rateBoard('Stocks per 40', 'Steals + blocks per 40 minutes', R('stocks40'))}</div>
-${OFT.size ? `<div class="row">${teamOfBoard()}${rateBoard('Offensive fouls drawn', 'Charges and other offensive fouls drawn, season total. The league feed does not separate charges from other offensive fouls.', (p) => OFP.get(p.id) || null, { fmt: (v) => String(Math.round(v)), pool: players })}</div>` : ''}
+${OFT.size ? `<div class="row">${teamOfBoard()}${rateBoard('Offensive fouls drawn', 'Charges and other offensive fouls drawn, season total. <a href="charges.html"><strong>Full list →</strong></a>', (p) => OFP.get(p.id) || null, { fmt: (v) => String(Math.round(v)), pool: players })}</div>` : ''}
 ${PBP ? `<div class="row">${rateBoard('On-court defense', 'Points allowed per 100 possessions by his team with him on the court. Lower is better. At least 300 possessions on the court.', (p) => defOf(p.id)?.onDrtg ?? null, { asc: true, pool: players })}${rateBoard('Defensive on/off', 'How many fewer points per 100 possessions his team allows with him on the court than off it. At least 300 possessions on the court.', (p) => defOf(p.id)?.defSwing ?? null, { fmt: signed, pool: players })}</div>` : ''}`;
 function teamOfBoard() {
   const rows = teams.map((t) => ({ t, e: OFT.get(t.code) })).filter((x) => x.e && x.e.gp).map((x) => ({ ...x, v: x.e.drawn / x.e.gp })).sort((a, b) => b.v - a.v);
   const top = rows[0]?.v || 1;
-  return `<section class="card board open"><h2>Charges drawn — teams</h2><p class="muted">Offensive fouls drawn per game (charges, illegal screens, push-offs), from the play-by-play. In brackets: offensive fouls the team commits per game.</p><ol>
+  return `<section class="card board open"><h2>Charges drawn — teams</h2><p class="muted">Offensive fouls drawn per game (charges, illegal screens, push-offs), from the play-by-play. Grey: offensive fouls the team commits per game. <a href="charges.html"><strong>Full list of every charge →</strong></a></p><ol>
 ${rows.map(({ t, e, v }, i) => `<li><span class="muted num">${i + 1}</span><div><a href="${teamHref(t.code)}">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a> <span class="muted small">${e.drawn} in ${e.gp} games · commits ${f1(e.committed / e.gp)}</span><div class="bar"><span style="width:${(100 * v / top).toFixed(1)}%"></span></div></div><strong class="num">${v.toFixed(2)}</strong></li>`).join('')}
 </ol></section>`;
 }
@@ -1078,6 +1079,22 @@ writePage('live.html', 'Live', `<div id="live-app"><p class="muted">Connecting t
   cover({ kicker: 'Live', title: 'Live games', lede: 'Follow any EuroLeague game as it happens: score, box scores, who is on the court, game flow and every play, straight from the official live feed.' }),
   { scripts: `<script type="module" src="live.js?v=${assetVersion()}"></script>` });
 
+// ---- Charges drawn: every offensive foul of the season ----
+if (OFE.length) {
+  const used = new Set(OFE.flatMap((e) => [e.drawnBy, e.committedBy]).filter(Boolean));
+  const data = {
+    teams: Object.fromEntries(teams.map((t) => [t.code, [t.tv, titleCase(t.name), crests.get(t.code) || null, teamHref(t.code)]])),
+    teamGp: Object.fromEntries([...OFT].map(([c, e]) => [c, e.gp])),
+    players: Object.fromEntries(players.filter((q) => used.has(q.id)).map((q) => [q.id, [q.name, q.tv, playerHref(q.id), q.gp, Math.round(q.totalMin)]])),
+    games: Object.fromEntries([...new Set(OFE.map((e) => e.g))].map((g) => [g.gameCode, [g.date, g.round, gameHref(g.gameCode), g.home.code, g.away.code, g.home.score, g.away.score]])),
+    ev: OFE.map((e) => { const draw = e.side === 'H' ? e.g.home.code : e.g.away.code, com = e.side === 'H' ? e.g.away.code : e.g.home.code; return [e.g.gameCode, e.period, e.clock, draw, e.drawnBy, com, e.committedBy, e.hs, e.as]; })
+  };
+  writePage('charges.html', 'Charges drawn', `<div id="charges-app"><p class="muted">Loading…</p></div>
+<script type="application/json" id="charges-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`, 'index.html',
+    cover({ kicker: esc(roundLine), title: 'Charges drawn', lede: `Every offensive foul of the season — ${OFE.length} in ${new Set(OFE.map((e) => e.g.gameCode)).size} games — with who drew it, who committed it, when and the score. The league's play-by-play records charges, illegal screens and push-offs all as "offensive foul", so all three are included.` }),
+    { scripts: `<script src="charges.js?v=${assetVersion()}" defer></script>` });
+}
+
 // ---- Glossary ----
 {
   const all = GLOSSARY.flatMap(([, items]) => items);
@@ -1176,6 +1193,7 @@ copyFileSync('static/share.js', join(OUT, 'share.js'));
 copyFileSync('static/game.js', join(OUT, 'game.js'));
 copyFileSync('static/mvp.js', join(OUT, 'mvp.js'));
 copyFileSync('static/boards.js', join(OUT, 'boards.js'));
+copyFileSync('static/charges.js', join(OUT, 'charges.js'));
 copyFileSync('static/live.js', join(OUT, 'live.js'));
 mkdirSync(join(OUT, 'lib'), { recursive: true });
 for (const f of ['parse.mjs', 'pbp.mjs', 'game.mjs']) copyFileSync(join('lib', f), join(OUT, 'lib', f));
