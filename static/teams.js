@@ -122,7 +122,7 @@
         S.tab = k; S.sort = null; tabBar.querySelectorAll('button').forEach((b) => { b.setAttribute('aria-pressed', b === e.currentTarget); b.setAttribute('aria-selected', b === e.currentTarget); }); draw();
       } }, t.label)));
     const body = el('div');
-    root.replaceChildren(el('section', { class: 'card tm-controls' }, tabBar, el('div', { class: 'tm-row' }, modeTabs, el('p', { class: 'muted small' }, 'Colours: red = top 3 in the league, dark = bottom 3. Click a column to sort.'))), el('section', { class: 'card' }, body));
+    root.replaceChildren(el('section', { class: 'card tm-controls' }, tabBar, el('div', { class: 'tm-row' }, modeTabs, el('div', { class: 'rk-legend' }, el('span', { class: 'rk-1' }, '1st'), el('span', { class: 'rk-2' }, '2nd'), el('span', { class: 'rk-3' }, '3rd'), el('span', { class: 'rk-bot' }, 'Bottom 3'), el('span', { class: 'muted small' }, 'Click a column to sort.')))), el('section', { class: 'card' }, body));
 
     function draw() {
       const tab = TABS[S.tab], cols = tab.cols;
@@ -133,6 +133,7 @@
         const high = c[3] === 1 || c[3] === 'rec';
         const vals = rows.map((x) => ({ x, v: sortKey(x, c) })).filter((e) => Number.isFinite(e.v) && e.v !== -Infinity);
         vals.sort((a, b) => (high ? b.v - a.v : a.v - b.v));
+        if (!vals.length || vals[0].v === vals[vals.length - 1].v) continue; // everyone equal: nothing to colour
         vals.forEach((e, i) => { (ranks[c[0]] ||= new Map()).set(e.x, i > 0 && vals[i - 1].v === e.v ? ranks[c[0]].get(vals[i - 1].x) : i + 1); });
       }
       const sortCol = cols.find((c) => c[0] === S.sort);
@@ -145,7 +146,7 @@
         el('td', { class: 'team' }, el('a', { href: x.T.href }, x.T.crest ? el('img', { class: 'crest', src: x.T.crest, alt: '', width: '24', height: '24', loading: 'lazy' }) : el('span', { class: 'code' }, x.T.tv), x.T.name)),
         cols.map((c) => {
           const r = ranks[c[0]]?.get(x);
-          const cls = 'num' + (r ? (r <= 3 ? ' rk-top' : r > N - 3 ? ' rk-bot' : '') : '');
+          const cls = 'num' + (r ? (r <= 3 ? ' rk-' + r : r > N - 3 ? ' rk-bot' : '') : '');
           return el('td', { class: cls, title: r ? `${ord(r)} in the league` : null }, text(x, c));
         })));
       body.replaceChildren(...[el('h2', {}, tab.label), tab.note ? el('p', { class: 'muted' }, tab.note) : null,
