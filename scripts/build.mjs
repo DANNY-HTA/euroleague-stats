@@ -15,7 +15,7 @@ import { buildStints, checkStints, aggregate, rapm, BOX_KEYS, repairPlusMinus } 
 import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
 import { playerRates } from '../lib/advanced.mjs';
-import { playLog, flowStats, connections, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
+import { playLog, flowStats, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
 const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 const args = process.argv.slice(2);
@@ -71,8 +71,23 @@ for (const g of games) {
 const PBP = pbpOk.length ? aggregate(pbpOk) : null;
 
 // ---- 2. Stats ----
+// Offensive fouls (incl. charges) drawn and committed, from the play-by-play
+const OFT = new Map(), OFP = new Map();
+for (const g of games) {
+  const raw = rawPbp.get(g.gameCode); if (!raw) continue;
+  const r = offensiveFouls(playLog(g, raw).plays);
+  for (const [side, code] of [['H', g.home.code], ['A', g.away.code]]) {
+    if (!OFT.has(code)) OFT.set(code, { gp: 0, drawn: 0, committed: 0 });
+    const e = OFT.get(code); e.gp++; e.drawn += r.drawn[side]; e.committed += r.committed[side];
+  }
+  for (const [id, n] of r.drawers) OFP.set(id, (OFP.get(id) || 0) + n);
+}
 const teams = teamTable(games);
 const players = playerTable(games);
+if (OFT.size) {
+  const rows = [...OFT].map(([c, e]) => [teams.find((t) => t.code === c)?.tv || c, e.drawn, e.gp, e.drawn / e.gp, e.committed]).sort((a, b) => b[3] - a[3]);
+  console.log('Offensive fouls drawn (charges etc.), per game: ' + rows.map((r, i) => `${i + 1}. ${r[0]} ${r[3].toFixed(2)} (${r[1]} in ${r[2]})`).join(' | '));
+}
 const qual = qualified(players, teams, cfg);
 const info = seasonInfo(games);
 
@@ -396,7 +411,15 @@ const defenseSection = `<h2 class="sec-title" id="defense">Defense</h2>
 <p class="muted sec-sub">Advanced defensive stats. Steal, block and defensive rebound % estimate how many of the chances available while the player was on the court he converted.</p>
 <div class="row">${rateBoard('Steal %', 'Share of opponent possessions ending in his steal while he plays', R('stlPct'))}${rateBoard('Block %', "Share of opponent 2-point shots he blocked while he plays", R('blkPct'))}</div>
 <div class="row">${rateBoard('Defensive rebound %', 'Share of available defensive rebounds he grabbed while he plays', R('drebPct'))}${rateBoard('Stocks per 40', 'Steals + blocks per 40 minutes', R('stocks40'))}</div>
+${OFT.size ? `<div class="row">${teamOfBoard()}${rateBoard('Offensive fouls drawn', 'Charges and other offensive fouls drawn, season total. The league feed does not separate charges from other offensive fouls.', (p) => OFP.get(p.id) || null, { fmt: (v) => String(Math.round(v)), pool: players })}</div>` : ''}
 ${PBP ? `<div class="row">${rateBoard('On-court defense', 'Points allowed per 100 possessions by his team with him on the court. Lower is better. At least 300 possessions on the court.', (p) => defOf(p.id)?.onDrtg ?? null, { asc: true, pool: players })}${rateBoard('Defensive on/off', 'How many fewer points per 100 possessions his team allows with him on the court than off it. At least 300 possessions on the court.', (p) => defOf(p.id)?.defSwing ?? null, { fmt: signed, pool: players })}</div>` : ''}`;
+function teamOfBoard() {
+  const rows = teams.map((t) => ({ t, e: OFT.get(t.code) })).filter((x) => x.e && x.e.gp).map((x) => ({ ...x, v: x.e.drawn / x.e.gp })).sort((a, b) => b.v - a.v);
+  const top = rows[0]?.v || 1;
+  return `<section class="card board open"><h2>Charges drawn — teams</h2><p class="muted">Offensive fouls drawn per game (charges, illegal screens, push-offs), from the play-by-play. In brackets: offensive fouls the team commits per game.</p><ol>
+${rows.map(({ t, e, v }, i) => `<li><span class="muted num">${i + 1}</span><div><a href="${teamHref(t.code)}">${badge(t.code, t.tv)} ${esc(titleCase(t.name))}</a> <span class="muted small">${e.drawn} in ${e.gp} games · commits ${f1(e.committed / e.gp)}</span><div class="bar"><span style="width:${(100 * v / top).toFixed(1)}%"></span></div></div><strong class="num">${v.toFixed(2)}</strong></li>`).join('')}
+</ol></section>`;
+}
 // Composite boards (PRA, Stocks): each part gets its own colour.
 const PARTS = { pra: [['ppg', 'Points', 'c1'], ['rpg', 'Rebounds', 'c2'], ['apg', 'Assists', 'c3']], stocks: [['spg', 'Steals', 'c1'], ['bpg', 'Blocks', 'c2']] };
 function board(title, sub, key, fmt = f1) {
@@ -676,7 +699,7 @@ ${R.map(({ q, oo, imp }) => `<tr><td><a href="${playerHref(q.id)}">${esc(q.name)
 <section class="r-sec"><h2>1. Team profile</h2>
 <div class="r-grid">
 <div><h3>Ratings</h3>${stat('Offensive rating', f1(t.ortg), 'ortg')}${stat('Defensive rating', f1(t.drtg), 'drtg')}${stat('Net rating', sg(t.net), 'net')}${stat('Pace', f1(t.pace), 'pace')}${stat('Points', f1(t.ppg), 'ppg')}${stat('Points allowed', f1(t.oppg), 'oppg')}</div>
-<div><h3>Four factors — offense</h3>${stat('eFG%', f1(t.efg), 'efg')}${stat('Turnovers / 100', f1(t.tov100), 'tov100')}${stat('Offensive reb %', f1(t.orebPct), 'orebPct')}${stat('Free-throw rate', f1(t.ftr), 'ftr')}<h3>Four factors — defense</h3>${stat('Opp eFG%', f1(t.efgD), 'efgD')}${stat('Forced TO / 100', f1(t.tov100D), 'tov100D')}${stat('Defensive reb %', f1(t.drebPct), 'drebPct')}${stat('Opp FT rate', f1(t.ftrD), 'ftrD')}</div>
+<div><h3>Four factors — offense</h3>${stat('eFG%', f1(t.efg), 'efg')}${stat('Turnovers / 100', f1(t.tov100), 'tov100')}${stat('Offensive reb %', f1(t.orebPct), 'orebPct')}${stat('Free-throw rate', f1(t.ftr), 'ftr')}<h3>Four factors — defense</h3>${stat('Opp eFG%', f1(t.efgD), 'efgD')}${stat('Forced TO / 100', f1(t.tov100D), 'tov100D')}${stat('Defensive reb %', f1(t.drebPct), 'drebPct')}${stat('Opp FT rate', f1(t.ftrD), 'ftrD')}${OFT.get(t.code)?.gp ? (() => { const arr = [...OFT.values()].filter((e) => e.gp).map((e) => e.drawn / e.gp).sort((a, b) => b - a); const v = OFT.get(t.code).drawn / OFT.get(t.code).gp; const r = arr.indexOf(v) + 1; return `<div class="rs"><span>Charges drawn / game</span><b>${v.toFixed(2)}</b><span class="rk ${r <= 3 ? 'rk-top' : r > arr.length - 3 ? 'rk-bot' : ''}">${ord(r)}</span></div>`; })() : ''}</div>
 <div><h3>Shooting</h3>${stat('3-pt rate', f1(t.threeRate) + '%', 'threeRate')}${stat('3P%', f1(t.threePct), 'threePct')}${stat('2P%', f1(t.twoPct), 'twoPct')}${stat('FT%', f1(t.ftPct), 'ftPct')}${stat('True shooting', f1(t.ts), 'ts')}${stat('Assist rate', f1(t.astRate) + '%', 'astRate')}<h3>Opponent shooting</h3>${stat('Opp 3-pt rate', f1(t.threeRateD) + '%', 'threeRateD')}${stat('Opp 3P%', f1(t.threePctD), 'threePctD')}${stat('Opp 2P%', f1(t.twoPctD), 'twoPctD')}</div>
 <div><h3>Splits</h3>${stat('Home', t.home)}${stat('Away', t.away)}${sp.close ? stat('Close games (≤5)', `${sp.close[0]}–${sp.close[1]}`) : ''}${sp.big ? stat('Decided by 10+', `${sp.big[0]}–${sp.big[1]}`) : ''}${sp.ot ? stat('Overtime', `${sp.ot[0]}–${sp.ot[1]}`) : ''}
 ${qa ? `<h3>By quarter (avg)</h3>${qa.map((q) => stat(`Q${q.q}`, `${f1(q.for)}–${f1(q.against)} <small class="${q.margin >= 0 ? 'pos' : 'neg'}">${sg(q.margin)}</small>`)).join('')}` : ''}</div>

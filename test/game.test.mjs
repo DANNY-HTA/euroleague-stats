@@ -36,3 +36,12 @@ test('assist connections link the passer to the scorer', () => {
   assert.equal(c.length, 2);
   assert.deepEqual(c.map((x) => [x.from, x.to, x.pts]), [['B2', 'B1', 3], ['A2', 'A1', 3]]);
 });
+
+test('offensive fouls drawn are credited to the defender', async () => {
+  const { offensiveFouls } = await import('../lib/game.mjs');
+  const plays = [[1, '08:00', 'H', 'A1', 'OF', 0, 0, 120], [1, '08:00', 'H', 'A1', 'TO', 0, 0, 120], [1, '08:00', 'A', 'B3', 'RV', 0, 0, 120], [2, '05:00', 'A', 'B1', 'OF', 0, 0, 900]];
+  const r = offensiveFouls(plays);
+  assert.deepEqual(r.drawn, { H: 1, A: 1 });
+  assert.equal(r.drawers.get('B3'), 1);
+  assert.equal(r.drawers.size, 1);
+});
