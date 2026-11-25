@@ -44,7 +44,7 @@
       if (p[0] !== lastPer) { items.push(el('li', { class: 'pbp-per' }, pname(p[0]))); lastPer = p[0]; }
       const who = p[3] ? (D.names[p[3]] || p[3]) : '';
       const label = D.labels[p[4]] || p[4];
-      if (p[4] === 'BP' || p[4] === 'EP') continue;
+      if (p[4] === 'BP' || p[4] === 'EP' || p[4] === 'EG') continue;
       const sc = !!SCORE[p[4]];
       items.push(el('li', { class: `pbp-row ${p[2] === 'H' ? 'ph' : p[2] === 'A' ? 'pa' : 'pn'}${sc ? ' sc' : ''}` },
         el('span', { class: 'pt' }, p[1]),
