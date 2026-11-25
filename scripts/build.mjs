@@ -360,11 +360,18 @@ const teamChart = scatter(teams.map((t) => ({
   title: `${titleCase(t.name)}: ${t.w}–${t.l}, offensive rating ${f1(t.ortg)}, defensive rating ${f1(t.drtg)}, net ${signed(t.net)}`
 })), { xLabel: 'Points scored per 100 possessions', yLabel: 'Points allowed per 100', invertY: true, big: true, avgX: avg(teams, 'ortg'), avgY: avg(teams, 'drtg'), cornerGood: 'Good at both ends', cornerBad: 'Struggling at both ends' });
 
+// Composite boards (PRA, Stocks): each part gets its own colour.
+const PARTS = { pra: [['ppg', 'Points', 'c1'], ['rpg', 'Rebounds', 'c2'], ['apg', 'Assists', 'c3']], stocks: [['spg', 'Steals', 'c1'], ['bpg', 'Blocks', 'c2']] };
 function board(title, sub, key, fmt = f1) {
   const list = leaders(qual, key, 10);
   const top = list[0]?.[key] || 1;
-  return `<section class="card board"><h2>${title}</h2><p class="muted">${sub}</p><ol>
-${list.map((p, i) => `<li><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span><div class="bar"><span style="width:${(100 * p[key] / top).toFixed(1)}%"></span></div></div><strong class="num">${fmt(p[key])}</strong></li>`).join('')}
+  const parts = PARTS[key];
+  const legend = parts ? `<div class="legend">${parts.map(([, l, c]) => `<span><i class="${c}"></i>${l}</span>`).join('')}</div>` : '';
+  const bar = (p) => parts
+    ? `<div class="bar stack" title="${esc(parts.map(([k, l]) => `${l} ${f1(p[k])}`).join(' · '))}">${parts.map(([k, , c]) => `<span class="${c}" style="width:${(100 * p[k] / top).toFixed(1)}%"></span>`).join('')}</div><div class="parts">${parts.map(([k, l, c]) => `<span class="${c}" title="${l}">${f1(p[k])}</span>`).join('')}</div>`
+    : `<div class="bar"><span style="width:${(100 * p[key] / top).toFixed(1)}%"></span></div>`;
+  return `<section class="card board"><h2>${title}</h2><p class="muted">${sub}</p>${legend}<ol>
+${list.map((p, i) => `<li><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span>${bar(p)}</div><strong class="num">${fmt(p[key])}</strong></li>`).join('')}
 </ol></section>`;
 }
 
