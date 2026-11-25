@@ -23,7 +23,7 @@ const LEAGUE = args.includes('--league') ? args[args.indexOf('--league') + 1] : 
 const baseCfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 const cfg = LEAGUE === 'el' ? { ...baseCfg, LEAGUE: 'el', root: '' } : { ...baseCfg, ...(baseCfg.leagues?.[LEAGUE] || {}), LEAGUE };
 const IS_EL = LEAGUE === 'el';
-const dataDir = args.includes('--data') ? args[args.indexOf('--data') + 1] : IS_EL ? join('data', 'raw', cfg.seasonCode) : join('data', 'raw', 'ISR' + cfg.year);
+const dataDir = args.includes('--data') ? args[args.indexOf('--data') + 1] : IS_EL ? join('data', 'raw', cfg.seasonCode) : join('data', 'raw', cfg.dataDir);
 const sample = args.includes('--sample');
 const OUT = args.includes('--out') ? args[args.indexOf('--out') + 1] : IS_EL ? 'site' : join('site', LEAGUE);
 
@@ -1199,7 +1199,7 @@ if (IS_EL) {
   }
   // Winner League (Israel): same data the /il/ pages are built from.
   let ilNote = '';
-  const ilDir = join('data', 'raw', 'ISR' + (cfg.leagues?.il?.year || '2027'));
+  const ilDir = join('data', 'raw', cfg.leagues?.il?.dataDir || 'ISR2027');
   if (!sample && existsSync(join(ilDir, '_schedule.json'))) {
     try {
       const ilClubs = JSON.parse(readFileSync(join(ilDir, '_clubs.json')));
@@ -1333,11 +1333,11 @@ if (IS_EL) {
     if (r.games) ecNotes.push(`EuroCup: ${r.rows.length} players from ${r.games} games`);
     console.log(`✓ Scouting pool ${season}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
   }
-  for (const year of sample ? [] : (cfg.scoutingIsrael || [])) {
-    const r = poolFromDir(join('data', 'raw', 'ISR' + year), 'IL', today);
+  for (const [key, L] of sample ? [] : Object.entries(cfg.leagues || {})) {
+    const r = poolFromDir(join('data', 'raw', L.dataDir), L.poolCode, today);
     for (const row of r.rows) ecRows.push(row);
-    if (r.games) ecNotes.push(`Winner League (Israel): ${r.rows.length} players from ${r.games} games`);
-    console.log(`✓ Scouting pool Israel ${year}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
+    if (r.games) ecNotes.push(`${L.leagueName}: ${r.rows.length} players from ${r.games} games`);
+    console.log(`✓ Scouting pool ${key}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
   }
   writeFileSync(join(OUT, 'scouting-pool.json'), JSON.stringify({ note: [`EuroLeague: ${el.length} players from ${info.games} games`, ...ecNotes].join(' · ') + '. Official stats, updated nightly.', players: [...el, ...ecRows] }));
   const REPO = process.env.GITHUB_REPOSITORY || IC.repo;

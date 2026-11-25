@@ -26,9 +26,6 @@
   "scoutingSeasons": [
     "U2026"
   ],
-  "scoutingIsrael": [
-    "2027"
-  ],
   "leagueName": "EuroLeague",
   "sourceText": "the official EuroLeague box scores",
   "leagues": {
@@ -39,7 +36,23 @@
       "leagueLogo": "",
       "year": "2027",
       "root": "../",
-      "dropInvalid": true
+      "dropInvalid": true,
+      "shortName": "Winner League",
+      "dataDir": "ISR2027",
+      "poolCode": "IL",
+      "fetch": "node scripts/fetch-ibba.mjs 2027"
+    },
+    "lba": {
+      "seasonLabel": "Lega Basket Serie A 2026–27",
+      "leagueName": "Serie A",
+      "shortName": "Serie A",
+      "sourceText": "the official Lega Basket Serie A (legabasket.it) box scores",
+      "leagueLogo": "",
+      "dataDir": "LBA2026",
+      "root": "../",
+      "dropInvalid": true,
+      "poolCode": "IT",
+      "fetch": "node scripts/fetch-lba.mjs 2026"
     }
   },
   "nameFixes": {
