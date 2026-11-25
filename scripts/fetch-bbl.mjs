@@ -10,7 +10,7 @@ import { convertBbl } from '../lib/bbl.mjs';
 
 const year = process.argv[2] || '2026';
 const OUT = join('data', 'raw', 'BBL' + year);
-const FIRST = Number(process.env.BBL_FIRST || 2006600), LAST = Number(process.env.BBL_LAST || 2006960);
+const FIRST = Number(process.env.BBL_FIRST || 2006400), LAST = Number(process.env.BBL_LAST || 2007050);
 const DELAY_MS = 500, DAY = 86400000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HEAD = { 'User-Agent': 'HTA LAB stats (Hapoel Tel Aviv basketball staff)', Accept: 'text/html' };
