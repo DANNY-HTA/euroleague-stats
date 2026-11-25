@@ -146,7 +146,7 @@ const homeHero = cover({
   title: esc(cfg.seasonLabel),
   lede: lead ? `<strong>${esc(titleCase(lead.name))}</strong> lead the league at ${lead.w}–${lead.l}. ` +
     (topBy('pirpg') ? `<strong>${esc(topBy('pirpg').name)}</strong> tops the PIR chart at ${f1(topBy('pirpg').pirpg)} a game.` : '') : '',
-  strip: [[info.games, 'games played'], [esc(bestO?.tv || ''), `best offence, ${f1(bestO?.ortg)}`], [esc(bestD?.tv || ''), `best defence, ${f1(bestD?.drtg)}`]],
+  strip: [[info.games, 'games played'], [esc(bestO?.tv || ''), `best offense, ${f1(bestO?.ortg)}`], [esc(bestD?.tv || ''), `best defense, ${f1(bestD?.drtg)}`]],
   side: cfg.leagueLogo ? `<div class="side league-badge"><img src="${esc(cfg.leagueLogo)}" alt="EuroLeague" width="190" height="43"></div>` : ''
 });
 writePage('index.html', cfg.seasonLabel, `
@@ -162,7 +162,7 @@ ${leaderTile('apg', 'Playmaking', 'assists per game, 1st in the league')}
 <tbody>${standingsRows}</tbody></table></div>
 <p class="muted small">Ranked by wins, then point difference. Official tiebreakers use head-to-head results.</p>
 </section>
-<section class="card wide"><h2>Who scores, who defends</h2><p class="muted">Right = better offence. Up = better defence. Dashed lines are the league average.</p>
+<section class="card wide"><h2>Who scores, who defends</h2><p class="muted">Right = better offense. Up = better defense. Dashed lines are the league average.</p>
 ${teamChart}<p class="hover-info" aria-live="polite"></p></section>
 </div>
 <div class="row">
@@ -245,9 +245,9 @@ function scoutNotes(t, roster, qa) {
   say(top('ftrD'), `Rarely fouls: opponents get only ${f1(t.ftrD)} free throws per 100 shots (${ord(t.ranks.ftrD)}).`);
   say(top('pace'), `Plays fast: ${f1(t.pace)} possessions per 40 minutes (${ord(t.ranks.pace)}).`);
   say(bottom('pace'), `Plays slow: ${f1(t.pace)} possessions per 40 minutes (${ord(t.ranks.pace)}).`);
-  say(top('drtg'), `Elite defence: allows ${f1(t.drtg)} points per 100 possessions (${ord(t.ranks.drtg)}).`);
-  say(bottom('drtg'), `Weak defence: allows ${f1(t.drtg)} points per 100 possessions (${ord(t.ranks.drtg)}).`);
-  say(top('ortg'), `Elite offence: scores ${f1(t.ortg)} points per 100 possessions (${ord(t.ranks.ortg)}).`);
+  say(top('drtg'), `Elite defense: allows ${f1(t.drtg)} points per 100 possessions (${ord(t.ranks.drtg)}).`);
+  say(bottom('drtg'), `Weak defense: allows ${f1(t.drtg)} points per 100 possessions (${ord(t.ranks.drtg)}).`);
+  say(top('ortg'), `Elite offense: scores ${f1(t.ortg)} points per 100 possessions (${ord(t.ranks.ortg)}).`);
   say(top('threePctD'), `Defends the three-point line well: opponents shoot ${f1(t.threePctD)}% (${ord(t.ranks.threePctD)}).`);
   say(bottom('threePctD'), `Gives up threes: opponents shoot ${f1(t.threePctD)}% from three against them (${ord(t.ranks.threePctD)}).`);
   if (qa) {
@@ -281,7 +281,7 @@ for (const t of teams) {
   const last5 = list.slice(0, 5).map((g) => (g.win ? 'W' : 'L')).join(' ');
   const form = list.slice(0, 5).reverse().map((g) => `<span class="form ${g.win ? 'w' : 'l'}" title="${g.win ? 'Win' : 'Loss'} ${g.isHome ? 'vs' : 'at'} ${esc(g.opp.tv)} ${g.for}–${g.against}">${g.win ? 'W' : 'L'}</span>`).join('');
   const best = Object.entries(t.ranks).filter(([k]) => ['ortg', 'drtg', 'net', 'efg', 'efgD', 'tov100D', 'orebPct', 'drebPct', 'threePct', 'twoPct'].includes(k)).sort((a, b) => a[1] - b[1])[0];
-  const LBL = { ortg: 'offence', drtg: 'defence', net: 'net rating', efg: 'shooting (eFG%)', efgD: 'shooting defence', tov100D: 'forcing turnovers', orebPct: 'offensive rebounding', drebPct: 'defensive rebounding', threePct: '3-point shooting', twoPct: '2-point shooting' };
+  const LBL = { ortg: 'offense', drtg: 'defense', net: 'net rating', efg: 'shooting (eFG%)', efgD: 'shooting defense', tov100D: 'forcing turnovers', orebPct: 'offensive rebounding', drebPct: 'defensive rebounding', threePct: '3-point shooting', twoPct: '2-point shooting' };
   const nameOf = new Map(players.map((q) => [q.id, q.name]));
   const short = (id) => { const n = nameOf.get(id) || id; const parts = n.split(' '); return parts.length > 1 ? parts.slice(1).join(' ') : n; };
   const sg = (v) => (v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1));
@@ -323,8 +323,8 @@ ${R.map(({ q, oo, imp }) => `<tr><td><a href="${playerHref(q.id)}">${esc(q.name)
 <ul class="notes">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></section>
 <section class="card"><h2>Ratings</h2>
 <div class="kpis">
-<div><span class="muted">Offence</span><strong>${f1(t.ortg)}</strong>${rankTag(t.ranks.ortg)}</div>
-<div><span class="muted">Defence</span><strong>${f1(t.drtg)}</strong>${rankTag(t.ranks.drtg)}</div>
+<div><span class="muted">Offense</span><strong>${f1(t.ortg)}</strong>${rankTag(t.ranks.ortg)}</div>
+<div><span class="muted">Defense</span><strong>${f1(t.drtg)}</strong>${rankTag(t.ranks.drtg)}</div>
 <div><span class="muted">Net</span><strong class="${t.net >= 0 ? 'pos' : 'neg'}">${signed(t.net)}</strong>${rankTag(t.ranks.net)}</div>
 <div><span class="muted">Pace</span><strong>${f1(t.pace)}</strong>${rankTag(t.ranks.pace)}</div>
 </div>
@@ -335,10 +335,10 @@ ${qa ? `<h3>Scoring by quarter <span class="muted">(per game)</span></h3>
 <tr><th scope="row">Margin</th>${qa.map((x) => `<td class="num ${x.margin >= 0 ? 'pos' : 'neg'}">${signed(x.margin)}</td>`).join('')}</tr>
 </tbody></table></div>` : ''}
 </section></div>
-<section class="card"><h2>Four factors and shooting</h2><p class="muted">Ranks: 1st = best in the league. On defence, "best" means the lowest value for opponents.</p>
-<div class="scroll"><table class="factors"><thead><tr><th scope="col"></th><th scope="col" class="num">Offence</th><th scope="col" class="num">League avg</th><th scope="col" class="num">Defence (opponents)</th><th scope="col" class="num">League avg</th></tr></thead><tbody>
+<section class="card"><h2>Four factors and shooting</h2><p class="muted">Ranks: 1st = best in the league. On defense, "best" means the lowest value for opponents.</p>
+<div class="scroll"><table class="factors"><thead><tr><th scope="col"></th><th scope="col" class="num">Offense</th><th scope="col" class="num">League avg</th><th scope="col" class="num">Defense (opponents)</th><th scope="col" class="num">League avg</th></tr></thead><tbody>
 ${factorRow('Effective FG%', 'efg', 'efgD')}
-${factorRow('Turnovers per 100', 'tov100', 'tov100D', '(defence: forced)')}
+${factorRow('Turnovers per 100', 'tov100', 'tov100D', '(defense: forced)')}
 ${factorRow('Offensive rebound %', 'orebPct', null)}
 ${factorRow('Defensive rebound %', 'drebPct', null)}
 ${factorRow('Free throws per 100 shots', 'ftr', 'ftrD')}
@@ -441,7 +441,7 @@ for (const p of players) {
 
   const chip = (k) => !isQual ? '<span class="chip">Not enough minutes yet</span>'
     : `<span class="chip ${r[k] <= 3 ? 'hot' : r[k] <= 20 ? 'warm' : ''}">${ord(r[k])} in the league</span>`;
-  const fourth = [['rpg', 'Rebounding', 'rebounds per game'], ['apg', 'Playmaking', 'assists per game'], ['stocks', 'Defence', 'steals + blocks per game']]
+  const fourth = [['rpg', 'Rebounding', 'rebounds per game'], ['apg', 'Playmaking', 'assists per game'], ['stocks', 'Defense', 'steals + blocks per game']]
     .map((x) => ({ x, rank: isQual ? (qualRank[p.id]?.[x[0]] ?? [...qual].sort((a, b) => b[x[0]] - a[x[0]]).findIndex((q) => q.id === p.id) + 1) : 0 }))
     .sort((a, b) => a.rank - b.rank)[0].x;
   if (isQual && r[fourth[0]] == null) r[fourth[0]] = [...qual].sort((a, b) => b[fourth[0]] - a[fourth[0]]).findIndex((q) => q.id === p.id) + 1;
