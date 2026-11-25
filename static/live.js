@@ -43,7 +43,7 @@ async function loadList() {
 }
 function listView() {
   const games = [...headers].sort((a, b) => (status(b[1]) === 'live') - (status(a[1]) === 'live') || a[0] - b[0]);
-  if (!games.length) return el('section', { class: 'card' }, el('h2', {}, 'No games right now'), el('p', { class: 'muted' }, 'The next round has not been published by the league yet. Come back on game day: games appear here about a day before tip-off and go live automatically.'));
+  if (!games.length) return el('section', { class: 'card' }, el('h2', {}, 'No games right now'), el('p', { class: 'muted' }, 'The next games are not in the league\'s live feed yet. They appear here as soon as the league adds them, and update automatically once they tip off.'));
   return el('section', { class: 'card' }, el('h2', {}, 'Games'), el('p', { class: 'muted' }, 'Live games update every 15 seconds. Click a game to follow it.'),
     el('div', { class: 'gcards' }, games.map(([code, h]) => {
       const st = status(h), hw = Number(h.ScoreA) > Number(h.ScoreB);
