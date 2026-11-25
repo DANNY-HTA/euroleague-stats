@@ -501,3 +501,11 @@ ul.oc-list li { display: flex; justify-content: space-between; gap: 10px; paddin
 .board:not(.open) li.more { display: none; }
 .board.open ol { max-height: 640px; overflow-y: auto; padding-right: 6px; }
 .board-more { margin-top: 14px; }
+.board-filter { margin-bottom: 22px; border-top: 5px solid var(--red); }
+.board-filter .filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 6px 0 8px; }
+.board-filter label { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.board-filter select, .board-filter input[type=search] { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-weight: 500; background: #fff; }
+.board-filter input[type=search] { border-radius: 999px; min-width: 200px; }
+.lg-rank { font-size: 11px; font-weight: 700; color: var(--red); background: var(--red-soft); border-radius: 999px; padding: 2px 7px; margin-left: 4px; }
+.board li.empty { display: block; }
+.board-filter { position: sticky; top: 64px; z-index: 15; box-shadow: 0 8px 24px rgba(20,22,27,.12); } .board-filter > p.muted { margin: 0 0 4px; font-size: 13px; } @media (max-width: 700px) { .board-filter { position: static; } }

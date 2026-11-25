@@ -362,6 +362,9 @@ const teamChart = scatter(teams.map((t) => ({
 })), { xLabel: 'Points scored per 100 possessions', yLabel: 'Points allowed per 100', invertY: true, big: true, avgX: avg(teams, 'ortg'), avgY: avg(teams, 'drtg'), cornerGood: 'Good at both ends', cornerBad: 'Struggling at both ends' });
 
 const moreBtn = (n) => (n > 10 ? `<button type="button" class="btn-ghost board-more" data-n="${n}" aria-expanded="false">Show all ${n} players</button>` : '');
+// Every home leaderboard is registered here so the browser can re-rank it with filters.
+const BOARD_REG = [];
+const regBoard = (def) => { const id = 'b' + BOARD_REG.length; BOARD_REG.push({ id, ...def }); return id; };
 // Per-40 and defensive boards
 const RATES = playerRates(games);
 const defOf = (id) => {
@@ -372,12 +375,13 @@ const defOf = (id) => {
   return { onDrtg: on, defSwing: off.poss >= 50 ? 100 * off.pa / off.poss - on : null };
 };
 function rateBoard(title, sub, val, { fmt = f1, asc = false, pool = qual } = {}) {
+  const bid = regBoard({ val, fmt: fmt === signed ? 's' : '1', asc, all: pool !== qual });
   const list = pool.map((p) => ({ p, v: val(p) })).filter((x) => x.v != null && Number.isFinite(x.v))
     .sort((a, b) => (asc ? a.v - b.v : b.v - a.v) || a.p.name.localeCompare(b.p.name));
   if (!list.length) return '';
   const vals = list.map((x) => x.v), hi = Math.max(...vals), lo = Math.min(...vals);
   const width = (v) => (asc ? (hi === lo ? 100 : 5 + 95 * (hi - v) / (hi - lo)) : 100 * v / (hi || 1));
-  return `<section class="card board"><h2>${title}</h2><p class="muted">${sub}</p><ol>
+  return `<section class="card board" data-board="${bid}"><h2>${title}</h2><p class="muted">${sub}</p><ol>
 ${list.map(({ p, v }, i) => `<li${i >= 10 ? ' class="more"' : ''}><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span><div class="bar"><span style="width:${Math.max(3, width(v)).toFixed(1)}%"></span></div></div><strong class="num">${fmt(v)}</strong></li>`).join('')}
 </ol>${moreBtn(list.length)}</section>`;
 }
@@ -394,6 +398,7 @@ ${PBP ? `<div class="row">${rateBoard('On-court defense', 'Points allowed per 10
 // Composite boards (PRA, Stocks): each part gets its own colour.
 const PARTS = { pra: [['ppg', 'Points', 'c1'], ['rpg', 'Rebounds', 'c2'], ['apg', 'Assists', 'c3']], stocks: [['spg', 'Steals', 'c1'], ['bpg', 'Blocks', 'c2']] };
 function board(title, sub, key, fmt = f1) {
+  const bid = regBoard({ val: (p) => p[key], fmt: '1', asc: false, all: false, parts: PARTS[key]?.map(([k, l, c]) => [k, l, c]) });
   const list = leaders(qual, key, Infinity);
   const top = list[0]?.[key] || 1;
   const parts = PARTS[key];
@@ -401,7 +406,7 @@ function board(title, sub, key, fmt = f1) {
   const bar = (p) => parts
     ? `<div class="bar stack" title="${esc(parts.map(([k, l]) => `${l} ${f1(p[k])}`).join(' · '))}">${parts.map(([k, , c]) => `<span class="${c}" style="width:${(100 * p[k] / top).toFixed(1)}%"></span>`).join('')}</div><div class="parts">${parts.map(([k, l, c]) => `<span class="${c}" title="${l}">${f1(p[k])}</span>`).join('')}</div>`
     : `<div class="bar"><span style="width:${(100 * p[key] / top).toFixed(1)}%"></span></div>`;
-  return `<section class="card board"><h2>${title}</h2><p class="muted">${sub}</p>${legend}<ol>
+  return `<section class="card board" data-board="${bid}"><h2>${title}</h2><p class="muted">${sub}</p>${legend}<ol>
 ${list.map((p, i) => `<li${i >= 10 ? ' class="more"' : ''}><span class="muted num">${i + 1}</span><div><a href="${playerHref(p.id)}">${esc(p.name)}</a> <span class="muted">${esc(p.tv)}</span>${bar(p)}</div><strong class="num">${fmt(p[key])}</strong></li>`).join('')}
 </ol>${moreBtn(list.length)}</section>`;
 }
@@ -443,6 +448,7 @@ ${roundMvpSection}
 <section class="card wide"><h2>Who scores, who defends</h2><p class="muted">Right = better offense. Up = better defense. Dashed lines are the league average.</p>
 ${teamChart}<p class="hover-info" aria-live="polite"></p></section>
 </div>
+<div id="board-filter" class="card board-filter"></div>
 <div class="row">
 ${board('Points', 'Per game', 'ppg')}
 ${board('PIR', 'Performance Index Rating per game', 'pirpg')}
@@ -453,7 +459,8 @@ ${board('Stocks', 'Steals + blocks per game', 'stocks')}
 </div>
 <p class="muted small">${qualNote}</p>
 ${per40Section}
-${defenseSection}`, 'index.html', homeHero, { scripts: `<script src="mvp.js?v=${assetVersion()}" defer></script>` });
+${defenseSection}
+<script type="application/json" id="boards-data">${boardsJson()}</script>`, 'index.html', homeHero, { scripts: `<script src="mvp.js?v=${assetVersion()}" defer></script><script src="boards.js?v=${assetVersion()}" defer></script>` });
 
 
 // Players page
@@ -1030,6 +1037,7 @@ copyFileSync('static/teambox.js', join(OUT, 'teambox.js'));
 copyFileSync('static/share.js', join(OUT, 'share.js'));
 copyFileSync('static/game.js', join(OUT, 'game.js'));
 copyFileSync('static/mvp.js', join(OUT, 'mvp.js'));
+copyFileSync('static/boards.js', join(OUT, 'boards.js'));
 copyFileSync('static/live.js', join(OUT, 'live.js'));
 mkdirSync(join(OUT, 'lib'), { recursive: true });
 for (const f of ['parse.mjs', 'pbp.mjs', 'game.mjs']) copyFileSync(join('lib', f), join(OUT, 'lib', f));
@@ -1039,6 +1047,18 @@ writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
 }))));
 writeFileSync(join(OUT, '.nojekyll'), '');
 console.log(`✓ Site written to ${OUT}/ (${teams.length} teams, ${players.length} players)`);
+
+function boardsJson() {
+  const isQ = new Set(qual.map((q) => q.id));
+  const PK = [...new Set(BOARD_REG.flatMap((b) => (b.parts || []).map(([k]) => k)))];
+  const rnd = (v) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 100) / 100);
+  return JSON.stringify({
+    boards: BOARD_REG.map((b) => ({ id: b.id, fmt: b.fmt, asc: b.asc, all: b.all, parts: b.parts ? b.parts.map(([k, l, c]) => [PK.indexOf(k), l, c]) : null })),
+    teams: teams.slice().sort((a, b) => a.name.localeCompare(b.name)).map((t) => [t.code, titleCase(t.name)]),
+    players: players.map((p) => [p.name, p.tv, p.team, playerHref(p.id), findPerson(peopleIndex, p)?.position || '', p.gp, +p.mpg.toFixed(1), isQ.has(p.id) ? 1 : 0,
+      BOARD_REG.map((b) => rnd(b.val(p))), PK.map((k) => rnd(p[k]))])
+  }).replace(/</g, '\\u003c');
+}
 
 function writePage(file, title, body, active, hero, extra = {}) {
   mkdirSync(OUT, { recursive: true });
