@@ -44,7 +44,7 @@ jobs:
       - name: Download EuroCup box scores (scouting pool, optional)
         continue-on-error: true
         run: for s in $(node -p "(require('./config.json').scoutingSeasons||[]).join(' ')"); do node scripts/fetch.mjs $s --no-pbp || true; done
-      - name: Download Israeli league box scores (scouting pool, optional)
+      - name: Download the Israeli league (box scores, play-by-play, rosters)
         continue-on-error: true
         run: for y in $(node -p "(require('./config.json').scoutingIsrael||[]).join(' ')"); do node scripts/fetch-ibba.mjs $y || true; done
       - name: Remember downloaded games for the next run
@@ -55,6 +55,9 @@ jobs:
           key: euroleague-data-${{ github.run_id }}
       - name: Check accuracy and build the site
         run: npm run build
+      - name: Build the Winner League (Israel) pages
+        continue-on-error: true
+        run: node scripts/build.mjs --league il
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

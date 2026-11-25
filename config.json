@@ -28,5 +28,18 @@
   ],
   "scoutingIsrael": [
     "2027"
-  ]
+  ],
+  "leagueName": "EuroLeague",
+  "sourceText": "the official EuroLeague box scores",
+  "leagues": {
+    "il": {
+      "seasonLabel": "Winner League 2026–27",
+      "leagueName": "Winner League",
+      "sourceText": "the official Israeli Basketball Super League (basket.co.il) box scores",
+      "leagueLogo": "",
+      "year": "2027",
+      "root": "../",
+      "dropInvalid": true
+    }
+  }
 }

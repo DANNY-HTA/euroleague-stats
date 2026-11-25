@@ -7,27 +7,34 @@
 import { readFileSync, readdirSync, mkdirSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseGame } from '../lib/parse.mjs';
-import { validateSeason } from '../lib/validate.mjs';
+import { validateSeason, validateGame } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, leaders, seasonInfo, teamGames, quarterAverages, playerGameLogs } from '../lib/stats.mjs';
 import { esc, f1, signed, scatter, page, fmtDate, assetVersion } from '../lib/render.mjs';
 import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
 import { buildStints, checkStints, aggregate, rapm, BOX_KEYS, repairPlusMinus } from '../lib/pbp.mjs';
 import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
-import { poolRows, poolFromDir, poolFromIbba } from '../lib/pool.mjs';
+import { poolRows, poolFromDir } from '../lib/pool.mjs';
 import { playerRates } from '../lib/advanced.mjs';
 import { playLog, flowStats, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
-const cfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 const args = process.argv.slice(2);
-const dataDir = args.includes('--data') ? args[args.indexOf('--data') + 1] : join('data', 'raw', cfg.seasonCode);
+const LEAGUE = args.includes('--league') ? args[args.indexOf('--league') + 1] : 'el';
+const baseCfg = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
+const cfg = LEAGUE === 'el' ? { ...baseCfg, LEAGUE: 'el', root: '' } : { ...baseCfg, ...(baseCfg.leagues?.[LEAGUE] || {}), LEAGUE };
+const IS_EL = LEAGUE === 'el';
+const dataDir = args.includes('--data') ? args[args.indexOf('--data') + 1] : IS_EL ? join('data', 'raw', cfg.seasonCode) : join('data', 'raw', 'ISR' + cfg.year);
 const sample = args.includes('--sample');
-const OUT = 'site';
+const OUT = args.includes('--out') ? args[args.indexOf('--out') + 1] : IS_EL ? 'site' : join('site', LEAGUE);
 
 if (!existsSync(dataDir)) { console.error(`No data in ${dataDir}. Run "npm run fetch" first.`); process.exit(1); }
 const files = readdirSync(dataDir).filter((f) => f.endsWith('.json') && !f.startsWith('_')).sort();
 const rawPbp = new Map();
-const games = files.map((f) => { const raw = JSON.parse(readFileSync(join(dataDir, f))); const g = parseGame(raw); if (raw.pbp) rawPbp.set(g.gameCode, raw.pbp); return g; });
+let games = files.map((f) => { const raw = JSON.parse(readFileSync(join(dataDir, f))); const g = parseGame(raw); if (raw.pbp) rawPbp.set(g.gameCode, raw.pbp); return g; });
+if (cfg.dropInvalid) {
+  // Secondary leagues: a game that fails the checks is left out (and reported) instead of stopping the build.
+  games = games.filter((g) => { const e = validateGame(g); if (e.length) console.warn(`Left out game ${g.gameCode}: ${e[0]}`); return !e.length; });
+}
 
 // Official club crests (optional). Only https image links are used.
 const crests = new Map();
@@ -352,7 +359,7 @@ const currentRound = upcoming.length ? upcoming[0].r : roundsList[roundsList.len
 const timeTag = (x) => `<time data-utc="${esc(x.utc || '')}" datetime="${esc(x.utc || '')}">${esc(x.utc ? x.utc.slice(0, 16).replace('T', ' ') + ' UTC' : 'Date to be confirmed')}</time>`;
 const upcomingCard = (x) => {
   const line = (s) => `<span class="gl">${crests.has(s.code) ? `<img src="${esc(crests.get(s.code))}" alt="" width="22" height="22">` : '<i></i>'}<span class="gn">${esc(titleCase(s.name || s.code))}</span><b></b></span>`;
-  return `<a class="gcard upcoming" href="live.html?game=${Number(x.c)}" data-r="${x.r || 0}" data-t="${esc(x.h.code)} ${esc(x.a.code)}"><span class="gd">Rd ${x.r} · ${timeTag(x)}</span>${line(x.h)}${line(x.a)}<span class="gm">${x.venue ? esc(titleCase(x.venue)) : ''}${x.ok ? '' : ' · time to be confirmed'}</span></a>`;
+  return `<a class="gcard upcoming" href="${IS_EL ? `live.html?game=${Number(x.c)}` : `#games`}" data-r="${x.r || 0}" data-t="${esc(x.h.code)} ${esc(x.a.code)}"><span class="gd">Rd ${x.r} · ${timeTag(x)}</span>${line(x.h)}${line(x.a)}<span class="gm">${x.venue ? esc(titleCase(x.venue)) : ''}${x.ok ? '' : ' · time to be confirmed'}</span></a>`;
 };
 
 const gameCard = (g) => {
@@ -360,7 +367,7 @@ const gameCard = (g) => {
   const line = (s, w) => `<span class="gl ${w ? 'w' : ''}">${crests.has(s.code) ? `<img src="${esc(crests.get(s.code))}" alt="" width="22" height="22">` : '<i></i>'}<span class="gn">${esc(titleCase(s.name))}</span><b>${s.score}</b></span>`;
   return `<a class="gcard" href="${gameHref(g.gameCode)}" data-r="${g.round || 0}" data-t="${esc(g.home.code)} ${esc(g.away.code)}"><span class="gd">${g.round ? `Rd ${g.round} · ` : ''}${esc(fmtDate(g.date))}</span>${line(g.home, hw)}${line(g.away, !hw)}${m ? `<span class="gm">MVP ${esc(m.p.name)} · ${m.p.pir} PIR</span>` : ''}</a>`;
 };
-const gamesSection = `<section class="card" id="games"><h2>All games</h2><p class="muted">Every game of the season, played and still to come (times in your time zone). Click a played game for the full picture; click an upcoming game to follow it live.</p>
+const gamesSection = `<section class="card" id="games"><h2>All games</h2><p class="muted">Every game of the season, played and still to come (times in your time zone). Click a played game for the full picture${IS_EL ? '; click an upcoming game to follow it live' : ''}.</p>
 <div class="filters" id="games-filter"><label>Team <select data-g="team"><option value="">All teams</option>${teams.slice().sort((a, b) => a.name.localeCompare(b.name)).map((t) => `<option value="${esc(t.code)}">${esc(titleCase(t.name))}</option>`).join('')}</select></label>
 <label>Round <select data-g="round"><option value="">All rounds</option>${roundsList.map((r) => `<option value="${r}"${r === currentRound ? ' selected' : ''}>Round ${r}</option>`).join('')}</select></label>
 <span class="muted small" data-g="count"></span></div>
@@ -454,7 +461,7 @@ const homeHero = cover({
   lede: lead ? `<strong>${esc(titleCase(lead.name))}</strong> lead the league at ${lead.w}–${lead.l}. ` +
     (topBy('pirpg') ? `<strong>${esc(topBy('pirpg').name)}</strong> tops the PIR chart at ${f1(topBy('pirpg').pirpg)} a game.` : '') : '',
   strip: [[info.games, 'games played'], [esc(bestO?.tv || ''), `best offense, ${f1(bestO?.ortg)}`], [esc(bestD?.tv || ''), `best defense, ${f1(bestD?.drtg)}`]],
-  side: cfg.leagueLogo ? `<div class="side league-badge"><img src="${esc(cfg.leagueLogo)}" alt="EuroLeague" width="190" height="43"></div>` : ''
+  side: cfg.leagueLogo ? `<div class="side league-badge"><img src="${esc(cfg.leagueLogo)}" alt="${esc(cfg.leagueName)}" width="190" height="43"></div>` : ''
 });
 writePage('index.html', cfg.seasonLabel, `
 <div class="tiles">
@@ -562,7 +569,7 @@ const tcols = [['name', 'Team', 's'], ['gp', 'GP'], ['w', 'W'], ['l', 'L'], ['pp
 {
   const splits = teamSplits(games, teams);
   writeFileSync(join(OUT, 'teams.json'), JSON.stringify({
-    note: `${info.games} games, ${roundLine.toLowerCase()}. Calculated from the official EuroLeague box scores.`,
+    note: `${info.games} games, ${roundLine.toLowerCase()}. Calculated from ${cfg.sourceText}.`,
     teams: teams.map((t) => ({ code: t.code, tv: t.tv, name: titleCase(t.name), crest: crests.get(t.code) || null, href: teamHref(t.code), gp: t.gp, w: t.w, l: t.l, raw: t.raw, split: splits[t.code] }))
   }));
   // A simple table stays in the page for browsers without JavaScript.
@@ -771,7 +778,7 @@ ${list.map((g) => { const gm = gameOf(g.gameCode), me = g.isHome ? gm.home : gm.
 </tbody></table>
 ${upcomingT.length ? `<h3>Next games</h3><table class="rtab"><tbody>${upcomingT.map((x) => { const home = x.h.code === t.code, o = home ? x.a : x.h; return `<tr><td>${timeTag(x)}</td><td>Rd ${x.r}</td><td>${home ? 'vs' : 'at'} ${esc(titleCase(o.name || o.code))}</td><td class="muted">${esc(titleCase(x.venue || ''))}</td></tr>`; }).join('')}</tbody></table>` : ''}
 </section>
-<footer class="r-foot">HTA LAB · Official EuroLeague box scores and play-by-play, checked before publishing · hta-lab.github.io</footer>
+<footer class="r-foot">HTA LAB · Official box scores and play-by-play (${esc(cfg.leagueName)}), checked before publishing · hta-lab.github.io</footer>
 </article>`;
     writePage(`team-${safe(t.code)}-report.html`, `${titleCase(t.name)} — team report`, body, 'teams.html', '', { scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` });
   }
@@ -816,7 +823,7 @@ ${roster.map((p) => `<tr><td><a href="${playerHref(p.id)}">${esc(p.name)}</a></t
 ${onoffTeamCard}${PBP ? `<section class="lu-embed"><h2 class="sec-title">All lineups</h2><p class="muted">Every five-man unit and 2-, 3- and 4-man combination this team has used. Filter by home/away, wins/losses and dates.</p><div id="lineups-app" data-team="${esc(t.code)}" data-lock="1" data-min-poss="0"><p class="muted">Loading lineups…</p></div></section>` : ""}
 ${(() => { const up = upcoming.filter((x) => x.h.code === t.code || x.a.code === t.code); return up.length ? `<section class="card"><h2>Upcoming games</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Venue</th><th scope="col"></th></tr></thead><tbody>
-${up.map((x) => { const home = x.h.code === t.code, o = home ? x.a : x.h; return `<tr><td>${timeTag(x)}</td><td class="num">${x.r}</td><td class="muted">${home ? 'vs' : 'at'}</td><td><a href="${teamHref(o.code)}">${badge(o.code, o.tv)} ${esc(titleCase(o.name || o.code))}</a></td><td class="muted">${esc(titleCase(x.venue || ''))}</td><td><a href="live.html?game=${Number(x.c)}">Follow live ›</a></td></tr>`; }).join('')}
+${up.map((x) => { const home = x.h.code === t.code, o = home ? x.a : x.h; return `<tr><td>${timeTag(x)}</td><td class="num">${x.r}</td><td class="muted">${home ? 'vs' : 'at'}</td><td><a href="${teamHref(o.code)}">${badge(o.code, o.tv)} ${esc(titleCase(o.name || o.code))}</a></td><td class="muted">${esc(titleCase(x.venue || ''))}</td><td>${IS_EL ? `<a href="live.html?game=${Number(x.c)}">Follow live ›</a>` : ''}</td></tr>`; }).join('')}
 </tbody></table></div></section>` : ''; })()}
 <section class="card"><h2>Results</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
@@ -990,7 +997,7 @@ ${stackList.map((q) => `<tr${q.id === p.id ? ' class="me"' : ''}><td><a href="${
     tiles: tileData.map(([label, value, sub, rk]) => ({ label, value, sub, rank: rk ? `${ord(rk)} in the league` : '', hot: rk != null && rk <= 3 })),
     games: log.slice(0, 8).reverse().map((g) => ({ pts: g.line.pts, opp: g.opp.tv, win: g.win })),
     gbgNote: `Points in his last ${Math.min(8, log.length)} games. Red = win.`,
-    footer: 'Calculated from the official EuroLeague box scores and play-by-play.',
+    footer: `Calculated from ${cfg.sourceText} and play-by-play.`,
     file: `${p.name.replace(/[^A-Za-z0-9]+/g, '-')}-HTA-LAB.png`
   }).replace(/</g, '\\u003c');
   writePage(`player-${safe(p.id)}.html`, p.name, `
@@ -1000,7 +1007,7 @@ ${tiles}
 ${stack}
 <div class="row">
 <section class="card"><h2>Profile</h2><dl class="bio">${bio.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
-${person ? '' : '<p class="muted small">Personal details are not available for this player in the EuroLeague roster feed.</p>'}</section>
+${person ? '' : '<p class="muted small">Personal details are not available for this player in the official roster feed.</p>'}</section>
 <section class="card"><h2>League ranks</h2>${ranks ? `<p class="muted">Among ${qual.length} players with enough minutes.</p><div class="kpis">${RANK_KEYS.map(([k, l]) => `<div><span class="muted">${l}</span><strong>${k === 'ts' || k === 'usg' ? f1(p[k]) + '%' : f1(p[k])}</strong>${rankTag(ranks[k], qual.length)}</div>`).join('')}</div>` : `<p class="muted">${esc(qualNote)} This player doesn't qualify yet.</p>`}</section>
 </div>
 <section class="card"><h2>Season stats</h2>
@@ -1031,7 +1038,7 @@ writePage('method.html', 'How we calculate', `
 
 <section class="card prose">
 <h2>Where the data comes from</h2>
-<p>Each night the site downloads the box score of every finished game from the EuroLeague's live data feed, the same feed behind euroleaguebasketball.net. All games are downloaded again every night, so any correction the league makes after a game is picked up.</p>
+<p>${IS_EL ? "Each night the site downloads the box score of every finished game from the EuroLeague's live data feed, the same feed behind euroleaguebasketball.net." : 'Each night the site downloads the box score and play-by-play of every finished game from the league\'s official LiveStats files on basket.co.il, the same data behind the league\'s own game pages.'} All games are downloaded again every night, so any correction the league makes after a game is picked up.</p>
 <h2>Accuracy checks</h2>
 <p>Before the site is updated, every game must pass all of these checks. If one fails, the site keeps showing the previous day's numbers.</p>
 <ul>
@@ -1052,7 +1059,7 @@ writePage('method.html', 'How we calculate', `
 <dt>True shooting % (TS%)</dt><dd>Points ÷ (2 × (FGA + 0.44 × FTA)). Counts threes and free throws fairly.</dd>
 <dt>Effective FG% (eFG%)</dt><dd>(FGM + 0.5 × 3PM) ÷ FGA.</dd>
 <dt>Usage rate (USG%)</dt><dd>Share of the team's plays a player finished while on the court: 100 × (FGA + 0.44 × FTA + TOV) × (team minutes ÷ 5) ÷ (player minutes × (team FGA + 0.44 × team FTA + team TOV)).</dd>
-<dt>PIR</dt><dd>The EuroLeague's official Performance Index Rating, taken directly from the box score.</dd>
+<dt>PIR</dt><dd>The official Performance Index Rating (VAL), taken directly from the box score.</dd>
 <dt>PRA</dt><dd>Points + rebounds + assists per game.</dd>
 <dt>Stocks</dt><dd>Steals + blocks per game.</dd>
 </dl>
@@ -1065,7 +1072,7 @@ writePage('method.html', 'How we calculate', `
 </dl>
 <h2>Leaderboards</h2>
 <p>${qualNote}</p>
-</section>`, 'method.html', cover({ kicker: 'Methodology', title: 'How we calculate', lede: 'Every number on this site comes from the official EuroLeague box scores. Nothing is typed in by hand, and every game is checked before it is published.' }));
+</section>`, 'method.html', cover({ kicker: 'Methodology', title: 'How we calculate', lede: `Every number on this site comes from ${cfg.sourceText}. Nothing is typed in by hand, and every game is checked before it is published.` }));
 
 
 // ---- Lineups tool data: one row per team, game and lineup (stints merged) ----
@@ -1100,7 +1107,7 @@ writePage('lineups.html', 'Lineups', `<div id="lineups-app"><p class="muted">Loa
   { scripts: `<script src="lineups.js?v=${assetVersion()}" defer></script>` });
 
 // ---- Live games (read from the official live feed in the browser) ----
-writePage('live.html', 'Live', `<div id="live-app"><p class="muted">Connecting to the EuroLeague live feed…</p></div>
+if (IS_EL) writePage('live.html', 'Live', `<div id="live-app"><p class="muted">Connecting to the EuroLeague live feed…</p></div>
 <script type="application/json" id="live-config">${JSON.stringify({
   season: cfg.seasonCode,
   firstCode: Math.max(0, ...games.map((g) => Number(g.gameCode) || 0)) + 1,
@@ -1173,7 +1180,7 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
 }
 
 // ---- HAPOEL – INTERNAL (password-protected, encrypted in the browser) ----
-{
+if (IS_EL) {
   const IC = cfg.internal || {};
   const encFiles = existsSync('internal') ? readdirSync('internal').filter((f) => /^[a-z0-9][a-z0-9-]{0,80}\.enc$/.test(f)).sort() : [];
   mkdirSync(join(OUT, 'internal'), { recursive: true });
@@ -1213,7 +1220,7 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
 }
 
 // ---- Scouting: staff database (encrypted in the repository) + official stats pool ----
-{
+if (IS_EL) {
   const IC = cfg.internal || {};
   const today = new Date().toISOString().slice(0, 10);
   const el = poolRows(players, { src: 'EL', teamName: (c) => titleCase(teams.find((t) => t.code === c)?.name || c), people: peopleIndex, crests, today });
@@ -1225,7 +1232,7 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
     console.log(`✓ Scouting pool ${season}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
   }
   for (const year of sample ? [] : (cfg.scoutingIsrael || [])) {
-    const r = poolFromIbba(join('data', 'raw', 'ISR' + year), today);
+    const r = poolFromDir(join('data', 'raw', 'ISR' + year), 'IL', today);
     for (const row of r.rows) ecRows.push(row);
     if (r.games) ecNotes.push(`Winner League (Israel): ${r.rows.length} players from ${r.games} games`);
     console.log(`✓ Scouting pool Israel ${year}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
