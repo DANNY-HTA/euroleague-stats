@@ -509,3 +509,46 @@ ul.oc-list li { display: flex; justify-content: space-between; gap: 10px; paddin
 .lg-rank { font-size: 11px; font-weight: 700; color: var(--red); background: var(--red-soft); border-radius: 999px; padding: 2px 7px; margin-left: 4px; }
 .board li.empty { display: block; }
 .board-filter { position: sticky; top: 64px; z-index: 15; box-shadow: 0 8px 24px rgba(20,22,27,.12); } .board-filter > p.muted { margin: 0 0 4px; font-size: 13px; } @media (max-width: 700px) { .board-filter { position: static; } }
+/* ---- Team report (screen + print) ---- */
+.report-bar { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; margin-bottom: 16px; }
+.report { background: #fff; border-radius: var(--r); padding: 28px 32px; box-shadow: 0 1px 2px rgba(20,22,27,.05), 0 8px 24px rgba(20,22,27,.05); font-size: 13px; }
+.r-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; border-bottom: 4px solid var(--red); padding-bottom: 14px; margin-bottom: 8px; }
+.r-id { display: flex; gap: 16px; align-items: center; }
+.r-id img { object-fit: contain; }
+.r-kicker { font: 800 12px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--red); }
+.r-head h1 { margin: 4px 0; font: 800 40px/1 var(--display); text-transform: uppercase; }
+.r-meta { color: var(--ink-2); font-weight: 600; }
+.r-date { text-align: right; color: var(--muted); font-size: 12px; }
+.r-sec { margin-top: 18px; }
+.r-sec h2 { font: 800 22px/1 var(--display); text-transform: uppercase; background: var(--ink); color: #fff; padding: 8px 12px; border-radius: 6px; margin: 0 0 10px; }
+.r-sec h3 { font: 800 14px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--red); margin: 12px 0 6px; }
+.r-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 22px; }
+.rs { display: grid; grid-template-columns: 1fr auto 42px; gap: 6px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.rs span { color: var(--ink-2); } .rs b { font-variant-numeric: tabular-nums; }
+.rk { font-size: 11px; font-weight: 700; color: var(--muted); text-align: right; }
+.rk.rk-top { color: #0f7a3a; } .rk.rk-bot { color: var(--red); }
+.r-notes { margin: 4px 0 0; padding-left: 18px; columns: 2; column-gap: 28px; } .r-notes li { margin-bottom: 4px; break-inside: avoid; }
+table.rtab { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.rtab th { text-align: left; font: 700 11px/1.2 var(--body); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border-bottom: 2px solid var(--ink); padding: 5px 6px; }
+table.rtab td { padding: 5px 6px; border-bottom: 1px solid var(--line); }
+table.rtab .num { text-align: right; font-variant-numeric: tabular-nums; }
+table.rtab.tight td, table.rtab.tight th { padding: 4px 4px; white-space: nowrap; }
+table.rtab tbody tr:nth-child(even) td { background: #fafafb; }
+.r-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.r-keys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; }
+.r-key { border-left: 3px solid var(--red); padding: 4px 0 4px 10px; break-inside: avoid; }
+.r-key ul { margin: 4px 0 0; padding-left: 16px; } .r-key li { margin-bottom: 2px; }
+.r-foot { margin-top: 20px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; text-align: center; }
+@media (max-width: 900px) { .r-grid { grid-template-columns: 1fr 1fr; } .r-two, .r-keys { grid-template-columns: 1fr; } .r-notes { columns: 1; } }
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  body { background: #fff; }
+  .top, footer.site-foot, body > footer, .no-print, .sample { display: none !important; }
+  main.wrap { max-width: none; padding: 0; margin: 0; }
+  .report { box-shadow: none; padding: 0; border-radius: 0; font-size: 10.5px; }
+  .r-sec { break-inside: auto; } .r-sec h2 { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  table.rtab { font-size: 9.5px; } table.rtab tr, .r-key, .rs { break-inside: avoid; }
+  .r-sec h2, .r-sec h3 { break-after: avoid; } .r-sec:nth-of-type(3) { break-before: page; }
+  .scroll { overflow: visible !important; }
+  a { color: inherit; text-decoration: none; }
+}

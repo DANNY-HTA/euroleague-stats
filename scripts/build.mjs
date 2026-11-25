@@ -501,6 +501,7 @@ writePage('players.html', 'Players', `
 </section>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Switch the chart, filter by team, and click any name for the full profile.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']] }));
 
 // Teams page
+const TEAM_SPLITS = teamSplits(games, teams);
 const tcols = [['name', 'Team', 's'], ['gp', 'GP'], ['w', 'W'], ['l', 'L'], ['ppg', 'PTS'], ['oppg', 'OPP'], ['ortg', 'ORtg'], ['drtg', 'DRtg'], ['net', 'Net'], ['pace', 'Pace'], ['ts', 'TS%'], ['efg', 'eFG%'], ['tov100', 'TOV/100'], ['orebPct', 'OREB%']];
 {
   const splits = teamSplits(games, teams);
@@ -604,8 +605,120 @@ ${R.map(({ q, oo, imp }) => `<tr><td><a href="${playerHref(q.id)}">${esc(q.name)
     title: esc(titleCase(t.name)),
     meta: `<span>${t.w}–${t.l}</span><span class="sep">/</span><span>${ord(t.rank)} in the standings</span><span class="sep">/</span><span>Home ${t.home} · Away ${t.away}</span><span class="sep">/</span><span class="formrow">${form}</span>`,
     strip: [[f1(t.ortg), `ORtg · ${ord(t.ranks.ortg)}`], [f1(t.drtg), `DRtg · ${ord(t.ranks.drtg)}`], [signed(t.net), `Net · ${ord(t.ranks.net)}`], [f1(t.pace), `Pace · ${ord(t.ranks.pace)}`]],
-    side: coverCrest(t.code)
+    side: coverCrest(t.code),
+    actions: `<a class="btn white" href="team-${safe(t.code)}-report.html">Generate team report</a>`
   });
+  // ---- Printable team report ----
+  {
+    const sp = TEAM_SPLITS[t.code] || {};
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const pctS = (m, a) => (a ? f1(100 * m / a) : '–');
+    const rk = (k) => (t.ranks?.[k] ? `<span class="rk ${t.ranks[k] <= 3 ? 'rk-top' : t.ranks[k] > N - 3 ? 'rk-bot' : ''}">${ord(t.ranks[k])}</span>` : '');
+    const stat = (label, v, k) => `<div class="rs"><span>${label}</span><b>${v}</b>${k ? rk(k) : ''}</div>`;
+    const gameOf = (code) => games.find((x) => x.gameCode === code);
+    // Last 5 games for "form" stats and starting fives
+    const last5 = list.slice(0, 5);
+    const last5Lines = new Map();
+    for (const g of last5) { const gm = gameOf(g.gameCode), me = g.isHome ? gm.home : gm.away; for (const p of me.players) { if (!(p.min > 0)) continue; if (!last5Lines.has(p.id)) last5Lines.set(p.id, { gp: 0, min: 0, pts: 0, pir: 0 }); const a = last5Lines.get(p.id); a.gp++; a.min += p.min; a.pts += p.pts; a.pir += p.pir; } }
+    const starters = last5.map((g) => { const gm = gameOf(g.gameCode), me = g.isHome ? gm.home : gm.away; return { g, ids: me.players.filter((p) => p.starter).map((p) => p.id) }; });
+    const startCount = new Map(); for (const s of starters) for (const id of s.ids) startCount.set(id, (startCount.get(id) || 0) + 1);
+    const startKey = (ids) => [...ids].sort().join(',');
+    const sameFive = starters.length ? starters.filter((s) => startKey(s.ids) === startKey(starters[0].ids)).length : 0;
+    const nm = (id) => nameOf.get(id) || id;
+    // Personnel
+    const R = roster.filter((p) => p.gp > 0).map((p) => {
+      const person = findPerson(peopleIndex, p), s = p.totals, oo = onOffOf(p.id), imp = IMPACT?.values.get(p.id), l5 = last5Lines.get(p.id), rt = RATES.get(p.id);
+      return { p, person, s, oo, imp, l5, rt, age: person ? ageOn(person.birthDate, todayISO) : null };
+    });
+    const per = (v, gp) => (gp ? f1(v / gp) : '–');
+    const keyPoints = (x) => {
+      const { p, s, rt } = x, out = [];
+      const tpa = s.fga3 / p.gp, fta = s.fta / p.gp, astTo = s.tov ? s.ast / s.tov : s.ast;
+      if (tpa >= 4) out.push(`Volume 3-pt shooter: ${f1(tpa)} attempts a game at ${pctS(s.fgm3, s.fga3)}%`);
+      else if (tpa >= 2 && s.fga3 >= 15 && 100 * s.fgm3 / s.fga3 >= 40) out.push(`Efficient from three: ${pctS(s.fgm3, s.fga3)}% on ${f1(tpa)} a game`);
+      else if (p.mpg >= 15 && tpa < 0.7) out.push('Rarely shoots threes — plays inside the arc');
+      if (fta >= 4) out.push(`Gets to the line: ${f1(fta)} FTA a game (${pctS(s.ftm, s.fta)}%)`);
+      if (s.fta >= 15 && 100 * s.ftm / s.fta < 65) out.push(`Weak free-throw shooter: ${pctS(s.ftm, s.fta)}% — foul candidate`);
+      if (p.apg >= 4 && astTo >= 2) out.push(`Playmaker: ${f1(p.apg)} assists, ${f1(astTo)} AST/TO`);
+      else if (p.tpg >= 2.5) out.push(`Turnover-prone: ${f1(p.tpg)} a game`);
+      if (rt && rt.drebPct >= 20 && p.mpg >= 12) out.push(`Strong defensive rebounder: ${f1(rt.drebPct)}% DREB`);
+      if (rt && rt.blkPct >= 4 && p.mpg >= 10) out.push(`Rim protector: ${f1(rt.blkPct)}% block rate`);
+      if (rt && rt.stlPct >= 2.5 && p.mpg >= 10) out.push(`Active hands: ${f1(rt.stlPct)}% steal rate`);
+      if (p.usg >= 26) out.push(`High usage: ${f1(p.usg)}% of possessions when on the court`);
+      if (x.l5 && x.l5.gp >= 3 && p.gp >= 6) { const d = x.l5.pts / x.l5.gp - p.ppg; if (d >= 4) out.push(`Hot: ${f1(x.l5.pts / x.l5.gp)} pts a game in the last 5 (season ${f1(p.ppg)})`); if (d <= -4) out.push(`Cold: ${f1(x.l5.pts / x.l5.gp)} pts a game in the last 5 (season ${f1(p.ppg)})`); }
+      if (x.oo?.swing != null && x.oo.onMin >= 80 && Math.abs(x.oo.swing) >= 12) out.push(`Team is ${x.oo.swing > 0 ? 'much better' : 'much worse'} with him on the court (${sg(x.oo.swing)} per 100)`);
+      return out.slice(0, 4);
+    };
+    // Lineups and pairs from the play-by-play
+    const teamStints = pbpOk.flatMap(({ game, stints }) => (game.home.code === t.code || game.away.code === t.code) ? stints.map((s) => ({ game, s })) : []);
+    const units = (k) => {
+      const m = new Map();
+      const combos = (ids) => { const r = []; const rec = (st, acc) => { if (acc.length === k) { r.push(acc); return; } for (let i = st; i < ids.length; i++) rec(i + 1, [...acc, ids[i]]); }; rec(0, []); return r; };
+      for (const { game, s } of teamStints) {
+        const home = game.home.code === t.code, ids = home ? s.home : s.away, me = t.code, op = home ? game.away.code : game.home.code, poss = (s.possH + s.possA) / 2;
+        for (const c of combos(ids)) { const key = c.join(','); if (!m.has(key)) m.set(key, { ids: c, secs: 0, poss: 0, pf: 0, pa: 0, g: new Set() }); const e = m.get(key); e.secs += s.secs; e.poss += poss; e.pf += s.pts[me]; e.pa += s.pts[op]; e.g.add(game.gameCode); }
+      }
+      return [...m.values()].map((e) => ({ ...e, ortg: e.poss ? 100 * e.pf / e.poss : 0, drtg: e.poss ? 100 * e.pa / e.poss : 0 })).map((e) => ({ ...e, net: e.ortg - e.drtg }));
+    };
+    const L5 = units(5), L2 = units(2), L3 = units(3);
+    const uRow = (u, i) => `<tr><td class="num muted">${i + 1}</td><td>${u.ids.map((id) => esc(nm(id))).join('<span class="muted"> · </span>')}</td><td class="num">${u.g.size}</td><td class="num">${f1(u.secs / 60)}</td><td class="num">${Math.round(u.poss)}</td><td class="num">${u.pf}–${u.pa}</td><td class="num">${f1(u.ortg)}</td><td class="num">${f1(u.drtg)}</td><td class="num ${u.net >= 0 ? 'pos' : 'neg'}">${sg(u.net)}</td></tr>`;
+    const uTable = (arr) => arr.length ? `<table class="rtab"><thead><tr><th>#</th><th>Players</th><th class="num">GP</th><th class="num">MIN</th><th class="num">Poss</th><th class="num">Score</th><th class="num">ORtg</th><th class="num">DRtg</th><th class="num">Net</th></tr></thead><tbody>${arr.map(uRow).join('')}</tbody></table>` : '<p class="muted">Not enough data.</p>';
+    const byMin = (arr, n) => [...arr].sort((a, b) => b.secs - a.secs).slice(0, n);
+    const byNet = (arr, n, minPoss, dir) => arr.filter((u) => u.poss >= minPoss).sort((a, b) => dir * (b.net - a.net)).slice(0, n);
+    const upcomingT = upcoming.filter((x) => x.h.code === t.code || x.a.code === t.code).slice(0, 5);
+    const body = `
+<div class="report-bar no-print"><a href="${teamHref(t.code)}">← Back to team page</a><button type="button" class="btn" id="print-btn">Print / Save as PDF</button><span class="muted small">Tip: in the print window choose “Save as PDF”. Landscape fits the wide tables best.</span></div>
+<article class="report">
+<header class="r-head"><div class="r-id">${crests.has(t.code) ? `<img src="${esc(crests.get(t.code))}" alt="" width="64" height="64">` : ''}<div><div class="r-kicker">HTA LAB · Team report</div><h1>${esc(titleCase(t.name))}</h1>
+<div class="r-meta">${esc(cfg.seasonLabel)} · ${t.w}–${t.l} · ${ord(t.rank)} in the standings · Home ${t.home} · Away ${t.away} · Last 5: ${list.slice(0, 5).map((g) => (g.win ? 'W' : 'L')).join(' ')}${sp.streak ? ` · Streak ${sp.streak}` : ''}</div></div></div>
+<div class="r-date">Data through ${esc(fmtDate(info.lastDate))}<br>Generated ${esc(fmtDate(todayISO))}</div></header>
+
+<section class="r-sec"><h2>1. Team profile</h2>
+<div class="r-grid">
+<div><h3>Ratings</h3>${stat('Offensive rating', f1(t.ortg), 'ortg')}${stat('Defensive rating', f1(t.drtg), 'drtg')}${stat('Net rating', sg(t.net), 'net')}${stat('Pace', f1(t.pace), 'pace')}${stat('Points', f1(t.ppg), 'ppg')}${stat('Points allowed', f1(t.oppg), 'oppg')}</div>
+<div><h3>Four factors — offense</h3>${stat('eFG%', f1(t.efg), 'efg')}${stat('Turnovers / 100', f1(t.tov100), 'tov100')}${stat('Offensive reb %', f1(t.orebPct), 'orebPct')}${stat('Free-throw rate', f1(t.ftr), 'ftr')}<h3>Four factors — defense</h3>${stat('Opp eFG%', f1(t.efgD), 'efgD')}${stat('Forced TO / 100', f1(t.tov100D), 'tov100D')}${stat('Defensive reb %', f1(t.drebPct), 'drebPct')}${stat('Opp FT rate', f1(t.ftrD), 'ftrD')}</div>
+<div><h3>Shooting</h3>${stat('3-pt rate', f1(t.threeRate) + '%', 'threeRate')}${stat('3P%', f1(t.threePct), 'threePct')}${stat('2P%', f1(t.twoPct), 'twoPct')}${stat('FT%', f1(t.ftPct), 'ftPct')}${stat('True shooting', f1(t.ts), 'ts')}${stat('Assist rate', f1(t.astRate) + '%', 'astRate')}<h3>Opponent shooting</h3>${stat('Opp 3-pt rate', f1(t.threeRateD) + '%', 'threeRateD')}${stat('Opp 3P%', f1(t.threePctD), 'threePctD')}${stat('Opp 2P%', f1(t.twoPctD), 'twoPctD')}</div>
+<div><h3>Splits</h3>${stat('Home', t.home)}${stat('Away', t.away)}${sp.close ? stat('Close games (≤5)', `${sp.close[0]}–${sp.close[1]}`) : ''}${sp.big ? stat('Decided by 10+', `${sp.big[0]}–${sp.big[1]}`) : ''}${sp.ot ? stat('Overtime', `${sp.ot[0]}–${sp.ot[1]}`) : ''}
+${qa ? `<h3>By quarter (avg)</h3>${qa.map((q) => stat(`Q${q.q}`, `${f1(q.for)}–${f1(q.against)} <small class="${q.margin >= 0 ? 'pos' : 'neg'}">${sg(q.margin)}</small>`)).join('')}` : ''}</div>
+</div>
+<h3>Scouting notes</h3><ul class="r-notes">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>
+</section>
+
+<section class="r-sec"><h2>2. Starting five — last ${starters.length} games</h2>
+${sameFive === starters.length && starters.length > 1 ? `<p><strong>Same starting five in all ${starters.length} games.</strong></p>` : `<p>${sameFive} of the last ${starters.length} games with the most recent starting five.</p>`}
+<table class="rtab"><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Starters</th></tr></thead><tbody>
+${starters.map(({ g, ids }) => `<tr><td>${esc(fmtDate(g.date))}</td><td>${g.isHome ? 'vs' : 'at'} ${esc(g.opp.tv)}</td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td><td>${ids.map((id) => esc(nm(id))).join('<span class="muted"> · </span>')}</td></tr>`).join('')}
+</tbody></table>
+<p class="small"><strong>Starts in the last ${starters.length}:</strong> ${[...startCount].sort((a, b) => b[1] - a[1]).map(([id, n]) => `${esc(nm(id))} ${n}`).join(' · ')}<br><strong>Season starts:</strong> ${R.filter((x) => x.p.gs > 0).sort((a, b) => b.p.gs - a.p.gs).map((x) => `${esc(x.p.name)} ${x.p.gs}/${x.p.gp}`).join(' · ')}</p>
+</section>
+
+<section class="r-sec"><h2>3. Personnel</h2>
+<div class="scroll"><table class="rtab tight"><thead><tr><th>#</th><th>Player</th><th>Pos</th><th class="num">Ht</th><th class="num">Age</th><th class="num">GP/GS</th><th class="num">MIN</th><th class="num">PTS</th><th class="num">REB</th><th class="num">AST</th><th class="num">STL</th><th class="num">BLK</th><th class="num">TOV</th><th class="num">2P</th><th class="num">3P</th><th class="num">3PA</th><th class="num">FT%</th><th class="num">FTA</th><th class="num">TS%</th><th class="num">USG%</th><th class="num">PIR</th><th class="num">+/-</th><th class="num" title="Team net per 100 with him on minus off">On/off</th><th class="num">Impact</th><th class="num" title="Last 5 games: minutes / points">Last 5</th></tr></thead><tbody>
+${R.map((x) => { const { p, s, person, oo, imp, l5 } = x; return `<tr><td class="num muted">${esc(p.number || person?.dorsal || '')}</td><td><strong>${esc(p.name)}</strong>${p.teams.length > 1 ? ' <span class="muted small">(traded)</span>' : ''}</td><td>${esc((person?.position || '').slice(0, 1))}</td><td class="num">${person?.height || '–'}</td><td class="num">${x.age ?? '–'}</td><td class="num">${p.gp}/${p.gs}</td><td class="num">${f1(p.mpg)}</td><td class="num"><strong>${f1(p.ppg)}</strong></td><td class="num">${f1(p.rpg)}</td><td class="num">${f1(p.apg)}</td><td class="num">${f1(p.spg)}</td><td class="num">${f1(p.bpg)}</td><td class="num">${f1(p.tpg)}</td><td class="num">${pctS(s.fgm2, s.fga2)}</td><td class="num">${pctS(s.fgm3, s.fga3)}</td><td class="num">${per(s.fga3, p.gp)}</td><td class="num">${pctS(s.ftm, s.fta)}</td><td class="num">${per(s.fta, p.gp)}</td><td class="num">${f1(p.ts)}</td><td class="num">${f1(p.usg)}</td><td class="num">${f1(p.pirpg)}</td><td class="num">${sg(p.pmpg)}</td><td class="num">${oo?.swing == null ? '–' : sg(oo.swing)}</td><td class="num">${imp == null ? '–' : sg(imp)}</td><td class="num">${l5 ? `${f1(l5.min / l5.gp)} / ${f1(l5.pts / l5.gp)}` : '–'}</td></tr>`; }).join('')}
+</tbody></table></div>
+<p class="muted small">Per game. 2P/3P/FT are percentages; 3PA and FTA are attempts per game. On/off and impact (RAPM) are points per 100 possessions from the play-by-play.</p>
+<h3>Player keys</h3>
+<div class="r-keys">${R.filter((x) => x.p.mpg >= 8).map((x) => { const k = keyPoints(x); return `<div class="r-key"><strong>${esc(x.p.name)}</strong> <span class="muted">${esc(x.person?.position || '')}${x.p.number ? ` · #${esc(x.p.number)}` : ''} · ${f1(x.p.mpg)} min</span><ul>${(k.length ? k : ['No standout tendency in the numbers']).map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>`; }).join('')}</div>
+</section>
+
+${PBP ? `<section class="r-sec"><h2>4. Lineups</h2>
+<h3>Most used five-man lineups</h3>${uTable(byMin(L5, 10))}
+<div class="r-two"><div><h3>Best lineups <small class="muted">(30+ possessions)</small></h3>${uTable(byNet(L5, 5, 30, 1))}</div><div><h3>Worst lineups <small class="muted">(30+ possessions)</small></h3>${uTable(byNet(L5, 5, 30, -1))}</div></div>
+<div class="r-two"><div><h3>Most used pairs</h3>${uTable(byMin(L2, 10))}</div><div><h3>Most used trios</h3>${uTable(byMin(L3, 10))}</div></div>
+<div class="r-two"><div><h3>Best pairs <small class="muted">(100+ possessions)</small></h3>${uTable(byNet(L2, 5, 100, 1))}</div><div><h3>Worst pairs <small class="muted">(100+ possessions)</small></h3>${uTable(byNet(L2, 5, 100, -1))}</div></div>
+<p class="muted small">From ${new Set(teamStints.map((x) => x.game.gameCode)).size} of ${list.length} games where the official play-by-play matches the box score exactly. ORtg/DRtg = points scored/allowed per 100 possessions.</p>
+</section>` : ''}
+
+<section class="r-sec"><h2>${PBP ? 5 : 4}. Results${upcomingT.length ? ' and schedule' : ''}</h2>
+<table class="rtab"><thead><tr><th>Date</th><th>Rd</th><th>Opponent</th><th>Result</th><th>Top scorer</th></tr></thead><tbody>
+${list.map((g) => { const gm = gameOf(g.gameCode), me = g.isHome ? gm.home : gm.away, top = me.players.slice().sort((a, b) => b.pts - a.pts)[0]; return `<tr><td>${esc(fmtDate(g.date))}</td><td class="num">${g.round}</td><td>${g.isHome ? 'vs' : 'at'} ${esc(titleCase(g.opp.name))}</td><td class="${g.win ? 'pos' : 'neg'}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</td><td>${top ? `${esc(top.name)} ${top.pts}` : ''}</td></tr>`; }).join('')}
+</tbody></table>
+${upcomingT.length ? `<h3>Next games</h3><table class="rtab"><tbody>${upcomingT.map((x) => { const home = x.h.code === t.code, o = home ? x.a : x.h; return `<tr><td>${timeTag(x)}</td><td>Rd ${x.r}</td><td>${home ? 'vs' : 'at'} ${esc(titleCase(o.name || o.code))}</td><td class="muted">${esc(titleCase(x.venue || ''))}</td></tr>`; }).join('')}</tbody></table>` : ''}
+</section>
+<footer class="r-foot">HTA LAB · Official EuroLeague box scores and play-by-play, checked before publishing · hta-lab.github.io</footer>
+</article>`;
+    writePage(`team-${safe(t.code)}-report.html`, `${titleCase(t.name)} — team report`, body, 'teams.html', '', { scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` });
+  }
   writePage(teamHref(t.code), titleCase(t.name), `
 <div class="row">
 <section class="card"><h2>Scouting notes</h2><p class="muted">Generated from this season's box scores. Ranks are out of ${N} teams.</p>
