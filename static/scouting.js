@@ -84,10 +84,15 @@
   }
   /** Returns { sha, text } of scouting/db.enc, or { sha: null, text: null } when there is no database yet. */
   async function readRemote() {
-    const meta = await gh('/contents/' + CFG.path + '?ref=' + (CFG.branch || 'main'), { allow404: true });
+    // The repository is public, so reading works without a key. A saved key is used when it works
+    // (higher GitHub limits); an old, expired or wrong key never blocks reading.
+    const path = '/contents/' + CFG.path + '?ref=' + (CFG.branch || 'main');
+    let meta, auth = !!getToken();
+    if (auth) { try { meta = await gh(path, { allow404: true }, true); if (!meta) auth = false; } catch { auth = false; } }
+    if (!auth) meta = await gh(path, { allow404: true }, false);
     if (!meta) return { sha: null, text: null };
     if (meta.content && meta.encoding === 'base64' && meta.size <= 900000) return { sha: meta.sha, text: dec.decode(unb64(meta.content)) };
-    const blob = await gh('/git/blobs/' + meta.sha);
+    const blob = await gh('/git/blobs/' + meta.sha, {}, auth);
     return { sha: meta.sha, text: dec.decode(unb64(blob.content)) };
   }
   async function writeRemote(text, message) {
