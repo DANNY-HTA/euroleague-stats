@@ -39,7 +39,7 @@
   const getWho = () => { try { return localStorage.getItem(WHO) || ''; } catch { return ''; } };
   const setWho = (t) => { try { localStorage.setItem(WHO, t); } catch { /* ignore */ } };
   const STATUSES = ['', 'Watch', 'Target', 'Priority', 'Contacted', 'Signed', 'Pass'];
-  const LEAGUE_NAME = { EL: 'EuroLeague', EC: 'EuroCup' };
+  const LEAGUE_NAME = { EL: 'EuroLeague', EC: 'EuroCup', IL: 'Winner League (Israel)' };
 
   // ---------- crypto ----------
   async function deriveKey(password) {
@@ -136,7 +136,7 @@
     return {
       id: o.src + ':' + o.pid, src: o.src, league: LEAGUE_NAME[o.src] || o.src, name: o.name, team: o.teamName, teamCode: o.team, crest: o.crest, pos: o.pos, height: o.height, age: o.age, nat: o.nat,
       stats: { season: CFG.seasonLabel || '', gp: o.gp, mpg: o.mpg, ppg: o.ppg, rpg: o.rpg, apg: o.apg, spg: o.spg, bpg: o.bpg, tpg: o.tpg, p2: pct(o.fgm2, o.fga2), p3: pct(o.fgm3, o.fga3), p3a: o.gp ? o.fga3 / o.gp : null, ft: pct(o.ftm, o.fta), ts: o.ts, usg: o.usg, pir: o.pir, orpg: o.orpg, drpg: o.drpg },
-      official: true, href: o.src === 'EL' ? 'player-' + String(o.pid).replace(/[^A-Za-z0-9]/g, '') + '.html' : null
+      official: true, season: o.src === 'IL' ? '2026-27' : null, href: o.src === 'EL' ? 'player-' + String(o.pid).replace(/[^A-Za-z0-9]/g, '') + '.html' : null
     };
   }
   function allPlayers() {

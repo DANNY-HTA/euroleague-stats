@@ -14,7 +14,7 @@ import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
 import { buildStints, checkStints, aggregate, rapm, BOX_KEYS, repairPlusMinus } from '../lib/pbp.mjs';
 import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
-import { poolRows, poolFromDir } from '../lib/pool.mjs';
+import { poolRows, poolFromDir, poolFromIbba } from '../lib/pool.mjs';
 import { playerRates } from '../lib/advanced.mjs';
 import { playLog, flowStats, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
@@ -1223,6 +1223,12 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
     for (const row of r.rows) { row[4] = titleCase(row[4]); ecRows.push(row); }
     if (r.games) ecNotes.push(`EuroCup: ${r.rows.length} players from ${r.games} games`);
     console.log(`✓ Scouting pool ${season}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
+  }
+  for (const year of sample ? [] : (cfg.scoutingIsrael || [])) {
+    const r = poolFromIbba(join('data', 'raw', 'ISR' + year), today);
+    for (const row of r.rows) ecRows.push(row);
+    if (r.games) ecNotes.push(`Winner League (Israel): ${r.rows.length} players from ${r.games} games`);
+    console.log(`✓ Scouting pool Israel ${year}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
   }
   writeFileSync(join(OUT, 'scouting-pool.json'), JSON.stringify({ note: [`EuroLeague: ${el.length} players from ${info.games} games`, ...ecNotes].join(' · ') + '. Official stats, updated nightly.', players: [...el, ...ecRows] }));
   const REPO = process.env.GITHUB_REPOSITORY || IC.repo;

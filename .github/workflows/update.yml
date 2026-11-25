@@ -44,6 +44,9 @@ jobs:
       - name: Download EuroCup box scores (scouting pool, optional)
         continue-on-error: true
         run: for s in $(node -p "(require('./config.json').scoutingSeasons||[]).join(' ')"); do node scripts/fetch.mjs $s --no-pbp || true; done
+      - name: Download Israeli league box scores (scouting pool, optional)
+        continue-on-error: true
+        run: for y in $(node -p "(require('./config.json').scoutingIsrael||[]).join(' ')"); do node scripts/fetch-ibba.mjs $y || true; done
       - name: Remember downloaded games for the next run
         if: always()
         uses: actions/cache/save@v4
