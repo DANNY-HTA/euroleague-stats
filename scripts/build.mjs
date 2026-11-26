@@ -624,6 +624,15 @@ if (IS_EL && pbpOk.length) {
   }));
 }
 
+// Team stats for "Ask the Brain" (team-stats.json): every team's season numbers, with league ranks.
+{
+  const K = ['gp', 'w', 'l', 'ppg', 'oppg', 'ortg', 'drtg', 'net', 'pace', 'efg', 'ts', 'tov100', 'orebPct', 'drebPct', 'ftr', 'efgD', 'tov100D', 'ftrD', 'twoPct', 'threePct', 'threeRate', 'ftPct', 'astRate', 'twoPctD', 'threePctD', 'rpg', 'apg', 'spg', 'bpg'];
+  writeFileSync(join(OUT, 'team-stats.json'), JSON.stringify({ league: cfg.leagueName || 'EuroLeague', season: cfg.seasonLabel, keys: K,
+    teams: teams.map((t) => [t.code, titleCase(t.name), t.rank, ...K.map((k) => (typeof t[k] === 'number' ? Math.round(t[k] * 10) / 10 : t[k]))]),
+    games: games.slice().sort((a, b) => a.date.localeCompare(b.date)).map((g) => [g.date, g.round, g.home.code, g.home.score, g.away.code, g.away.score]),
+    upcoming: upcoming.slice(0, 40).map((x) => [x.utc || '', x.h?.code, x.a?.code]) }));
+}
+
 // Teams page
 const TEAM_SPLITS = teamSplits(games, teams);
 // Hapoel Tel Aviv as the reference team in every team report (same league; otherwise its EuroLeague numbers).

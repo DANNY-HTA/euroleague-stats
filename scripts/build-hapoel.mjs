@@ -268,6 +268,7 @@ const hero = `<section class="cover hap-cover"><div class="wrap"><div>
 const tabs = `<div class="comp-tabs" role="tablist" aria-label="Competition"><button type="button" role="tab" data-comp="all" aria-selected="true">All competitions</button>${ACTIVE.map((C) => `<button type="button" role="tab" data-comp="${C.key}" aria-selected="false">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="18" height="18">` : ''}${esc(C.short)}</button>`).join('')}</div>`;
 const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#lineups">Lineups</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
 
+const person = (k) => (people.get(k)?.name || k);
 const data = {
   comps: Object.fromEntries(ACTIVE.map((C) => [C.key, C.short])), tk: TK,
   games: gameRows,
@@ -304,5 +305,29 @@ ${ACTIVE.map((C) => `<div class="comp-block" data-comp="${C.key}"><h3 class="com
 
 const info = { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null };
 copyFileSync('static/hapoel.js', join(OUT, 'hapoel.js'));
+// ---- Data for "Ask the Brain": Hapoel's season in compact form, and the Brain page ----
+{
+  const line = (C, p) => [p.name, C.short, p.gp, p.gs, +f1(p.mpg), +f1(p.ppg), +f1(p.rpg), +f1(p.apg), +f1(p.spg), +f1(p.bpg), +f1(p.tpg), p.totals.fga2 ? +(100 * p.totals.fgm2 / p.totals.fga2).toFixed(1) : null, p.totals.fga3 ? +(100 * p.totals.fgm3 / p.totals.fga3).toFixed(1) : null, p.totals.fta ? +(100 * p.totals.ftm / p.totals.fta).toFixed(1) : null, +f1(p.ts), +f1(p.usg), +f1(p.pirpg), +f1(p.pmpg), C.onoff(p.id)?.swing != null ? +C.onoff(p.id).swing.toFixed(1) : null];
+  const brain = {
+    built: new Date().toISOString().slice(0, 10),
+    teamStats: { cols: ['Stat', 'All', ...ACTIVE.flatMap((C) => [C.short, C.short + ' rank', C.short + ' league avg']), 'Wins', 'Losses', 'Home', 'Away'],
+      rows: STATS.map(([label, k, fmt]) => [label, fmtV(tAll, k, fmt), ...ACTIVE.flatMap((C) => [fmtV(C.team, k, fmt), k && C.team?.ranks?.[k] ? C.team.ranks[k] : '', k ? (/ppp$/.test(k) ? C.lg(k).toFixed(3) : f1(C.lg(k))) : '']), fmtV(tW, k, fmt), fmtV(tL, k, fmt), fmtV(tH, k, fmt), fmtV(tA, k, fmt)]) },
+    playerCols: ['Player', 'Competition', 'GP', 'GS', 'MIN', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TOV', '2P%', '3P%', 'FT%', 'TS%', 'USG%', 'PIR', '+/-', 'On/off net'],
+    players: ACTIVE.flatMap((C) => C.roster.map((p) => line(C, p))),
+    games: gameRows.map((g) => ({ comp: compShort[g.c], date: g.d, round: g.r, venue: g.h ? 'home' : 'away', opp: g.opp[0], score: `${g.s[0]}-${g.s[1]}`, result: g.w ? 'W' : 'L', quarters: g.q,
+      box: g.me.p.map((r) => [person(r[1]), r[3] ? Math.round(r[3]) : 0, ...r.slice(5)].join(' ')).join('; ') })),
+    boxKeys: 'name min pts fgm2 fga2 fgm3 fga3 ftm fta oreb dreb reb ast stl tov blk blka pf fd pir',
+    schedule: sched.map((x) => [compShort[x.c], x.utc ? x.utc.slice(0, 16) : 'TBC', x.home ? 'home' : 'away', x.opp, x.res ? `${x.res[0]}-${x.res[1]}` : ''])
+  };
+  writeFileSync(join(OUT, 'hapoel-brain.json'), JSON.stringify(brain));
+  const leaguesForBrain = LEAGUES.map(([k, L]) => [k, L.leagueName || L.shortName, k === 'el' ? '' : k + '/', L.leagueLogo || '']);
+  copyFileSync('static/brain.js', join(OUT, 'brain.js'));
+  writeFileSync(join(OUT, 'brain.html'), page({ title: 'Ask the Brain', cfg: { ...cfg }, info, active: 'brain.html', sample: false,
+    body: `<section class="card brain"><h2>Ask the Brain</h2>
+<p class="muted">Ask anything about Hapoel and the leagues on HTA LAB — the answer is written by Claude, using only the data on this site (Hapoel's games and box scores, team and player stats, schedules). Add the leagues the question is about; leagues and teams you name are added automatically.</p>
+<div id="brain-app"><p class="muted">Loading…</p></div></section>
+<script type="application/json" id="brain-leagues">${JSON.stringify(leaguesForBrain).replace(/</g, '\\u003c')}</script>`,
+    hero: null, scripts: `<script src="brain.js?v=${assetVersion()}" defer></script>` }));
+}
 writeFileSync(join(OUT, 'index.html'), page({ title: 'Hapoel Tel Aviv', cfg, info, active: 'index.html', sample: false, body, hero, scripts: `<script src="hapoel.js?v=${assetVersion()}" defer></script>` }));
 console.log(`✓ Hapoel home page: ${gameRows.length} games (${ACTIVE.map((C) => `${C.short} ${C.mine.length}`).join(', ')}), ${people.size} players, ${lineupGames.size} games with lineups`);

@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
-const h = readFileSync('site/index.html', 'utf8');
-const t = h.slice(h.indexOf('class="hap-stats"'), h.indexOf('</table>', h.indexOf('class="hap-stats"')));
-for (const lab of ['Points per possession', 'Opp points per possession', '2-pointers made', '3-pointers attempted', 'Opp free throws made']) { const i = t.indexOf(lab); console.log('ROW', t.slice(i, i + 900).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200)); }
+import { readFileSync, existsSync } from 'node:fs';
+for (const f of ['site/brain.html', 'site/brain.js', 'site/hapoel-brain.json', 'site/team-stats.json', 'site/il/team-stats.json']) console.log('FILE', f, existsSync(f) ? readFileSync(f).length : 'MISSING');
+const b = JSON.parse(readFileSync('site/hapoel-brain.json', 'utf8')); console.log('BRAIN', b.players.length, b.games.length, b.teamStats.rows.length, JSON.stringify(b.games[0]).slice(0, 300));
