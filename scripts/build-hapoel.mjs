@@ -115,9 +115,28 @@ for (const C of ACTIVE) for (const { game, stints } of C.pbpOk) {
 const lineupGames = new Set(stintRows.map((r) => r[1] + '|' + r[0]));
 
 // ---- Team stats: per competition (with league rank and average) and both competitions together ----
+// Shooting made/attempted per game (team and opponents) and points per possession, ranked like the rest.
+const EXTRA = [['fgm2', 1], ['fga2', 1], ['fgm3', 1], ['fga3', 1], ['ftm', 1], ['fta', 1]];
+function augment(t) {
+  if (!t?.raw || !t.gp) return t;
+  for (const [k] of EXTRA) { t[k + 'pg'] = t.raw.tot[k] / t.gp; t['o' + k + 'pg'] = t.raw.opp[k] / t.gp; }
+  t.ppp = t.raw.poss ? t.raw.pf / t.raw.poss : null; t.oppp = t.raw.poss ? t.raw.pa / t.raw.poss : null;
+  return t;
+}
+const EXTRA_DIR = { ppp: true, oppp: false, ...Object.fromEntries(EXTRA.flatMap(([k]) => [[k + 'pg', true], ['o' + k + 'pg', false]])) };
+for (const C of ACTIVE) {
+  C.teams.forEach(augment);
+  for (const [k, better] of Object.entries(EXTRA_DIR)) {
+    if (better == null) continue;
+    const sorted = [...C.teams].filter((t) => t[k] != null).sort((a, b) => (better ? b[k] - a[k] : a[k] - b[k]));
+    sorted.forEach((t, i) => { t.ranks ||= {}; t.ranks[k] = i + 1; });
+  }
+}
 const STATS = [
   ['Record', null, (t) => `${t.w}–${t.l}`],
-  ['Points', 'ppg'], ['Points allowed', 'oppg'], ['Offensive rating', 'ortg'], ['Defensive rating', 'drtg'], ['Net rating', 'net', null, true], ['Pace', 'pace'],
+  ['Points', 'ppg'], ['Points allowed', 'oppg'], ['Offensive rating', 'ortg'], ['Defensive rating', 'drtg'], ['Net rating', 'net', null, true], ['Pace', 'pace'], ['Points per possession (PPP)', 'ppp', (t) => (t.ppp == null ? '–' : t.ppp.toFixed(3))], ['Opp points per possession', 'oppp', (t) => (t.oppp == null ? '–' : t.oppp.toFixed(3))],
+  ['2-pointers made', 'fgm2pg'], ['2-pointers attempted', 'fga2pg'], ['3-pointers made', 'fgm3pg'], ['3-pointers attempted', 'fga3pg'], ['Free throws made', 'ftmpg'], ['Free throws attempted', 'ftapg'],
+  ['Opp 2-pointers made', 'ofgm2pg'], ['Opp 2-pointers attempted', 'ofga2pg'], ['Opp 3-pointers made', 'ofgm3pg'], ['Opp 3-pointers attempted', 'ofga3pg'], ['Opp free throws made', 'oftmpg'], ['Opp free throws attempted', 'oftapg'],
   ['eFG%', 'efg'], ['True shooting %', 'ts'], ['Turnovers / 100', 'tov100'], ['Offensive rebound %', 'orebPct'], ['Free-throw rate', 'ftr'],
   ['Opp eFG%', 'efgD'], ['Forced turnovers / 100', 'tov100D'], ['Defensive rebound %', 'drebPct'], ['Opp free-throw rate', 'ftrD'],
   ['2P%', 'twoPct'], ['3P%', 'threePct'], ['3-point rate', 'threeRate'], ['FT%', 'ftPct'], ['Assist rate', 'astRate'],
@@ -126,15 +145,15 @@ const STATS = [
 ];
 // Both competitions together: Hapoel's games, with the Israeli code mapped to one team.
 const allMine = ACTIVE.flatMap((C) => C.mine.map((g) => { const map = (s) => (s.code === C.code ? { ...s, code: 'HAP', tv: 'HTA' } : s); return { ...g, gameCode: C.key + g.gameCode, home: map(g.home), away: map(g.away) }; }));
-const tAll = teamTable(allMine).find((t) => t.code === 'HAP');
-const splitRow = (gs) => (gs.length ? teamTable(gs).find((t) => t.code === 'HAP') : null);
+const tAll = augment(teamTable(allMine).find((t) => t.code === 'HAP'));
+const splitRow = (gs) => (gs.length ? augment(teamTable(gs).find((t) => t.code === 'HAP')) : null);
 const wins = allMine.filter((g) => (g.home.code === 'HAP' ? g.home.score > g.away.score : g.away.score > g.home.score));
 const losses = allMine.filter((g) => !wins.includes(g));
 const tW = splitRow(wins), tL = splitRow(losses);
 const tH = splitRow(allMine.filter((g) => g.home.code === 'HAP')), tA = splitRow(allMine.filter((g) => g.away.code === 'HAP'));
 for (const C of ACTIVE) {
   const won = (g) => (g.home.code === C.code ? g.home.score > g.away.score : g.away.score > g.home.score);
-  const one = (gs) => (gs.length ? teamTable(gs).find((t) => t.code === C.code) || null : null);
+  const one = (gs) => (gs.length ? augment(teamTable(gs).find((t) => t.code === C.code)) || null : null);
   C.split = { w: one(C.mine.filter(won)), l: one(C.mine.filter((g) => !won(g))), h: one(C.mine.filter((g) => g.home.code === C.code)), a: one(C.mine.filter((g) => g.away.code === C.code)) };
 }
 const fmtV = (t, k, fmt) => (!t ? '–' : fmt ? fmt(t) : k === 'net' ? signed(t[k]) : f1(t[k]));
@@ -143,7 +162,7 @@ const teamStatsTable = `<div class="scroll"><table class="hap-stats"><thead><tr>
 ${ACTIVE.map((C) => `<th scope="col" class="num" data-comp-col="${C.key}">${esc(C.short)}</th><th scope="col" class="num muted" data-comp-col="${C.key}">${esc(C.short)} avg</th>${[['w', 'Wins'], ['l', 'Losses'], ['h', 'Home'], ['a', 'Away']].map(([k, l]) => `<th scope="col" class="num" data-comp-col="${C.key}">${l}${C.split[k] ? ` <span class="muted small">${C.split[k].w}–${C.split[k].l}</span>` : ''}</th>`).join('')}`).join('')}
 <th scope="col" class="num" data-comp-col="all">Wins</th><th scope="col" class="num" data-comp-col="all">Losses</th><th scope="col" class="num" data-comp-col="all">Home</th><th scope="col" class="num" data-comp-col="all">Away</th></tr></thead><tbody>
 ${STATS.map(([label, k, fmt]) => `<tr><th scope="row">${label}</th><td class="num" data-comp-col="all"><strong>${fmtV(tAll, k, fmt)}</strong></td>
-${ACTIVE.map((C) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.team, k, fmt)} ${k ? rk(C, k) : ''}</td><td class="num muted" data-comp-col="${C.key}">${k ? f1(C.lg(k)) : ''}</td>${['w', 'l', 'h', 'a'].map((x) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.split[x], k, fmt)}</td>`).join('')}`).join('')}
+${ACTIVE.map((C) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.team, k, fmt)} ${k ? rk(C, k) : ''}</td><td class="num muted" data-comp-col="${C.key}">${k ? (/ppp$/.test(k) ? C.lg(k).toFixed(3) : f1(C.lg(k))) : ''}</td>${['w', 'l', 'h', 'a'].map((x) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.split[x], k, fmt)}</td>`).join('')}`).join('')}
 <td class="num" data-comp-col="all">${fmtV(tW, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tL, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tH, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tA, k, fmt)}</td></tr>`).join('')}
 </tbody></table></div>
 <p class="muted small">Per game; ratings are points per 100 possessions. Rank = place in that league (1st = best); avg = league average. Wins, losses, home and away are within the competition chosen above ("All competitions" combines both).</p>`;
