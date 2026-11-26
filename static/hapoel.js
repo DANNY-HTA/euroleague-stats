@@ -22,7 +22,7 @@
   function applyComp() {
     document.body.dataset.comp = comp;
     document.querySelectorAll('.comp-tabs [data-comp]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.comp === comp)));
-    document.querySelectorAll('[data-comp-col]').forEach((c) => { c.hidden = !(comp === 'all' || c.dataset.compCol === comp); });
+    document.querySelectorAll('[data-comp-col]').forEach((c) => { c.hidden = c.dataset.compCol !== comp; });
     document.querySelectorAll('.hap-sched tr[data-comp], .comp-block[data-comp]').forEach((r) => { r.hidden = !inComp(r.dataset.comp); });
     renderGames(); renderPlayers(); renderLineups();
   }

@@ -132,16 +132,21 @@ const wins = allMine.filter((g) => (g.home.code === 'HAP' ? g.home.score > g.awa
 const losses = allMine.filter((g) => !wins.includes(g));
 const tW = splitRow(wins), tL = splitRow(losses);
 const tH = splitRow(allMine.filter((g) => g.home.code === 'HAP')), tA = splitRow(allMine.filter((g) => g.away.code === 'HAP'));
+for (const C of ACTIVE) {
+  const won = (g) => (g.home.code === C.code ? g.home.score > g.away.score : g.away.score > g.home.score);
+  const one = (gs) => (gs.length ? teamTable(gs).find((t) => t.code === C.code) || null : null);
+  C.split = { w: one(C.mine.filter(won)), l: one(C.mine.filter((g) => !won(g))), h: one(C.mine.filter((g) => g.home.code === C.code)), a: one(C.mine.filter((g) => g.away.code === C.code)) };
+}
 const fmtV = (t, k, fmt) => (!t ? '–' : fmt ? fmt(t) : k === 'net' ? signed(t[k]) : f1(t[k]));
 const rk = (C, k) => (C.team?.ranks?.[k] ? `<span class="rank ${C.team.ranks[k] <= 3 ? 'top' : C.team.ranks[k] > C.teams.length - 3 ? 'bottom' : ''}">${ord(C.team.ranks[k])}</span>` : '');
 const teamStatsTable = `<div class="scroll"><table class="hap-stats"><thead><tr><th scope="col">Stat</th><th scope="col" class="num" data-comp-col="all">All</th>
-${ACTIVE.map((C) => `<th scope="col" class="num" data-comp-col="${C.key}">${esc(C.short)}</th><th scope="col" class="num muted" data-comp-col="${C.key}">${esc(C.short)} avg</th>`).join('')}
+${ACTIVE.map((C) => `<th scope="col" class="num" data-comp-col="${C.key}">${esc(C.short)}</th><th scope="col" class="num muted" data-comp-col="${C.key}">${esc(C.short)} avg</th>${[['w', 'Wins'], ['l', 'Losses'], ['h', 'Home'], ['a', 'Away']].map(([k, l]) => `<th scope="col" class="num" data-comp-col="${C.key}">${l}${C.split[k] ? ` <span class="muted small">${C.split[k].w}–${C.split[k].l}</span>` : ''}</th>`).join('')}`).join('')}
 <th scope="col" class="num" data-comp-col="all">Wins</th><th scope="col" class="num" data-comp-col="all">Losses</th><th scope="col" class="num" data-comp-col="all">Home</th><th scope="col" class="num" data-comp-col="all">Away</th></tr></thead><tbody>
 ${STATS.map(([label, k, fmt]) => `<tr><th scope="row">${label}</th><td class="num" data-comp-col="all"><strong>${fmtV(tAll, k, fmt)}</strong></td>
-${ACTIVE.map((C) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.team, k, fmt)} ${k ? rk(C, k) : ''}</td><td class="num muted" data-comp-col="${C.key}">${k ? f1(C.lg(k)) : ''}</td>`).join('')}
+${ACTIVE.map((C) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.team, k, fmt)} ${k ? rk(C, k) : ''}</td><td class="num muted" data-comp-col="${C.key}">${k ? f1(C.lg(k)) : ''}</td>${['w', 'l', 'h', 'a'].map((x) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.split[x], k, fmt)}</td>`).join('')}`).join('')}
 <td class="num" data-comp-col="all">${fmtV(tW, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tL, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tH, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tA, k, fmt)}</td></tr>`).join('')}
 </tbody></table></div>
-<p class="muted small">Per game; ratings are points per 100 possessions. Rank = place in that league (1st = best); avg = league average. "All", wins, losses, home and away combine both competitions.</p>`;
+<p class="muted small">Per game; ratings are points per 100 possessions. Rank = place in that league (1st = best); avg = league average. Wins, losses, home and away are within the competition chosen above ("All competitions" combines both).</p>`;
 const quarterTable = (() => {
   const rows = ACTIVE.map((C) => { const q = quarterAverages(teamGames(C.games, C.code)); return q ? `<tr><th scope="row">${esc(C.short)}</th>${q.map((x) => `<td class="num">${f1(x.for)}–${f1(x.against)} <small class="${x.margin >= 0 ? 'pos' : 'neg'}">${signed(x.margin)}</small></td>`).join('')}</tr>` : ''; }).join('');
   return rows ? `<div class="scroll"><table><thead><tr><th scope="col"></th><th scope="col" class="num">Q1</th><th scope="col" class="num">Q2</th><th scope="col" class="num">Q3</th><th scope="col" class="num">Q4</th></tr></thead><tbody>${rows}</tbody></table></div>` : '';
