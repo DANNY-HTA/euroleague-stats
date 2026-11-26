@@ -1,8 +1,10 @@
-import { gzipSync } from 'node:zlib';
-const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats (Hapoel Tel Aviv)', Accept: 'application/json' };
-const B = 'https://schedule.nbl.com.au';
-const id = '36dbeb55-58ad-11f1-a69b-43a6b5595d3e', season = '67d4a190-40bc-4bfb-a9a2-11bd0b93f020';
-const d = (await (await fetch(`${B}/api/calendar/match?match=${id}&league=NBL&season=${season}`, { headers: H })).json()).match;
-const slim = { ...d }; for (const k of ['betting', 'latest_play', 'match_bg', 'odds']) delete slim[k];
-const b64 = gzipSync(JSON.stringify(slim)).toString('base64');
-for (let i = 0; i < b64.length; i += 4000) console.log('CH' + String(i / 4000).padStart(4, '0') + ' ' + b64.slice(i, i + 4000));
+const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats (Hapoel Tel Aviv)', Accept: 'text/html,application/json' };
+const g = async (u) => { try { const r = await fetch(u, { headers: H, redirect: 'follow' }); return [r.status, await r.text(), r.url]; } catch (e) { return [0, e.cause?.code || e.message, u]; } };
+for (const u of ['https://www.aba-liga.com', 'https://www.aba-liga.com/robots.txt', 'https://www.aba-liga.com/calendar/', 'https://www.vtb-league.com', 'https://www.vtb-league.com/robots.txt', 'https://vtb-league.com/en/', 'https://api.vtb-league.com/']) {
+  const [s, t, fu] = await g(u);
+  console.log('R', s, u, '->', fu, String(t).length, (String(t).match(/<title>[^<]*/) || [''])[0].slice(0, 80), /Just a moment|cf-chl|captcha/i.test(t) ? 'CHALLENGE' : '');
+  if (/robots/.test(u) && s === 200) console.log('  ROBOTS', String(t).slice(0, 400).replace(/\n/g, ' ⏎ '));
+  const apis = [...new Set(String(t).match(/https?:\/\/[a-z0-9.-]*(api|data|stats|live|genius|fiba|hapi|wh\.|synergy|widget)[a-z0-9.-]*\.[a-z]{2,}[^"' )<]{0,60}/gi) || [])].filter(x => !/googleapis|gstatic|facebook|twitter|google-analytics|doubleclick/.test(x)).slice(0, 10);
+  if (apis.length) console.log('  APIS', apis.join(' | '));
+  const links = [...new Set(String(t).match(/href="[^"]*(game|match|boxscore|box-score|stats)[^"]*"/gi) || [])].slice(0, 10); if (links.length) console.log('  LINKS', links.join(' '));
+}
