@@ -17,4 +17,9 @@ jobs:
           path: data
           key: euroleague-data-none
           restore-keys: euroleague-data-
-      - run: node scripts/fetch-acb.mjs 2026 2>&1 | tail -2 && node probe.mjs && npm run build 2>&1 | grep "Quarter box" ; for k in ec il acb bbl nbl aba vtb lba; do echo "== $k"; node scripts/build.mjs --league $k 2>&1 | grep "Quarter box"; done
+      - run: tar czf data.tgz data/raw/E2026 data/raw/ISR2027 && ls -la data.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data
+          path: data.tgz
+          retention-days: 1
