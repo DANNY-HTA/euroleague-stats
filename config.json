@@ -111,6 +111,30 @@
       "dropInvalid": true,
       "poolCode": "AU",
       "fetch": "node scripts/fetch-nbl.mjs 2026"
+    },
+    "aba": {
+      "seasonLabel": "ABA League 2026–27",
+      "leagueName": "ABA League (Adriatic)",
+      "shortName": "ABA",
+      "sourceText": "the official ABA League (aba-liga.com) box scores and play-by-play",
+      "leagueLogo": "",
+      "dataDir": "ABA2026",
+      "root": "../",
+      "dropInvalid": true,
+      "poolCode": "AD",
+      "fetch": "node scripts/fetch-aba.mjs 2026"
+    },
+    "vtb": {
+      "seasonLabel": "VTB United League 2026–27",
+      "leagueName": "VTB United League",
+      "shortName": "VTB",
+      "sourceText": "the official VTB United League box scores and play-by-play (Infobasket)",
+      "leagueLogo": "",
+      "dataDir": "VTB2026",
+      "root": "../",
+      "dropInvalid": true,
+      "poolCode": "RU",
+      "fetch": "node scripts/fetch-vtb.mjs 2026"
     }
   },
   "nameFixes": {

@@ -39,8 +39,8 @@
   const getWho = () => { try { return localStorage.getItem(WHO) || ''; } catch { return ''; } };
   const setWho = (t) => { try { localStorage.setItem(WHO, t); } catch { /* ignore */ } };
   const STATUSES = ['', 'Watch', 'Target', 'Priority', 'Contacted', 'Signed', 'Pass'];
-  const LEAGUE_NAME = { EL: 'EuroLeague', EC: 'EuroCup', IL: 'Winner League (Israel)', IT: 'Serie A (Italy)', ES: 'Liga Endesa (Spain)', DE: 'Basketball Bundesliga (Germany)', GR: 'Greek Basketball League', AU: 'NBL (Australia)' };
-  const LEAGUE_DIR = { EC: 'ec/', IL: 'il/', IT: 'lba/', ES: 'acb/', DE: 'bbl/', GR: 'gr/', AU: 'nbl/' };
+  const LEAGUE_NAME = { EL: 'EuroLeague', EC: 'EuroCup', IL: 'Winner League (Israel)', IT: 'Serie A (Italy)', ES: 'Liga Endesa (Spain)', DE: 'Basketball Bundesliga (Germany)', GR: 'Greek Basketball League', AU: 'NBL (Australia)', AD: 'ABA League (Adriatic)', RU: 'VTB United League' };
+  const LEAGUE_DIR = { EC: 'ec/', IL: 'il/', IT: 'lba/', ES: 'acb/', DE: 'bbl/', GR: 'gr/', AU: 'nbl/', AD: 'aba/', RU: 'vtb/' };
 
   // ---------- crypto ----------
   async function deriveKey(password) {

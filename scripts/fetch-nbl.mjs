@@ -5,10 +5,22 @@
 import { mkdir, writeFile, readFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { convertNbl } from '../lib/nbl.mjs';
+import { parseGame } from '../lib/parse.mjs';
+import { buildStints, checkStints } from '../lib/pbp.mjs';
+// Events at the same game clock can be ordered two ways in the feed; keep the order that reproduces the official box score.
+function bestConvert(match, season) {
+  let first = null;
+  for (const order of ['id', 'timestamp']) {
+    const raw = convertNbl(match, season, { order }); first ||= raw;
+    try { const g = parseGame(raw), r = buildStints(g, raw.pbp); if (r.ok && !checkStints(g, r.stints)) return raw; } catch { /* try the next order */ }
+  }
+  return first;
+}
 
 const year = Number(process.argv[2] || 2026);
 const OUT = join('data', 'raw', 'NBL' + year);
 const B = 'https://schedule.nbl.com.au/api/calendar';
+const CONVERTED_SINCE = Date.parse('2026-11-26T18:00:00Z'); // re-convert files made before the last converter fix
 const DELAY_MS = 800, REFRESH_DAYS = 10;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HEAD = { 'User-Agent': 'HTA LAB stats (Hapoel Tel Aviv basketball staff)', Accept: 'application/json' };
@@ -38,10 +50,10 @@ const keep = new Set(['_clubs.json', '_schedule.json']);
 let fresh = 0, kept = 0, failed = 0;
 for (const m of games.filter(played)) {
   const file = `${num(m.id)}.json`; keep.add(file);
-  if ((Date.now() - m.starts_at_ms) / 86400000 > REFRESH_DAYS) { try { JSON.parse(await readFile(join(OUT, file), 'utf8')); kept++; continue; } catch { /* download */ } }
+  if ((Date.now() - m.starts_at_ms) / 86400000 > REFRESH_DAYS) { try { const c = JSON.parse(await readFile(join(OUT, file), 'utf8')); if (Date.parse(c.fetchedAt || 0) > CONVERTED_SINCE) { kept++; continue; } } catch { /* download */ } }
   try {
     const d = await getJson(`${B}/match?match=${m.id}&league=NBL&season=${m.season_id}`);
-    const raw = convertNbl(d.match, 'NBL' + year);
+    const raw = bestConvert(d.match, 'NBL' + year);
     raw.gameCode = num(m.id);
     raw.header.Round = String(Number(String(m.round_label).match(/\d+/)?.[0]) || raw.header.Round);
     await writeFile(join(OUT, file), JSON.stringify(raw)); fresh++;

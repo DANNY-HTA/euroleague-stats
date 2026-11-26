@@ -9,6 +9,7 @@ import { flight, jsonAfter, convertAcb } from '../lib/acb.mjs';
 
 const year = process.argv[2] || '2026';
 const OUT = join('data', 'raw', 'ACB' + year);
+const CONVERTED_SINCE = Date.parse('2026-11-26T18:00:00Z'); // re-convert files made before the last converter fix
 const DELAY_MS = 900, REFRESH_DAYS = 10;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HEAD = { 'User-Agent': 'HTA LAB stats (Hapoel Tel Aviv basketball staff)', Accept: 'text/html' };
@@ -41,7 +42,7 @@ let fresh = 0, kept = 0, failed = 0;
 for (const m of matches.filter(played)) {
   const file = `${m.id}.json`; keep.add(file);
   const age = (Date.now() - Date.parse(m.startDateTime)) / 86400000;
-  if (age > REFRESH_DAYS) { try { JSON.parse(await readFile(join(OUT, file), 'utf8')); kept++; continue; } catch { /* download */ } }
+  if (age > REFRESH_DAYS) { try { const c = JSON.parse(await readFile(join(OUT, file), 'utf8')); if (Date.parse(c.fetchedAt || 0) > CONVERTED_SINCE) { kept++; continue; } } catch { /* download */ } }
   const slug = slugOf.get(m.id) || `partidos/x-vs-y-${m.id}`;
   try {
     const plays = await get(`https://live.acb.com/es/${slug}/jugadas`); await sleep(DELAY_MS);
