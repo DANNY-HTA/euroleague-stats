@@ -1,16 +1,14 @@
-const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats (Hapoel Tel Aviv)', Accept: 'text/html,application/json' };
-const g = async (u) => { try { const r = await fetch(u, { headers: H, redirect: 'follow' }); return [r.status, await r.text(), r.url]; } catch (e) { return [0, e.cause?.code || e.message, u]; } };
-const sites = {
-  GR: ['https://www.esake.gr', 'https://www.esake.gr/robots.txt', 'https://www.basket.gr'],
-  AU: ['https://www.nbl.com.au', 'https://www.nbl.com.au/robots.txt', 'https://www.nbl.com.au/schedule'],
-  LT: ['https://www.lkl.lt', 'https://www.lkl.lt/robots.txt', 'https://lkl.lt/en/'],
-  BCL: ['https://www.championsleague.basketball', 'https://www.championsleague.basketball/robots.txt'],
-  TR: ['https://www.tbf.org.tr', 'https://basketbolsuperligi.com', 'https://www.bsl.org.tr'],
-};
-for (const [k, us] of Object.entries(sites)) for (const u of us) {
-  const [s, t, fu] = await g(u);
-  console.log('R', k, s, u, '->', fu, String(t).length, (String(t).match(/<title>[^<]*/) || [''])[0].slice(0, 70), /Just a moment|cf-chl|captcha/i.test(t) ? 'CHALLENGE' : '');
-  if (/robots/.test(u) && s === 200) console.log('  ROBOTS', String(t).slice(0, 500).replace(/\n/g, ' ⏎ '));
-  const apis = [...new Set(String(t).match(/https?:\/\/[a-z0-9.-]*(api|data|stats|live|genius|fiba|hapi|wh\.)[a-z0-9.-]*\.[a-z]{2,}[^"' )<]{0,50}/gi) || [])].filter(x => !/googleapis|gstatic|facebook|twitter/.test(x)).slice(0, 10);
-  if (apis.length) console.log('  APIS', apis.join(' | '));
-}
+const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats (Hapoel Tel Aviv)', Accept: 'text/html' };
+const g = async (u) => { try { const r = await fetch(u, { headers: H }); return [r.status, await r.text()]; } catch (e) { return [0, e.message]; } };
+const show = (k, u, s, t) => { console.log('P', k, s, u, t.length, /__NEXT_DATA__/.test(t) ? 'NEXTDATA' : '', /self\.__next_f/.test(t) ? 'FLIGHT' : '', /geniussports/.test(t) ? 'GENIUS' : '');
+  for (const w of ['PlayersStats', 'playerStats', 'boxscore', 'boxScore', '"pts"', '"points"', 'Minutes', '"min"', 'play-by-play', 'playByPlay', 'pbp']) { const i = t.indexOf(w); if (i >= 0) console.log('   W', w, t.slice(Math.max(0, i - 120), i + 200).replace(/\s+/g, ' ')); } };
+// Greece
+let [s, t] = await g('https://www.esake.gr'); const gr = [...new Set(t.match(/https?:\/\/www\.esake\.gr\/[^"' ]*(game|match|agon|boxscore|stat)[^"' ]*/gi) || [])]; console.log('GRLINKS', gr.slice(0, 12).join(' '));
+for (const u of gr.slice(0, 2)) { const [a, b] = await g(u); show('GR', u, a, b); }
+// Australia
+[s, t] = await g('https://www.nbl.com.au/schedule'); const au = [...new Set(t.match(/\/(game|games|match|matches)\/[a-z0-9\/-]+/gi) || [])]; console.log('AULINKS', au.slice(0, 12).join(' '));
+for (const u of au.slice(0, 2)) { const [a, b] = await g('https://www.nbl.com.au' + u); show('AU', u, a, b); }
+// BCL
+[s, t] = await g('https://www.championsleague.basketball/en/games'); console.log('BCLGAMES', s, t.length);
+const bc = [...new Set(t.match(/\/en\/games?\/[a-z0-9\/-]+/gi) || [])]; console.log('BCLLINKS', bc.slice(0, 12).join(' '));
+for (const u of bc.filter(x => /\d/.test(x)).slice(0, 2)) { const [a, b] = await g('https://www.championsleague.basketball' + u); show('BCL', u, a, b); const [c, d] = await g('https://www.championsleague.basketball' + u + '#boxscore'); }
