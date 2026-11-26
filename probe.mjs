@@ -1,3 +1,10 @@
-import { readFileSync, existsSync } from 'node:fs';
-for (const f of ['site/brain.html', 'site/brain.js', 'site/hapoel-brain.json', 'site/team-stats.json', 'site/il/team-stats.json']) console.log('FILE', f, existsSync(f) ? readFileSync(f).length : 'MISSING');
-const b = JSON.parse(readFileSync('site/hapoel-brain.json', 'utf8')); console.log('BRAIN', b.players.length, b.games.length, b.teamStats.rows.length, JSON.stringify(b.games[0]).slice(0, 300));
+import { readFileSync, readdirSync } from 'node:fs';
+for (const dir of ['site', 'site/il', 'site/acb']) {
+  let n = 0, ok = 0, bad = [];
+  for (const f of readdirSync(dir).filter((f) => /^game-.*\.html$/.test(f))) {
+    const h = readFileSync(`${dir}/${f}`, 'utf8'); const m = h.match(/<script type="application\/json" id="qb-data">([\s\S]*?)<\/script>/);
+    if (!m) continue; n++; const D = JSON.parse(m[1]); if (D.ok) ok++; else bad.push(f);
+    if (n === 1) { const id = D.players[0][0]; console.log('SAMPLE', dir, f, D.periods, D.total, D.players[0][1], JSON.stringify(D.box[id]), JSON.stringify(D.iv[id])); }
+  }
+  console.log('QB', dir, 'pages', n, 'statsOk', ok, 'bad', bad.slice(0, 5).join(' '));
+}
