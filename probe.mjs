@@ -1,10 +1,16 @@
-import { flight } from './lib/acb.mjs';
-const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats (Hapoel Tel Aviv)', Accept: 'text/html' };
-const B = 'https://basketball.scouting4u.com';
-for (const p of ['/leagues/g-league-37/results', '/leagues/g-league-37/players', '/leagues/g-league-37/stats']) {
-  const t = await (await fetch(B + p, { headers: H })).text(); const F = flight(t);
-  console.log('PAGE', p, t.length, F.length);
-  const hrefs = [...new Set((t + F).match(/\/(games?|matches?|match|boxscore|players?)\/[a-z0-9-]+/gi) || [])]; console.log('  HREFS', hrefs.slice(0, 15).join(' '));
-  for (const w of ['"games"', '"matches"', 'homeScore', 'home_score', 'boxscore', 'points', '"results"', 'Season', 'season']) { const i = F.indexOf(w); if (i >= 0) console.log('  W', w, F.slice(Math.max(0, i - 200), i + 500).replace(/\s+/g, ' ')); }
-  const txt = t.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '); const k = txt.indexOf('Results'); console.log('  TEXT', txt.slice(k, k + 1200));
+const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats (Hapoel Tel Aviv)', Accept: 'text/html,application/json' };
+const g = async (u) => { try { const r = await fetch(u, { headers: H, redirect: 'follow' }); return [r.status, await r.text(), r.url]; } catch (e) { return [0, e.cause?.code || e.message, u]; } };
+const sites = {
+  GR: ['https://www.esake.gr', 'https://www.esake.gr/robots.txt', 'https://www.basket.gr'],
+  AU: ['https://www.nbl.com.au', 'https://www.nbl.com.au/robots.txt', 'https://www.nbl.com.au/schedule'],
+  LT: ['https://www.lkl.lt', 'https://www.lkl.lt/robots.txt', 'https://lkl.lt/en/'],
+  BCL: ['https://www.championsleague.basketball', 'https://www.championsleague.basketball/robots.txt'],
+  TR: ['https://www.tbf.org.tr', 'https://basketbolsuperligi.com', 'https://www.bsl.org.tr'],
+};
+for (const [k, us] of Object.entries(sites)) for (const u of us) {
+  const [s, t, fu] = await g(u);
+  console.log('R', k, s, u, '->', fu, String(t).length, (String(t).match(/<title>[^<]*/) || [''])[0].slice(0, 70), /Just a moment|cf-chl|captcha/i.test(t) ? 'CHALLENGE' : '');
+  if (/robots/.test(u) && s === 200) console.log('  ROBOTS', String(t).slice(0, 500).replace(/\n/g, ' ⏎ '));
+  const apis = [...new Set(String(t).match(/https?:\/\/[a-z0-9.-]*(api|data|stats|live|genius|fiba|hapi|wh\.)[a-z0-9.-]*\.[a-z]{2,}[^"' )<]{0,50}/gi) || [])].filter(x => !/googleapis|gstatic|facebook|twitter/.test(x)).slice(0, 10);
+  if (apis.length) console.log('  APIS', apis.join(' | '));
 }
