@@ -7,6 +7,14 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const mm = (secs) => { const t = Math.round(secs); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
   const pLabel = (q) => (q <= 4 ? 'Q' + q : D.periods > 5 ? 'OT' + (q - 4) : 'OT');
+  // Game seconds -> "Q2 6:41" (time left on the quarter clock). At a quarter's end, show "end of Q1".
+  const starts = []; { let a = 0; for (let q = 1; q <= D.periods; q++) { starts.push([a, q <= 4 ? 600 : 300]); a += q <= 4 ? 600 : 300; } }
+  const clock = (t, isEnd) => {
+    let i = starts.findIndex(([a, len]) => (isEnd ? t > a && t <= a + len + 0.5 : t >= a - 0.5 && t < a + len));
+    if (i < 0) i = starts.length - 1;
+    const [a, len] = starts[i], left = Math.max(0, len - (t - a));
+    return isEnd && left < 0.5 ? `end of ${pLabel(i + 1)}` : `${pLabel(i + 1)} ${mm(left)}`;
+  };
   const picked = new Set(Array.from({ length: D.periods }, (_, i) => i + 1));
   let quick = 'all';
 
@@ -33,7 +41,7 @@ ${rows.map(({ p, a }) => `<tr><td>${p[3] ? '<span class="st" title="Starter">●
     const pct = (t) => (100 * t / total).toFixed(3);
     return `<h3>${esc(D[side][1])} — playing time</h3><div class="pt-chart">
 <div class="pt-row pt-head"><span></span><div class="pt-track">${per.map((t, i) => `<span class="pt-q" style="left:${pct(t)}%">${pLabel(i + 1)}</span>`).join('')}</div><span class="num">MIN</span></div>
-${rows.map(({ p, iv, secs }) => `<div class="pt-row"><span class="pt-name">${p[3] ? '<span class="st">●</span> ' : ''}${esc(p[1])}</span><div class="pt-track">${per.slice(1).map((t) => `<i class="pt-line" style="left:${pct(t)}%"></i>`).join('')}${iv.map(([a, b]) => `<b class="pt-on" style="left:${pct(a)}%;width:${pct(b - a)}%" title="${mm(a)}–${mm(b)} game time (${mm(b - a)})"></b>`).join('')}</div><span class="num">${mm(secs)}</span></div>`).join('')}
+${rows.map(({ p, iv, secs }) => `<div class="pt-row"><span class="pt-name">${p[3] ? '<span class="st">●</span> ' : ''}${esc(p[1])}</span><div class="pt-track">${per.slice(1).map((t) => `<i class="pt-line" style="left:${pct(t)}%"></i>`).join('')}${iv.map(([a, b]) => `<b class="pt-on" tabindex="0" role="button" data-a="${a}" data-b="${b}" data-n="${esc(p[1])}" style="left:${pct(a)}%;width:${pct(b - a)}%" title="${clock(a)} → ${clock(b, true)} · ${mm(b - a)}"></b>`).join('')}</div><span class="num">${mm(secs)}</span></div>`).join('')}
 </div>`;
   }
   function render() {
@@ -41,7 +49,7 @@ ${rows.map(({ p, iv, secs }) => `<div class="pt-row"><span class="pt-name">${p[3
 <span class="muted small">${quick === 'all' ? 'Whole game' : [...picked].sort().map(pLabel).join(' + ')}</span></div>
 ${D.ok ? boxFor('H') + boxFor('A') : '<p class="muted">The play-by-play for this game does not add up exactly to the official box score, so the quarter box score is not shown. Playing time below is exact.</p>'}
 <div class="pt-wrap">${chart('H')}${chart('A')}</div>
-<p class="muted small">Quarter lines are from the play-by-play; in the "Whole game" view every stat matches the official box score${D.tdiff > 2 ? `, and minutes are within ${D.tdiff} seconds of the official minutes (the play-by-play clock is slightly off in this game)` : ''}. ● = starter. Hover a bar for the exact minutes.</p>`;
+<p class="muted small">Quarter lines are from the play-by-play; in the "Whole game" view every stat matches the official box score${D.tdiff > 2 ? `, and minutes are within ${D.tdiff} seconds of the official minutes (the play-by-play clock is slightly off in this game)` : ''}. ● = starter. Click a bar to see the minutes of that stretch.</p>`;
     app.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => {
       const q = b.dataset.q;
       if (q === 'all') { picked.clear(); for (let i = 1; i <= D.periods; i++) picked.add(i); quick = 'all'; }
@@ -51,5 +59,21 @@ ${D.ok ? boxFor('H') + boxFor('A') : '<p class="muted">The play-by-play for this
       render();
     }));
   }
+  // Click / tap a bar: show that stretch's minutes.
+  let pop = null;
+  const closePop = () => { pop?.remove(); pop = null; app.querySelectorAll('.pt-on.sel').forEach((x) => x.classList.remove('sel')); };
+  app.addEventListener('click', (e) => {
+    const bar = e.target.closest('.pt-on');
+    if (!bar) { if (!e.target.closest('.pt-pop')) closePop(); return; }
+    const same = bar.classList.contains('sel'); closePop(); if (same) return;
+    const a = +bar.dataset.a, b = +bar.dataset.b;
+    bar.classList.add('sel');
+    pop = document.createElement('div'); pop.className = 'pt-pop';
+    pop.innerHTML = `<strong>${bar.dataset.n}</strong><span class="pt-pop-min">${mm(b - a)}</span><span>${clock(a)} → ${clock(b, true)}</span>`;
+    const track = bar.parentElement; track.appendChild(pop);
+    const mid = (bar.offsetLeft + bar.offsetWidth / 2) / track.offsetWidth;
+    pop.style.left = `${Math.min(Math.max(mid * 100, 8), 92)}%`;
+  });
+  app.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('pt-on')) { e.preventDefault(); e.target.click(); } if (e.key === 'Escape') closePop(); });
   render();
 })();
