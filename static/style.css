@@ -726,3 +726,14 @@ table.box.q { max-width: 520px; }
 .qs-table th button[aria-sort] { color: var(--red); }
 .qs-table tr.hap td { background: var(--red-soft); font-weight: 700; }
 .qs-filters { align-items: center; gap: 10px 16px; }
+/* ---- Bigger league logos everywhere ---- */
+.league-card { padding: 22px 12px 18px; }
+.league-card img, .league-card .lg-dot.big { width: 120px; height: 96px; object-fit: contain; }
+.league-menu-list { grid-template-columns: repeat(2, minmax(240px, 1fr)); min-width: 520px; }
+.league-menu-list a { padding: 10px 12px; font-size: 15px; }
+.league-menu-list img, .league-menu-list .lg-dot { width: 44px; height: 44px; }
+.comp-tabs button img { width: 28px; height: 28px; }
+.comp-h img { width: 40px; height: 40px; }
+.cc-lg img { width: 34px; height: 34px; }
+.cover .league-badge img { width: auto; height: auto; max-width: 260px; max-height: 150px; min-width: 120px; min-height: 90px; object-fit: contain; }
+@media (max-width: 700px) { .league-menu-list { grid-template-columns: 1fr; min-width: 260px; } .league-card img { width: 96px; height: 76px; } }
