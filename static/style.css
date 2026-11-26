@@ -711,3 +711,5 @@ table.box.q { max-width: 520px; }
 .lc-name { font: 800 18px/1.1 var(--display); text-transform: uppercase; }
 .hap-sched td { white-space: nowrap; }
 .cover .league-badge img { max-width: 190px; max-height: 120px; object-fit: contain; background: #fff; border-radius: 16px; padding: 10px; }
+.hap-toc a { color: var(--red); background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+.hap-toc a:hover { border-color: var(--red); }
