@@ -132,16 +132,21 @@ const wins = allMine.filter((g) => (g.home.code === 'HAP' ? g.home.score > g.awa
 const losses = allMine.filter((g) => !wins.includes(g));
 const tW = splitRow(wins), tL = splitRow(losses);
 const tH = splitRow(allMine.filter((g) => g.home.code === 'HAP')), tA = splitRow(allMine.filter((g) => g.away.code === 'HAP'));
+for (const C of ACTIVE) {
+  const won = (g) => (g.home.code === C.code ? g.home.score > g.away.score : g.away.score > g.home.score);
+  const one = (gs) => (gs.length ? teamTable(gs).find((t) => t.code === C.code) || null : null);
+  C.split = { w: one(C.mine.filter(won)), l: one(C.mine.filter((g) => !won(g))), h: one(C.mine.filter((g) => g.home.code === C.code)), a: one(C.mine.filter((g) => g.away.code === C.code)) };
+}
 const fmtV = (t, k, fmt) => (!t ? '–' : fmt ? fmt(t) : k === 'net' ? signed(t[k]) : f1(t[k]));
 const rk = (C, k) => (C.team?.ranks?.[k] ? `<span class="rank ${C.team.ranks[k] <= 3 ? 'top' : C.team.ranks[k] > C.teams.length - 3 ? 'bottom' : ''}">${ord(C.team.ranks[k])}</span>` : '');
 const teamStatsTable = `<div class="scroll"><table class="hap-stats"><thead><tr><th scope="col">Stat</th><th scope="col" class="num" data-comp-col="all">All</th>
-${ACTIVE.map((C) => `<th scope="col" class="num" data-comp-col="${C.key}">${esc(C.short)}</th><th scope="col" class="num muted" data-comp-col="${C.key}">${esc(C.short)} avg</th>`).join('')}
+${ACTIVE.map((C) => `<th scope="col" class="num" data-comp-col="${C.key}">${esc(C.short)}</th><th scope="col" class="num muted" data-comp-col="${C.key}">${esc(C.short)} avg</th>${[['w', 'Wins'], ['l', 'Losses'], ['h', 'Home'], ['a', 'Away']].map(([k, l]) => `<th scope="col" class="num" data-comp-col="${C.key}">${l}${C.split[k] ? ` <span class="muted small">${C.split[k].w}–${C.split[k].l}</span>` : ''}</th>`).join('')}`).join('')}
 <th scope="col" class="num" data-comp-col="all">Wins</th><th scope="col" class="num" data-comp-col="all">Losses</th><th scope="col" class="num" data-comp-col="all">Home</th><th scope="col" class="num" data-comp-col="all">Away</th></tr></thead><tbody>
 ${STATS.map(([label, k, fmt]) => `<tr><th scope="row">${label}</th><td class="num" data-comp-col="all"><strong>${fmtV(tAll, k, fmt)}</strong></td>
-${ACTIVE.map((C) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.team, k, fmt)} ${k ? rk(C, k) : ''}</td><td class="num muted" data-comp-col="${C.key}">${k ? f1(C.lg(k)) : ''}</td>`).join('')}
+${ACTIVE.map((C) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.team, k, fmt)} ${k ? rk(C, k) : ''}</td><td class="num muted" data-comp-col="${C.key}">${k ? f1(C.lg(k)) : ''}</td>${['w', 'l', 'h', 'a'].map((x) => `<td class="num" data-comp-col="${C.key}">${fmtV(C.split[x], k, fmt)}</td>`).join('')}`).join('')}
 <td class="num" data-comp-col="all">${fmtV(tW, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tL, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tH, k, fmt)}</td><td class="num" data-comp-col="all">${fmtV(tA, k, fmt)}</td></tr>`).join('')}
 </tbody></table></div>
-<p class="muted small">Per game; ratings are points per 100 possessions. Rank = place in that league (1st = best); avg = league average. "All", wins, losses, home and away combine both competitions.</p>`;
+<p class="muted small">Per game; ratings are points per 100 possessions. Rank = place in that league (1st = best); avg = league average. Wins, losses, home and away are within the competition chosen above ("All competitions" combines both).</p>`;
 const quarterTable = (() => {
   const rows = ACTIVE.map((C) => { const q = quarterAverages(teamGames(C.games, C.code)); return q ? `<tr><th scope="row">${esc(C.short)}</th>${q.map((x) => `<td class="num">${f1(x.for)}–${f1(x.against)} <small class="${x.margin >= 0 ? 'pos' : 'neg'}">${signed(x.margin)}</small></td>`).join('')}</tr>` : ''; }).join('');
   return rows ? `<div class="scroll"><table><thead><tr><th scope="col"></th><th scope="col" class="num">Q1</th><th scope="col" class="num">Q2</th><th scope="col" class="num">Q3</th><th scope="col" class="num">Q4</th></tr></thead><tbody>${rows}</tbody></table></div>` : '';
@@ -174,8 +179,8 @@ function boardsFor(C) {
     if (!mine.length) return '';
     const vals = mine.map((x) => x.v), hi = Math.max(...vals), lo = Math.min(...vals);
     const width = (v) => (asc ? (hi === lo ? 100 : 5 + 95 * (hi - v) / (hi - lo)) : hi > 0 ? 100 * Math.max(0, v) / hi : 50);
-    return `<section class="card board open"><h2>${title}</h2><p class="muted">${sub}. Rank among the ${ranked.length} ${poolKind === 'qual' ? 'qualified ' : ''}players in the league.</p><ol>
-${mine.map(({ p, v }) => { const r = rankOf.get(p.id); return `<li><span class="muted num">${r ? ord(r) : '–'}</span><div><a href="${C.pfx}player-${safe(p.id)}.html">${esc(p.name)}</a>${poolKind === 'qual' && !isQ.has(p.id) ? ' <span class="muted small">(not enough minutes to rank)</span>' : ''}<div class="bar"><span style="width:${Math.max(3, width(v)).toFixed(1)}%"></span></div></div><strong class="num">${fmt(v)}</strong></li>`; }).join('')}
+    return `<section class="card board open"><h2>${title}</h2><p class="muted">${sub}. Ranked within Hapoel.</p><ol>
+${mine.map(({ p, v }, i) => `<li><span class="muted num">${ord(i + 1)}</span><div><a href="${C.pfx}player-${safe(p.id)}.html">${esc(p.name)}</a>${poolKind === 'qual' && !isQ.has(p.id) ? ' <span class="muted small">(few minutes)</span>' : ''}<div class="bar"><span style="width:${Math.max(3, width(v)).toFixed(1)}%"></span></div></div><strong class="num">${fmt(v)}</strong></li>`).join('')}
 </ol></section>`;
   }).filter(Boolean);
 }
@@ -187,8 +192,8 @@ function mvpFor(C) {
   const rows = C.qual.map((p, i) => ({ p, score: F.reduce((s, [, w], j) => { const v = vals[j][i]; return s + (v == null || !Number.isFinite(v) ? 0 : (v - st[j].m) / st[j].sd) * w; }, 0) })).sort((a, b) => b.score - a.score);
   const mine = rows.map((x, i) => ({ ...x, r: i + 1 })).filter((x) => C.roster.some((p) => p.id === x.p.id));
   if (!mine.length) return '';
-  return `<section class="card board open"><h2>MVP race</h2><p class="muted">HTA LAB MVP index (PIR 30%, impact 20%, team win % 15%, points 15%, TS% 10%, on/off 10%) — place in the ${C.short} race of ${rows.length} qualified players.</p><ol>
-${mine.map((x) => `<li><span class="muted num">${ord(x.r)}</span><div><a href="${C.pfx}player-${safe(x.p.id)}.html">${esc(x.p.name)}</a><div class="bar"><span style="width:${Math.max(3, Math.min(100, 50 + 25 * x.score)).toFixed(1)}%"></span></div></div><strong class="num">${x.score.toFixed(2)}</strong></li>`).join('')}
+  return `<section class="card board open"><h2>MVP race</h2><p class="muted">HTA LAB MVP index (PIR 30%, impact 20%, team win % 15%, points 15%, TS% 10%, on/off 10%) — ranked within Hapoel.</p><ol>
+${mine.map((x, i) => `<li><span class="muted num">${ord(i + 1)}</span><div><a href="${C.pfx}player-${safe(x.p.id)}.html">${esc(x.p.name)}</a><div class="bar"><span style="width:${Math.max(3, Math.min(100, 50 + 25 * x.score)).toFixed(1)}%"></span></div></div><strong class="num">${x.score.toFixed(2)}</strong></li>`).join('')}
 </ol></section>`;
 }
 
@@ -262,15 +267,16 @@ ${[...nextGames.slice(0, 4)].map(schedRow).join('')}${sched.filter((x) => x.res)
 <section class="card" id="team"><h2>Team stats</h2><p class="muted">Hapoel's numbers in each competition, with the league rank and league average, and both competitions together split by wins, losses, home and away.</p>
 ${teamStatsTable}
 ${quarterTable ? `<h3>Average by quarter</h3>${quarterTable}` : ''}
+<p class="small"><a href="quarter-split.html"><strong>EuroLeague quarter splits — every player and team, quarter by quarter →</strong></a></p>
 <p class="small">${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}.html"><strong>${esc(C.short)} team page →</strong></a> · <a href="${C.pfx}team-${safe(C.code)}-report.html">${esc(C.short)} team report</a>`).join(' · ')}</p></section>
 
-<section class="card" id="players"><h2>Players</h2><p class="muted">Every Hapoel player, every stat, in the competition chosen above. Click a column to sort.</p>
+<section class="card" id="players"><h2>Players</h2><p class="muted">Every Hapoel player, every stat, in the competition chosen above — per game, totals or per 40 minutes, over all games, wins, losses, home, away, the last few, or any games you tick. Click a column to sort.</p>
 <div id="hap-players"><p class="muted">Loading…</p></div></section>
 
 <section class="card" id="lineups"><h2>Lineups</h2><p class="muted">Hapoel's five-man units — and 2-, 3- and 4-man combinations — from the official play-by-play. Pick the games: all of them, the last few, wins or losses, one competition, or any games you tick.</p>
 <div id="hap-lineups"><p class="muted">Loading…</p></div></section>
 
-<section id="boards"><h2 class="sec-title">Leaderboards — Hapoel players</h2><p class="muted sec-sub">Every leaderboard from the league home pages, with Hapoel's players and their place in the league.</p>
+<section id="boards"><h2 class="sec-title">Leaderboards — Hapoel players</h2><p class="muted sec-sub">Every leaderboard from the league home pages, with Hapoel's players ranked within the team.</p>
 ${ACTIVE.map((C) => `<div class="comp-block" data-comp="${C.key}"><h3 class="comp-h">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="22" height="22">` : ''}${esc(C.short)}</h3><div class="row-3">${[mvpFor(C), ...boardsFor(C)].filter(Boolean).join('')}</div></div>`).join('')}
 </section>
 

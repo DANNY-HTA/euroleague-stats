@@ -1,5 +1,10 @@
-import { readFileSync, readdirSync } from 'node:fs';
-const f = readdirSync('site').filter((x) => /^player-/.test(x)).find((x) => readFileSync('site/' + x, 'utf8').includes('id="competitions"'));
-const h = readFileSync('site/' + f, 'utf8'); const i = h.indexOf('id="competitions"');
-console.log('SAMPLE', f, h.slice(i, i + 2500).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 900));
-for (const name of ['elijahbryant', 'danoturu', 'vasiliemicic']) { const x = readdirSync('site').find((y) => y.toLowerCase().includes(name)); }
+import { readFileSync } from 'node:fs';
+const h = readFileSync('site/quarter-split.html', 'utf8');
+const D = JSON.parse(h.match(/id="qs-data">([\s\S]*?)<\/script>/)[1]);
+const I = Object.fromEntries(D.f.map((k, i) => [k, i]));
+console.log('QS games', D.games, 'of', D.total, 'players', D.players.length, 'teams', D.teams.length);
+const tot = (cells, k) => Object.values(cells).reduce((s, c) => s + c[I[k]], 0);
+for (const t of D.teams.slice(0, 4)) console.log('TEAM', t[1], 'pts', tot(t[4], 'pts'), 'pf(stints)', tot(t[4], 'pf'), 'opp pts', tot(t[5], 'pts'), 'pa', tot(t[4], 'pa'), 'min', (tot(t[4], 'secs') / 60).toFixed(0), 'games', t[4][1]?.[I.g]);
+const bad = D.teams.filter((t) => tot(t[4], 'pts') !== tot(t[4], 'pf'));
+console.log('MISMATCH teams', bad.length);
+const vz = D.players.find((p) => /Vezenkov/.test(p[0])); console.log('VEZENKOV Q1', JSON.stringify(Object.fromEntries(D.f.map((k) => [k, vz[4][1][I[k]]]))));

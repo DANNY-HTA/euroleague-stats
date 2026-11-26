@@ -17,4 +17,4 @@ jobs:
           path: data
           key: euroleague-data-none
           restore-keys: euroleague-data-
-      - run: ls data/raw && npm run build 2>&1 | tail -1 && for k in ec il lba acb bbl gr nbl aba vtb; do node scripts/build.mjs --league $k 2>&1 | tail -1; done && CROSS_DEBUG=1 node scripts/build-cross.mjs
+      - run: ls data/raw && npm run build 2>&1 | tail -2 && node probe.mjs
