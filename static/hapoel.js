@@ -75,7 +75,7 @@ ${view === 'q' ? quarterBox(g) : `<h4>Hapoel Tel Aviv</h4><div class="scroll">${
   function renderGames() {
     const list = D.games.filter((g) => inComp(g.c));
     if (!list.length) { gamesBox.innerHTML = '<p class="muted">No games yet.</p>'; return; }
-    gamesBox.innerHTML = list.map((g, i) => `<details class="hap-game" data-i="${D.games.indexOf(g)}"${i === 0 ? ' open' : ''}><summary>${compTag(g.c)}<span class="hg-date">${fmtD(g.d)}</span><span class="hg-opp">${g.h ? 'vs' : 'at'} ${g.opp[1] ? `<img src="${esc(g.opp[1])}" alt="" width="20" height="20">` : ''}${esc(g.opp[0])}</span><strong class="${g.w ? 'pos' : 'neg'}">${g.w ? 'W' : 'L'} ${g.s[0]}–${g.s[1]}</strong>${g.r ? `<span class="muted small">Rd ${g.r}</span>` : ''}</summary><div class="hg-body"></div></details>`).join('');
+    gamesBox.innerHTML = list.map((g, i) => `<details class="hap-game" data-i="${D.games.indexOf(g)}"><summary>${compTag(g.c)}<span class="hg-date">${fmtD(g.d)}</span><span class="hg-opp">${g.h ? 'vs' : 'at'} ${g.opp[1] ? `<img src="${esc(g.opp[1])}" alt="" width="20" height="20">` : ''}${esc(g.opp[0])}</span><strong class="${g.w ? 'pos' : 'neg'}">${g.w ? 'W' : 'L'} ${g.s[0]}–${g.s[1]}</strong>${g.r ? `<span class="muted small">Rd ${g.r}</span>` : ''}</summary><div class="hg-body"></div></details>`).join('');
     const fill = (d, view = 'basic') => { const g = D.games[Number(d.dataset.i)]; const b = d.querySelector('.hg-body'); b.innerHTML = gameDetail(g, view);
       b.querySelectorAll('[data-view]').forEach((btn) => btn.addEventListener('click', () => fill(d, btn.dataset.view))); };
     gamesBox.querySelectorAll('details').forEach((d) => { if (d.open) fill(d); d.addEventListener('toggle', () => { if (d.open && !d.querySelector('.box-views')) fill(d); }); });
