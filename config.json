@@ -87,6 +87,18 @@
       "dropInvalid": true,
       "poolCode": "DE",
       "fetch": "node scripts/fetch-bbl.mjs 2026"
+    },
+    "gr": {
+      "seasonLabel": "Stoiximan GBL 2026–27",
+      "leagueName": "Greek Basketball League",
+      "shortName": "GBL",
+      "sourceText": "the official Greek Basketball League (esake.gr) box scores",
+      "leagueLogo": "",
+      "dataDir": "GR2026",
+      "root": "../",
+      "dropInvalid": true,
+      "poolCode": "GR",
+      "fetch": "node scripts/fetch-esake.mjs 2026"
     }
   },
   "nameFixes": {
