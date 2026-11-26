@@ -1,10 +1,4 @@
 import { readFileSync } from 'node:fs';
-const h = readFileSync('site/quarter-split.html', 'utf8');
-const D = JSON.parse(h.match(/id="qs-data">([\s\S]*?)<\/script>/)[1]);
-const I = Object.fromEntries(D.f.map((k, i) => [k, i]));
-console.log('QS games', D.games, 'of', D.total, 'players', D.players.length, 'teams', D.teams.length);
-const tot = (cells, k) => Object.values(cells).reduce((s, c) => s + c[I[k]], 0);
-for (const t of D.teams.slice(0, 4)) console.log('TEAM', t[1], 'pts', tot(t[4], 'pts'), 'pf(stints)', tot(t[4], 'pf'), 'opp pts', tot(t[5], 'pts'), 'pa', tot(t[4], 'pa'), 'min', (tot(t[4], 'secs') / 60).toFixed(0), 'games', t[4][1]?.[I.g]);
-const bad = D.teams.filter((t) => tot(t[4], 'pts') !== tot(t[4], 'pf'));
-console.log('MISMATCH teams', bad.length);
-const vz = D.players.find((p) => /Vezenkov/.test(p[0])); console.log('VEZENKOV Q1', JSON.stringify(Object.fromEntries(D.f.map((k) => [k, vz[4][1][I[k]]]))));
+const h = readFileSync('site/index.html', 'utf8');
+const t = h.slice(h.indexOf('class="hap-stats"'), h.indexOf('</table>', h.indexOf('class="hap-stats"')));
+for (const lab of ['Points per possession', 'Opp points per possession', '2-pointers made', '3-pointers attempted', 'Opp free throws made']) { const i = t.indexOf(lab); console.log('ROW', t.slice(i, i + 900).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200)); }
