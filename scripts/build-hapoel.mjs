@@ -179,8 +179,8 @@ function boardsFor(C) {
     if (!mine.length) return '';
     const vals = mine.map((x) => x.v), hi = Math.max(...vals), lo = Math.min(...vals);
     const width = (v) => (asc ? (hi === lo ? 100 : 5 + 95 * (hi - v) / (hi - lo)) : hi > 0 ? 100 * Math.max(0, v) / hi : 50);
-    return `<section class="card board open"><h2>${title}</h2><p class="muted">${sub}. Rank among the ${ranked.length} ${poolKind === 'qual' ? 'qualified ' : ''}players in the league.</p><ol>
-${mine.map(({ p, v }) => { const r = rankOf.get(p.id); return `<li><span class="muted num">${r ? ord(r) : '–'}</span><div><a href="${C.pfx}player-${safe(p.id)}.html">${esc(p.name)}</a>${poolKind === 'qual' && !isQ.has(p.id) ? ' <span class="muted small">(not enough minutes to rank)</span>' : ''}<div class="bar"><span style="width:${Math.max(3, width(v)).toFixed(1)}%"></span></div></div><strong class="num">${fmt(v)}</strong></li>`; }).join('')}
+    return `<section class="card board open"><h2>${title}</h2><p class="muted">${sub}. Ranked within Hapoel.</p><ol>
+${mine.map(({ p, v }, i) => `<li><span class="muted num">${ord(i + 1)}</span><div><a href="${C.pfx}player-${safe(p.id)}.html">${esc(p.name)}</a>${poolKind === 'qual' && !isQ.has(p.id) ? ' <span class="muted small">(few minutes)</span>' : ''}<div class="bar"><span style="width:${Math.max(3, width(v)).toFixed(1)}%"></span></div></div><strong class="num">${fmt(v)}</strong></li>`).join('')}
 </ol></section>`;
   }).filter(Boolean);
 }
@@ -192,8 +192,8 @@ function mvpFor(C) {
   const rows = C.qual.map((p, i) => ({ p, score: F.reduce((s, [, w], j) => { const v = vals[j][i]; return s + (v == null || !Number.isFinite(v) ? 0 : (v - st[j].m) / st[j].sd) * w; }, 0) })).sort((a, b) => b.score - a.score);
   const mine = rows.map((x, i) => ({ ...x, r: i + 1 })).filter((x) => C.roster.some((p) => p.id === x.p.id));
   if (!mine.length) return '';
-  return `<section class="card board open"><h2>MVP race</h2><p class="muted">HTA LAB MVP index (PIR 30%, impact 20%, team win % 15%, points 15%, TS% 10%, on/off 10%) — place in the ${C.short} race of ${rows.length} qualified players.</p><ol>
-${mine.map((x) => `<li><span class="muted num">${ord(x.r)}</span><div><a href="${C.pfx}player-${safe(x.p.id)}.html">${esc(x.p.name)}</a><div class="bar"><span style="width:${Math.max(3, Math.min(100, 50 + 25 * x.score)).toFixed(1)}%"></span></div></div><strong class="num">${x.score.toFixed(2)}</strong></li>`).join('')}
+  return `<section class="card board open"><h2>MVP race</h2><p class="muted">HTA LAB MVP index (PIR 30%, impact 20%, team win % 15%, points 15%, TS% 10%, on/off 10%) — ranked within Hapoel.</p><ol>
+${mine.map((x, i) => `<li><span class="muted num">${ord(i + 1)}</span><div><a href="${C.pfx}player-${safe(x.p.id)}.html">${esc(x.p.name)}</a><div class="bar"><span style="width:${Math.max(3, Math.min(100, 50 + 25 * x.score)).toFixed(1)}%"></span></div></div><strong class="num">${x.score.toFixed(2)}</strong></li>`).join('')}
 </ol></section>`;
 }
 
@@ -275,7 +275,7 @@ ${quarterTable ? `<h3>Average by quarter</h3>${quarterTable}` : ''}
 <section class="card" id="lineups"><h2>Lineups</h2><p class="muted">Hapoel's five-man units — and 2-, 3- and 4-man combinations — from the official play-by-play. Pick the games: all of them, the last few, wins or losses, one competition, or any games you tick.</p>
 <div id="hap-lineups"><p class="muted">Loading…</p></div></section>
 
-<section id="boards"><h2 class="sec-title">Leaderboards — Hapoel players</h2><p class="muted sec-sub">Every leaderboard from the league home pages, with Hapoel's players and their place in the league.</p>
+<section id="boards"><h2 class="sec-title">Leaderboards — Hapoel players</h2><p class="muted sec-sub">Every leaderboard from the league home pages, with Hapoel's players ranked within the team.</p>
 ${ACTIVE.map((C) => `<div class="comp-block" data-comp="${C.key}"><h3 class="comp-h">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="22" height="22">` : ''}${esc(C.short)}</h3><div class="row-3">${[mvpFor(C), ...boardsFor(C)].filter(Boolean).join('')}</div></div>`).join('')}
 </section>
 
