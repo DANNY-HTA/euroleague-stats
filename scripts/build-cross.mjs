@@ -87,5 +87,6 @@ for (const g of people) for (const e of g) {
   else { const m = html.lastIndexOf('</main>'); if (m < 0) continue; html = html.slice(0, m) + sec + html.slice(m); }
   writeFileSync(file, html); pages++;
 }
+if (process.env.CROSS_DEBUG) for (const g of people) { const lg = new Set(g.map((e) => e.lg)); const odd = lg.size > 2 || (!lg.has('el') && !lg.has('ec')) || (lg.has('el') && lg.has('ec')); if (odd) console.log('ODD', g.map((e) => `${e.lg}:${e.name}/${e.teamName}/age ${e.age}/gp ${e.gp}`).join(' | ')); }
 const pairs = new Map(); for (const g of people) { const k = [...new Set(g.map((e) => e.lg))].sort((a, b) => order.get(a) - order.get(b)).join(' + '); pairs.set(k, (pairs.get(k) || 0) + 1); }
 console.log(`✓ Players in more than one competition: ${people.length} (${pages} player pages updated) — ${[...pairs].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}: ${n}`).join(', ')}`);
