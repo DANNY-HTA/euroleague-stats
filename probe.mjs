@@ -6,6 +6,6 @@ const games = list(j).filter((g) => /winner league/i.test(g.board_name_eng || ''
 console.log('games', games.length, games[0]?.ExternalID);
 const ls = await (await fetch(`${BASE}/livestats/data/game-${games[0].ExternalID}.json`)).json();
 const acts = ls.actions?.actions || [];
-const shots = acts.filter((a) => /2pt|3pt/i.test(a.actionType || ''));
+const types=[...new Set(acts.map(a=>a.type))]; console.log('TYPES', types.join(',')); const shots = acts.filter((a) => /shot|2|3|point/i.test(String(a.type)));
 console.log('acts', acts.length, 'shots', shots.length, 'keys', Object.keys(acts[0] || {}).join(','));
 console.log('SHOT', JSON.stringify(shots.slice(0, 3)));
