@@ -755,3 +755,18 @@ nav a.nav-brain { background: #111; color: #fff; } nav a.nav-brain[aria-current=
 .brain-ask textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--line); border-radius: 12px; font: inherit; resize: vertical; }
 .brain-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
 .brain-row select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+
+/* Game page: quarter box score & playing time */
+#quarters h3 { margin: 1.2rem 0 .4rem; font-size: 1rem; }
+.qb-box tfoot th, .qb-box tfoot td { font-weight: 700; border-top: 2px solid currentColor; }
+.qb-box .st, .pt-chart .st { color: var(--red); font-size: .7em; }
+.pt-wrap { display: grid; gap: 1rem; }
+.pt-chart { display: grid; gap: 3px; font-size: .82rem; }
+.pt-row { display: grid; grid-template-columns: minmax(110px, 180px) 1fr 48px; align-items: center; gap: .5rem; }
+.pt-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-track { position: relative; height: 16px; background: rgba(127,127,127,.12); border-radius: 3px; }
+.pt-head .pt-track { background: none; height: 14px; }
+.pt-q { position: absolute; top: 0; padding-left: 3px; font-size: .72rem; opacity: .7; }
+.pt-line { position: absolute; top: -2px; bottom: -2px; width: 1px; background: rgba(127,127,127,.5); }
+.pt-on { position: absolute; top: 2px; bottom: 2px; background: var(--red); border-radius: 2px; opacity: .85; }
+.pt-on:hover { opacity: 1; outline: 1px solid currentColor; }

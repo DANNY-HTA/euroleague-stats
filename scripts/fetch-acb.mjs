@@ -9,7 +9,7 @@ import { flight, jsonAfter, convertAcb } from '../lib/acb.mjs';
 
 const year = process.argv[2] || '2026';
 const OUT = join('data', 'raw', 'ACB' + year);
-const CONVERTED_SINCE = Date.parse('2026-11-26T18:00:00Z'); // re-convert files made before the last converter fix
+const CONVERTED_SINCE = Date.parse('2026-11-26T21:30:00Z'); // re-convert files made before the last converter fix
 const DELAY_MS = 900, REFRESH_DAYS = 10;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HEAD = { 'User-Agent': 'HTA LAB stats (Hapoel Tel Aviv basketball staff)', Accept: 'text/html' };

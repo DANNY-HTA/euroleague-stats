@@ -147,6 +147,8 @@ const qualNote = `Players averaging at least ${cfg.minMinutesForLeaders} minutes
 // ---- Game pages: every game in full (modelled on the EuroLeague Media Game Center) ----
 const gameHref = (code) => `game-${safe(code)}.html`;
 const stintsOf = new Map(pbpOk.map(({ game, stints }) => [game.gameCode, stints]));
+const QB_CHECK = { games: 0, stats: 0, time: 0, why: {} };
+const periodStintsOf = new Map(pbpOk.map(({ game, periodStints }) => [game.gameCode, periodStints]));
 const nameOf = new Map(players.map((q) => [q.id, q.name]));
 const pctTxt = (m, a) => (a ? f1(100 * m / a) : '–');
 const sortTh = (label, num = true, title = '') => `<th scope="col"${num ? ' class="num"' : ''}${title ? ` title="${esc(title)}"` : ''}><button type="button">${label}</button></th>`;
@@ -283,6 +285,49 @@ for (const g of sortedGames) {
     names: Object.fromEntries([...H.players, ...A.players].map((p) => [p.id, p.name])),
     plays: log.plays.map((p) => p.slice(0, 7)), labels: PLAY_LABEL, groups: PLAY_GROUP
   }).replace(/</g, '\\u003c') : null;
+  // Quarter box score + playing time (games whose play-by-play matches the box score)
+  const pst = periodStintsOf.get(g.gameCode);
+  let qbJson = null;
+  if (pst && log) {
+    const QK = ['secs', 'pm', 'pts', 'fgm2', 'fga2', 'fgm3', 'fga3', 'ftm', 'fta', 'oreb', 'dreb', 'ast', 'stl', 'tov', 'blk', 'blka', 'fl', 'fd'];
+    const QX = Object.fromEntries(QK.map((k, i) => [k, i]));
+    const EVQ = { '2FGM': [['pts', 2], ['fgm2', 1], ['fga2', 1]], '2FGA': [['fga2', 1]], '3FGM': [['pts', 3], ['fgm3', 1], ['fga3', 1]], '3FGA': [['fga3', 1]], FTM: [['pts', 1], ['ftm', 1], ['fta', 1]], FTA: [['fta', 1]], O: [['oreb', 1]], D: [['dreb', 1]], AS: [['ast', 1]], ST: [['stl', 1]], TO: [['tov', 1]], FV: [['blk', 1]], AG: [['blka', 1]], RV: [['fd', 1]], OF: [['fl', 1]] };
+    const nP = Math.max(4, ...pst.map((x) => x.period));
+    const box = {}, team = { H: {}, A: {} }, iv = {};
+    const cellQ = (o, id, q) => { o[id] ||= {}; return (o[id][q] ||= QK.map(() => 0)); };
+    let t0 = 0;
+    for (const x of pst) {
+      for (const [ids, me, op, side] of [[x.home, H.code, A.code, 'H'], [x.away, A.code, H.code, 'A']]) {
+        for (const id of ids) {
+          const c = cellQ(box, id, x.period); c[QX.secs] += x.secs; c[QX.pm] += x.pts[me] - x.pts[op];
+          const list = (iv[id] ||= []); const last = list[list.length - 1];
+          if (x.secs > 0) { if (last && Math.abs(last[1] - t0) < 0.5) last[1] = t0 + x.secs; else list.push([t0, t0 + x.secs]); }
+        }
+        const tc = cellQ(team, side, x.period); tc[QX.secs] += x.secs; tc[QX.pm] += x.pts[me] - x.pts[op];
+      }
+      t0 += x.secs;
+    }
+    for (const [per, , side, pid, type] of log.plays) {
+      const ev = EVQ[type] || (/^CM/.test(type) ? [['fl', 1]] : null); if (!ev || !side) continue;
+      const tc = cellQ(team, side, per); for (const [k, v] of ev) tc[QX[k]] += v;
+      if (pid) { const c = cellQ(box, pid, per); for (const [k, v] of ev) c[QX[k]] += v; }
+    }
+    const r1 = (v) => Math.round(v * 10) / 10;
+    // Reliability check: each player's quarters must add up to his official box-score line.
+    const CHK = [['pts', 'pts'], ['fgm2', 'fgm2'], ['fga2', 'fga2'], ['fgm3', 'fgm3'], ['fga3', 'fga3'], ['ftm', 'ftm'], ['fta', 'fta'], ['oreb', 'oreb'], ['dreb', 'dreb'], ['ast', 'ast'], ['stl', 'stl'], ['tov', 'tov'], ['blk', 'blk'], ['pf', 'fl']];
+    let statsOk = true, timeOk = true, tdiff = 0;
+    for (const p of [...H.players, ...A.players]) {
+      const tot = QK.map(() => 0); for (const c of Object.values(box[p.id] || {})) c.forEach((v, i) => { tot[i] += v; });
+      for (const [bk, qk] of CHK) if ((p[bk] || 0) !== tot[QX[qk]]) { statsOk = false; QB_CHECK.why[bk] = (QB_CHECK.why[bk] || 0) + 1; }
+      tdiff = Math.max(tdiff, Math.abs(p.min * 60 - tot[QX.secs]));
+      if (Math.abs(p.min * 60 - tot[QX.secs]) > 30) { timeOk = false; QB_CHECK.why.secs = (QB_CHECK.why.secs || 0) + 1; if (!QB_CHECK.ex) QB_CHECK.ex = `${g.gameCode} ${p.name} ${p.min * 60} vs ${tot[QX.secs]}`; }
+      if ((p.pm || 0) !== tot[QX.pm]) { timeOk = false; QB_CHECK.why.pm = (QB_CHECK.why.pm || 0) + 1; }
+    }
+    QB_CHECK.games++; if (statsOk) QB_CHECK.stats++; if (timeOk) QB_CHECK.time++;
+    if (timeOk) qbJson = JSON.stringify({ ok: statsOk, tdiff: Math.round(tdiff), k: QK, periods: nP, total: r1(t0), H: [H.tv, titleCase(H.name)], A: [A.tv, titleCase(A.name)],
+      players: [...H.players.map((p) => [p.id, p.name, 'H', p.starter ? 1 : 0, playerHref(p.id)]), ...A.players.map((p) => [p.id, p.name, 'A', p.starter ? 1 : 0, playerHref(p.id)])].filter(([id]) => box[id] || iv[id]),
+      box, team, iv: Object.fromEntries(Object.entries(iv).map(([id, l]) => [id, l.map(([a, b]) => [r1(a), r1(b)])])) }).replace(/</g, '\\u003c');
+  }
   const hero = `<section class="cover game-cover"><div class="wrap gc-wrap">
 <div class="crumbs"><a href="${HOME}#games">Games</a> / ${g.round ? `Round ${g.round}` : esc(g.phase || '')}</div>
 <span class="kicker">${g.round ? `Round ${g.round} · ` : ''}${esc(fmtDate(g.date))}</span>
@@ -308,10 +353,12 @@ ${flow ? `<section class="card"><h2>Game flow</h2><p class="muted">The score mar
 <section class="card"><h2>Team comparison</h2><div class="perf-head"><span>${badge(H.code, H.tv)} ${esc(H.tv)}</span><span>${f1(cmp.P)} possessions</span><span>${esc(A.tv)} ${badge(A.code, A.tv)}</span></div>${cmp.html}</section>
 </div>
 <section class="card"><h2>Box score</h2>${pmRepaired.has(g.gameCode) ? `<p class="note-warn">The league's published +/- for this game is wrong (${pmRepaired.get(g.gameCode)} players). The +/- shown here is recalculated from the official play-by-play, which reproduces the final score and every player's minutes.</p>` : ''}${sideHead(H)}${gameBox(H)}${sideHead(A)}${gameBox(A)}<p class="muted small">Click any column to sort. PIR = Performance Index Rating.</p></section>
+${qbJson ? `<section class="card" id="quarters"><h2>Quarter box score &amp; playing time</h2><p class="muted">Pick one or more quarters: every player's line in just those quarters, from the official play-by-play. Below, when each player was on the court.</p><div id="qb-app"><p class="muted">Loading…</p></div></section>
+<script type="application/json" id="qb-data">${qbJson}</script>` : ''}
 ${stints ? lineupBlock(g, stints, near ? `Small difference with the official box score in this game (${esc(near.why)}). These lineups are shown for this game only and are not used in the season lineup, on/off or impact numbers.` : '') : raw ? '<p class="muted small">Lineups are not available for this game: the official play-by-play does not say who was on the court at every moment.</p>' : ''}
 ${log ? `<section class="card"><h2>Best connections</h2><p class="muted">Who assisted whom, by points created.</p><div class="row two">${['H', 'A'].map((s) => `<div>${sideHead(s === 'H' ? H : A)}${connList(s)}</div>`).join('')}</div></section>
 <section class="card"><h2>Play-by-play</h2><div id="pbp-app"><p class="muted">Loading…</p></div></section>
-<script type="application/json" id="pbp-data">${pbpJson}</script>` : ''}`, HOME, hero, { scripts: `<script src="game.js?v=${assetVersion()}" defer></script>` });
+<script type="application/json" id="pbp-data">${pbpJson}</script>` : ''}`, HOME, hero, { scripts: `<script src="game.js?v=${assetVersion()}" defer></script>${qbJson ? `<script src="gamequarters.js?v=${assetVersion()}" defer></script>` : ''}` });
 }
 console.log(`✓ Game pages: ${sortedGames.length}`);
 // ---- Home: MVP race (several factors) and MVP of each round ----
@@ -1486,6 +1533,7 @@ copyFileSync('static/lineups.js', join(OUT, 'lineups.js'));
 copyFileSync('static/teams.js', join(OUT, 'teams.js'));
 copyFileSync('static/teambox.js', join(OUT, 'teambox.js'));
 copyFileSync('static/share.js', join(OUT, 'share.js'));
+if (existsSync('static/gamequarters.js')) copyFileSync('static/gamequarters.js', join(OUT, 'gamequarters.js'));
 if (existsSync('static/quarter-split.js')) copyFileSync('static/quarter-split.js', join(OUT, 'quarter-split.js'));
 copyFileSync('static/game.js', join(OUT, 'game.js'));
 copyFileSync('static/mvp.js', join(OUT, 'mvp.js'));
@@ -1501,6 +1549,7 @@ writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   stats: [['PTS', p.ppg], ['REB', p.rpg], ['AST', p.apg], ['STL', p.spg], ['BLK', p.bpg], ['PIR', p.pirpg], ['MIN', p.mpg], ['TS%', p.ts], ['USG%', p.usg]].map(([k, v]) => [k, f1(v)])
 }))));
 writeFileSync(join(OUT, '.nojekyll'), '');
+console.log(`Quarter box: ${QB_CHECK.games} games with play-by-play, ${QB_CHECK.time} playing time exact, ${QB_CHECK.stats} quarter stats exact`, JSON.stringify(QB_CHECK.why), QB_CHECK.ex || '');
 console.log(`✓ Site written to ${OUT}/ (${teams.length} teams, ${players.length} players)`);
 
 function boardsJson() {
