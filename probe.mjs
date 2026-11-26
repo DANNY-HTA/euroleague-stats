@@ -1,12 +1,8 @@
-import { gzipSync } from 'node:zlib';
 const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats (Hapoel Tel Aviv)', Accept: 'application/json' };
 const B = 'https://schedule.nbl.com.au';
-const rb = await fetch(B + '/robots.txt', { headers: H }); console.log('ROBOTS', rb.status, (await rb.text()).slice(0, 400).replace(/\n/g, ' ⏎ '));
-const j = await (await fetch(B + '/api/calendar/schedule?league=nbl&limit=500&offset=0', { headers: H })).json();
-const arr = Object.values(j).find((v) => Array.isArray(v) && v[0]?.match_slug) || [];
-const m = arr.find((x) => x.phase === 'complete' && x.season_type === 'regular');
-console.log('MATCH', m.id, m.match_title, m.season_id);
-const r = await fetch(`${B}/api/calendar/match?match=${m.id}&league=NBL&season=${m.season_id}`, { headers: H }); const t = await r.text();
-console.log('M', r.status, t.length);
-console.log('M64 ' + gzipSync(t).toString('base64'));
-console.log('S64 ' + gzipSync(JSON.stringify(j)).toString('base64'));
+const id = '36dbeb55-58ad-11f1-a69b-43a6b5595d3e', season = '67d4a190-40bc-4bfb-a9a2-11bd0b93f020';
+const d = await (await fetch(`${B}/api/calendar/match?match=${id}&league=NBL&season=${season}`, { headers: H })).json();
+const out = [];
+const sh = (o, p = '', dd = 0) => { if (dd > 5 || !o || typeof o !== 'object') return; if (Array.isArray(o)) { if (o[0] !== undefined) sh(o[0], p + '[0]', dd + 1); return; }
+  for (const [k, v] of Object.entries(o).slice(0, 70)) { out.push(p + '.' + k + (Array.isArray(v) ? `[${v.length}]` : v && typeof v === 'object' ? '' : '=' + String(v).slice(0, 40))); sh(v, p + '.' + k, dd + 1); } };
+sh(d); console.log(out.filter(l => !/logo|image|photo|url|color|broadcast|ticket|article|video|news/i.test(l)).slice(0, 400).map(l => 'K ' + l).join('\n'));
