@@ -1,0 +1,75 @@
+# Updates the website automatically.
+# Runs after every night of games, whenever code changes, and when you press
+# "Run workflow" on the Actions tab. If any accuracy check fails, the run stops,
+# GitHub emails you, and the site keeps showing the last correct numbers.
+
+name: Update site
+
+on:
+  schedule:
+    - cron: "47 0 * * *"   # 02:47 Sofia time (winter), after the evening games
+    - cron: "47 6 * * *"   # 08:47 Sofia time, picks up morning corrections
+  push:
+    branches: [main]
+    paths-ignore: ['scouting/**']   # scouting notes are read straight from the repository
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test the formulas and checks
+        run: npm test
+      - name: Restore games downloaded in earlier runs
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: euroleague-data-${{ github.run_id }}
+          restore-keys: euroleague-data-
+      - name: Download the official box scores
+        run: npm run fetch
+      - name: Download EuroCup box scores (scouting pool, optional)
+        continue-on-error: true
+        run: for s in $(node -p "(require('./config.json').scoutingSeasons||[]).join(' ')"); do node scripts/fetch.mjs $s || true; done
+      - name: Download the other leagues (Israel, Italy …)
+        continue-on-error: true
+        run: node -e "for (const L of Object.values(require('./config.json').leagues||{})) console.log(L.fetch)" | while read -r cmd; do $cmd || true; done
+      - name: Remember downloaded games for the next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: euroleague-data-${{ github.run_id }}
+      - name: Check accuracy and build the site
+        run: npm run build
+      - name: Build the other leagues' pages
+        continue-on-error: true
+        run: for k in $(node -p "Object.keys(require('./config.json').leagues||{}).join(' ')"); do node scripts/build.mjs --league $k || echo "League $k failed"; done
+      - name: Build the Hapoel home page
+        run: node scripts/build-hapoel.mjs || cp site/euroleague.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
