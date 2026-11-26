@@ -1,4 +1,11 @@
-import { readFileSync, readdirSync } from 'node:fs';
-const d = 'data/raw/ISR2027'; console.log('IL files', readdirSync(d).slice(0, 5));
-const f = readdirSync(d).find((x) => /^\d+\.json$/.test(x)); const j = JSON.parse(readFileSync(d + '/' + f)); console.log('IL', f, j.source, Object.keys(j));
-const id = j.gameCode; for (const u of [`https://basket.co.il/livestats/data/game-${id}.json`]) { try { const r = await fetch(u); const t = await r.text(); console.log('URL', u, r.status, t.length); const m = t.match(/"(x|y|shotX|shot_x)"\s*:\s*[-\d.]+/g); console.log('XY', (m || []).slice(0, 10).join(' ')); const k = t.indexOf('"x"'); console.log('CTX', t.slice(Math.max(0, k - 300), k + 200)); } catch (e) { console.log('ERR', e.message); } }
+const BASE = 'https://basket.co.il';
+const list = (j) => (Array.isArray(j) ? j : j?.d ? (typeof j.d === 'string' ? JSON.parse(j.d) : j.d) : j?.Games || j?.games || []);
+const r = await fetch(`${BASE}/ws/ws.asmx/Games?league_id=0&team_uid=0&cYear=2027&board_id=0&board_round=0&team_id=0&game_id=0`, { headers: { Accept: 'application/json' } });
+const t = await r.text(); let j; try { j = JSON.parse(t); } catch { console.log('notjson', t.slice(0, 200)); }
+const games = list(j).filter((g) => /winner league/i.test(g.board_name_eng || '') && g.ExternalID);
+console.log('games', games.length, games[0]?.ExternalID);
+const ls = await (await fetch(`${BASE}/livestats/data/game-${games[0].ExternalID}.json`)).json();
+const acts = ls.actions?.actions || [];
+const shots = acts.filter((a) => /2pt|3pt/i.test(a.actionType || ''));
+console.log('acts', acts.length, 'shots', shots.length, 'keys', Object.keys(acts[0] || {}).join(','));
+console.log('SHOT', JSON.stringify(shots.slice(0, 3)));
