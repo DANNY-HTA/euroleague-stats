@@ -3,7 +3,7 @@
 // matches the league pages; league ranks and averages are computed against each competition.
 //
 //   node scripts/build-hapoel.mjs
-import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseGame } from '../lib/parse.mjs';
 import { validateGame } from '../lib/validate.mjs';
@@ -278,5 +278,6 @@ ${ACTIVE.map((C) => `<div class="comp-block" data-comp="${C.key}"><h3 class="com
 <script type="application/json" id="hap-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
 
 const info = { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null };
+copyFileSync('static/hapoel.js', join(OUT, 'hapoel.js'));
 writeFileSync(join(OUT, 'index.html'), page({ title: 'Hapoel Tel Aviv', cfg, info, active: 'index.html', sample: false, body, hero, scripts: `<script src="hapoel.js?v=${assetVersion()}" defer></script>` }));
 console.log(`✓ Hapoel home page: ${gameRows.length} games (${ACTIVE.map((C) => `${C.short} ${C.mine.length}`).join(', ')}), ${people.size} players, ${lineupGames.size} games with lineups`);

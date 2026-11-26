@@ -711,3 +711,11 @@ table.box.q { max-width: 520px; }
 .lc-name { font: 800 18px/1.1 var(--display); text-transform: uppercase; }
 .hap-sched td { white-space: nowrap; }
 .cover .league-badge img { max-width: 190px; max-height: 120px; object-fit: contain; background: #fff; border-radius: 16px; padding: 10px; }
+.hap-toc a { color: var(--red); background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+.hap-toc a:hover { border-color: var(--red); }
+/* ---- Player in several competitions ---- */
+.cross-table td, .cross-table th { white-space: nowrap; }
+.cross-table tr.here td { background: var(--red-soft); font-weight: 700; }
+.cross-table tfoot th, .cross-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); }
+.cc-lg { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.cc-lg img { width: 22px; height: 22px; object-fit: contain; }
