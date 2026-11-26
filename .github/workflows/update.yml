@@ -58,6 +58,8 @@ jobs:
       - name: Build the other leagues' pages
         continue-on-error: true
         run: for k in $(node -p "Object.keys(require('./config.json').leagues||{}).join(' ')"); do node scripts/build.mjs --league $k || echo "League $k failed"; done
+      - name: Build the Hapoel home page
+        run: node scripts/build-hapoel.mjs || cp site/euroleague.html site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

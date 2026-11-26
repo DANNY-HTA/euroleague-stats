@@ -647,3 +647,67 @@ a.hs-row:hover { border-color: var(--red); color: var(--ink); box-shadow: 0 6px 
 .hs-res { font: 800 16px/1 var(--display); text-align: right; } .hs-res.w { color: #0f7a3a; } .hs-res.l { color: var(--red); } .hs-res.up { color: var(--muted); font-size: 13px; }
 .hs-next { font-size: 30px !important; }
 @media (max-width: 820px) { .hs-row { grid-template-columns: 1fr auto; } .hs-comp, .hs-venue, .hs-ha { display: none; } .hs-date { grid-column: 1 / -1; font-size: 13px; } }
+/* ---- Leagues menu (every league, with its logo) ---- */
+.league-menu { position: relative; }
+.league-menu summary { list-style: none; cursor: pointer; color: #fff; font: 700 15px/1 var(--display); text-transform: uppercase; letter-spacing: .05em; padding: 9px 14px; border-radius: 999px; background: rgba(0,0,0,.18); white-space: nowrap; }
+.league-menu summary::-webkit-details-marker { display: none; }
+.league-menu[open] summary, .league-menu summary:hover { background: #fff; color: var(--red); }
+.league-menu-list { position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; background: #fff; border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.18); padding: 8px; display: grid; grid-template-columns: repeat(2, minmax(200px, 1fr)); gap: 2px; min-width: 440px; }
+.league-menu-list a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; color: var(--ink); font-weight: 600; font-size: 14px; }
+.league-menu-list a:hover { background: var(--red-soft); color: var(--ink); }
+.league-menu-list a[aria-current] { background: var(--red); color: #fff; }
+.league-menu-list img { width: 28px; height: 28px; object-fit: contain; flex: none; }
+.lg-dot { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: #fff; font: 800 10px/1 var(--display); font-style: normal; text-transform: uppercase; flex: none; }
+.lg-dot.big { width: 64px; height: 64px; font-size: 18px; }
+nav a.nav-hapoel { background: rgba(0,0,0,.18); }
+nav a.nav-hapoel[aria-current="page"] { background: #fff; }
+@media (max-width: 700px) { .league-menu-list { grid-template-columns: 1fr; min-width: 240px; } }
+/* ---- Hapoel home ---- */
+.comp-tabs { position: sticky; top: 72px; z-index: 15; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; margin: 0 0 14px; background: #fff; border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.08); width: fit-content; }
+.comp-tabs button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 10px 18px; font: 700 15px/1 var(--display); letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+.comp-tabs button img { width: 18px; height: 18px; object-fit: contain; }
+.comp-tabs button[aria-selected="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+.comp-tabs button[aria-selected="true"] img { filter: brightness(0) invert(1); }
+.hap-toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 18px; font-weight: 700; font-size: 14px; }
+.comp-tag { display: inline-block; min-width: 26px; text-align: center; padding: 3px 6px; border-radius: 6px; font: 800 11px/1 var(--display); letter-spacing: .06em; color: #fff; background: var(--ink); }
+.comp-tag.comp-el { background: #f05a28; } .comp-tag.comp-il { background: #1f4fa3; }
+.hap-game { border: 1px solid var(--line); border-radius: 12px; margin: 0 0 8px; background: #fff; }
+.hap-game > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px; cursor: pointer; list-style: none; }
+.hap-game > summary::-webkit-details-marker { display: none; }
+.hap-game > summary::after { content: '▾'; margin-left: auto; color: var(--muted); }
+.hap-game[open] > summary { border-bottom: 1px solid var(--line); }
+.hap-game[open] > summary::after { content: '▴'; }
+.hg-date { color: var(--muted); font-size: 13px; min-width: 96px; }
+.hg-opp { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; min-width: 220px; }
+.hg-opp img { width: 20px; height: 20px; object-fit: contain; }
+.hg-body { padding: 12px 14px 16px; }
+.hg-body h4 { margin: 14px 0 6px; font: 800 16px/1 var(--display); text-transform: uppercase; }
+.box-views { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.box-views button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 14px; font: 700 13px/1 var(--display); letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+.box-views button[aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.box-views a { margin-left: auto; }
+table.box { font-size: 13px; } table.box td, table.box th { white-space: nowrap; } table.box tr.dnp td { color: var(--muted); }
+table.box tfoot td, table.box tfoot th { font-weight: 700; border-top: 2px solid var(--line); }
+table.box .st { color: var(--red); font-size: 9px; vertical-align: 2px; }
+table.box.q { max-width: 520px; }
+.hap-stats th[scope="row"] { white-space: nowrap; font-weight: 600; }
+.hap-stats td { white-space: nowrap; }
+.hap-players td, .hap-players th { white-space: nowrap; font-size: 13px; }
+.hap-players th button, .hap-lineups th button { all: unset; cursor: pointer; font-weight: 700; }
+.hap-players th button[aria-sort], .hap-lineups th button[aria-sort] { color: var(--red); }
+.game-pick { margin: 8px 0 12px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.game-pick summary { cursor: pointer; font-weight: 600; }
+.game-pick-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 16px; margin-top: 10px; max-height: 320px; overflow-y: auto; font-size: 13px; }
+.game-pick-list label { display: flex; gap: 8px; align-items: center; }
+.comp-block { margin: 0 0 26px; }
+.comp-h { display: flex; align-items: center; gap: 10px; font: 800 24px/1 var(--display); text-transform: uppercase; margin: 10px 0 12px; }
+.comp-h img { width: 22px; height: 22px; object-fit: contain; }
+.row-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 22px; }
+.row-3 > .card { margin: 0; }
+.league-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.league-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 18px 12px; border: 1px solid var(--line); border-radius: 16px; color: var(--ink); background: #fff; }
+.league-card:hover { border-color: var(--red); color: var(--ink); box-shadow: 0 10px 24px rgba(215,24,42,.12); }
+.league-card img { width: 64px; height: 64px; object-fit: contain; }
+.lc-name { font: 800 18px/1.1 var(--display); text-transform: uppercase; }
+.hap-sched td { white-space: nowrap; }
+.cover .league-badge img { max-width: 190px; max-height: 120px; object-fit: contain; background: #fff; border-radius: 16px; padding: 10px; }
