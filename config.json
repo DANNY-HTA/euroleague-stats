@@ -23,12 +23,22 @@
     "repo": "hta-lab/hta-lab.github.io"
   },
   "leagueLogo": "https://media-cdn.cortextech.io/d99bef12-2cef-4c40-8f68-0477e1ee7131.svg",
-  "scoutingSeasons": [
-    "U2026"
-  ],
+  "scoutingSeasons": [],
   "leagueName": "EuroLeague",
   "sourceText": "the official EuroLeague box scores",
   "leagues": {
+    "ec": {
+      "seasonLabel": "EuroCup 2026–27",
+      "leagueName": "EuroCup",
+      "shortName": "EuroCup",
+      "sourceText": "the official EuroCup box scores",
+      "leagueLogo": "",
+      "dataDir": "U2026",
+      "root": "../",
+      "dropInvalid": true,
+      "poolCode": "EC",
+      "fetch": "node scripts/fetch.mjs U2026"
+    },
     "il": {
       "seasonLabel": "Winner League 2026–27",
       "leagueName": "Winner League",

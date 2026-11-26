@@ -1335,7 +1335,7 @@ if (IS_EL) {
   }
   for (const [key, L] of sample ? [] : Object.entries(cfg.leagues || {})) {
     const r = poolFromDir(join('data', 'raw', L.dataDir), L.poolCode, today);
-    for (const row of r.rows) ecRows.push(row);
+    for (const row of r.rows) { if (L.poolCode === 'EC') row[4] = titleCase(row[4]); ecRows.push(row); }
     if (r.games) ecNotes.push(`${L.leagueName}: ${r.rows.length} players from ${r.games} games`);
     console.log(`✓ Scouting pool ${key}: ${r.rows.length} players from ${r.games} games` + (r.skipped ? ` (${r.skipped} games left out by the checks)` : ''));
   }

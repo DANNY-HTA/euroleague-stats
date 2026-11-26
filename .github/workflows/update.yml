@@ -43,7 +43,7 @@ jobs:
         run: npm run fetch
       - name: Download EuroCup box scores (scouting pool, optional)
         continue-on-error: true
-        run: for s in $(node -p "(require('./config.json').scoutingSeasons||[]).join(' ')"); do node scripts/fetch.mjs $s --no-pbp || true; done
+        run: for s in $(node -p "(require('./config.json').scoutingSeasons||[]).join(' ')"); do node scripts/fetch.mjs $s || true; done
       - name: Download the other leagues (Israel, Italy …)
         continue-on-error: true
         run: node -e "for (const L of Object.values(require('./config.json').leagues||{})) console.log(L.fetch)" | while read -r cmd; do $cmd || true; done
