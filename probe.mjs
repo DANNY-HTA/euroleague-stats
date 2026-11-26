@@ -1,8 +1,7 @@
 const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats (Hapoel Tel Aviv)', Accept: 'text/html' };
-for (const m of [1, 2, 3, 4, 5]) {
-  const u = `https://www.esake.gr/el/action/EsakegameView?idgame=578190A6&mode=${m}`;
-  const r = await fetch(u, { headers: H }); const t = await r.text();
-  const txt = t.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
-  console.log('M', m, r.status, t.length, (t.match(/<table/g) || []).length, 'tables', /geniussports|fibalivestats/.test(t) ? 'GENIUS' : '', [...new Set(t.match(/(fibalivestats|geniussports)[^"' <]{0,100}/g) || [])].slice(0, 3).join(' | '));
-  const i = txt.search(/ΛΕΠΤΑ|Λεπτά|MIN|ΠΟΝ/); console.log('   TXT', txt.slice(Math.max(0, i - 300), i + 900));
-}
+const B = 'https://www.esake.gr';
+const g = async (u) => (await fetch(u, { headers: H })).text();
+const t = await g(B + '/el');
+const acts = [...new Set([...t.matchAll(/href="([^"]*action\/[^"]+)"/g)].map(m => m[1].replace(/&amp;/g, '&')))].map(h => h.replace(/=[0-9A-F]{8}/g, '=X')); console.log('ACTIONS', [...new Set(acts)].join(' '));
+const gc = [...t.matchAll(/href="([^"]+)"[^>]*>\s*Game Center/g)].map(m => m[1]); console.log('GC', gc.join(' '));
+for (const u of gc.slice(0, 1)) { const x = await g(u.startsWith('http') ? u : B + u); const ids = [...new Set(x.match(/idgame=[0-9A-F]{8}/g) || [])]; console.log('GCIDS', ids.length, ids.slice(0, 5).join(' '), [...new Set([...x.matchAll(/href="([^"]*action\/[^"]+)"/g)].map(m => m[1].replace(/&amp;/g, '&').replace(/=[0-9A-F]{8}/g, '=X')))].join(' ')); }
