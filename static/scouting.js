@@ -136,7 +136,7 @@
     const o = Object.fromEntries(POOL_KEYS.map((k, i) => [k, row[i]]));
     return {
       id: o.src + ':' + o.pid, src: o.src, league: LEAGUE_NAME[o.src] || o.src, name: o.name, team: o.teamName, teamCode: o.team, crest: o.crest, pos: o.pos, height: o.height, age: o.age, nat: o.nat,
-      stats: { season: CFG.seasonLabel || '', gp: o.gp, mpg: o.mpg, ppg: o.ppg, rpg: o.rpg, apg: o.apg, spg: o.spg, bpg: o.bpg, tpg: o.tpg, p2: pct(o.fgm2, o.fga2), p3: pct(o.fgm3, o.fga3), p3a: o.gp ? o.fga3 / o.gp : null, ft: pct(o.ftm, o.fta), ts: o.ts, usg: o.usg, pir: o.pir, orpg: o.orpg, drpg: o.drpg },
+      stats: { season: `${LEAGUE_NAME[o.src] || o.src} · 2026–27`, gp: o.gp, mpg: o.mpg, ppg: o.ppg, rpg: o.rpg, apg: o.apg, spg: o.spg, bpg: o.bpg, tpg: o.tpg, p2: pct(o.fgm2, o.fga2), p3: pct(o.fgm3, o.fga3), p3a: o.gp ? o.fga3 / o.gp : null, ft: pct(o.ftm, o.fta), ts: o.ts, usg: o.usg, pir: o.pir, orpg: o.orpg, drpg: o.drpg },
       official: true, season: LEAGUE_DIR[o.src] ? '2026-27' : null, href: o.src === 'EL' || LEAGUE_DIR[o.src] ? (LEAGUE_DIR[o.src] || '') + 'player-' + String(o.pid).replace(/[^A-Za-z0-9]/g, '') + '.html' : null
     };
   }
@@ -216,10 +216,14 @@
     put(root, 
       el('div', { class: 'sc-top card' }, el('div', { class: 'sc-top-l' }, status, el('button', { type: 'button', class: 'btn', onclick: save }, 'Save now')),
         el('div', { class: 'sc-top-r' }, who, el('button', { type: 'button', class: 'btn ghost', onclick: () => openAdd() }, '+ Add player'), el('button', { type: 'button', class: 'btn ghost', onclick: () => openImport() }, 'Import CSV / Excel'), el('button', { type: 'button', class: 'btn ghost', onclick: () => openConnect() }, getToken() ? '✓ Device connected' : 'Connect this device'))),
-      el('div', { class: 'sc-layout' }, side, main), drawer, modal);
+      el('div', { class: 'sc-layout' }, side, main));
+    // The panel and pop-ups live directly in <body>, above the sticky header (inside <main> they were under it).
+    document.body.append(drawer, modal);
     paintStatus(); render();
   }
   function render() { renderSide(); renderMain(); if (S.open) renderDrawer(); }
+  document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!modal.hidden) { modal.hidden = true; return; } if (!drawer.hidden) { S.open = null; drawer.hidden = true; renderMain(); } });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
 
   function renderSide() {
     const all = allPlayers();

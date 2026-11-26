@@ -737,3 +737,21 @@ table.box.q { max-width: 520px; }
 .cc-lg img { width: 34px; height: 34px; }
 .cover .league-badge img { width: auto; height: auto; max-width: 260px; max-height: 150px; min-width: 120px; min-height: 90px; object-fit: contain; }
 @media (max-width: 700px) { .league-menu-list { grid-template-columns: 1fr; min-width: 260px; } .league-card img { width: 96px; height: 76px; } }
+/* Scouting: panel and pop-ups above the header, close button always visible */
+.sc-drawer { z-index: 1000; } .sc-modal { z-index: 1010; }
+.sc-dh { position: sticky; top: -20px; z-index: 3; background: #fff; margin: -20px -22px 8px; padding: 18px 22px 10px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.sc-dh .sc-x { flex: none; background: var(--soft); }
+.sc-mbox { max-height: none; } .sc-mbox > .sc-x { position: sticky; top: 0; float: right; z-index: 3; background: #fff; }
+/* ---- Ask the Brain ---- */
+nav a.nav-brain { background: #111; color: #fff; } nav a.nav-brain[aria-current="page"] { background: #fff; color: var(--red); }
+.brain-key { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; margin: 0 0 12px; }
+.brain-key input { width: min(420px, 100%); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.brain-key p { flex-basis: 100%; margin: 0; }
+.brain-leagues { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 14px; font-size: 14px; }
+.brain-leagues img { width: 18px; height: 18px; object-fit: contain; vertical-align: -4px; }
+.brain-thread { display: grid; gap: 10px; margin: 0 0 14px; }
+.brain-q { background: var(--red-soft); border-radius: 12px; padding: 10px 14px; }
+.brain-a { border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px; } .brain-a h4 { margin: 12px 0 4px; } .brain-a table { font-size: 13px; }
+.brain-ask textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--line); border-radius: 12px; font: inherit; resize: vertical; }
+.brain-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
+.brain-row select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
