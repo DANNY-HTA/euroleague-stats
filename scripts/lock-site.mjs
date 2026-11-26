@@ -12,10 +12,10 @@ import { deflateRawSync } from 'node:zlib';
 const SITE = 'site', ACCESS = 'access/users.json';
 if (!existsSync(ACCESS)) { console.log('Site lock: not set up (no access/users.json) — site stays public.'); process.exit(0); }
 const access = JSON.parse(readFileSync(ACCESS, 'utf8'));
-const keyB64 = (process.env.SITE_KEY || '').trim();
+const keyB64 = (process.env.SITE_KEY || '').replace(/[\s"'`]/g, '');
 if (!keyB64) { console.error('Site lock: access/users.json exists but the SITE_KEY secret is missing. Refusing to publish an unlocked site.'); process.exit(1); }
 const K = Buffer.from(keyB64, 'base64');
-if (K.length !== 32) { console.error('Site lock: SITE_KEY is not a 32-byte base64 key.'); process.exit(1); }
+if (K.length !== 32) { console.error(`Site lock: SITE_KEY is not a site key (${keyB64.length} characters; a site key is 44 characters ending in "="). Paste the key from access-setup.html again.`); process.exit(1); }
 
 const seal = (buf) => { const iv = randomBytes(12), c = createCipheriv('aes-256-gcm', K, iv); const ct = Buffer.concat([c.update(buf), c.final(), c.getAuthTag()]); return Buffer.concat([iv, ct]).toString('base64'); };
 // The key must match the one the logins were made with.
