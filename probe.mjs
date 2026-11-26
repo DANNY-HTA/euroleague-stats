@@ -1,9 +1,7 @@
-// Sanity checks of the Hapoel page: data size, sections, and run the page script against a tiny fake DOM.
-import { readFileSync } from 'node:fs';
-const h = readFileSync('site/index.html', 'utf8');
-console.log('INDEX', h.length, ['id="schedule"', 'id="boxscores"', 'id="team"', 'id="players"', 'id="lineups"', 'id="boards"', 'id="leagues"', 'league-menu'].map((k) => k + ':' + h.includes(k)).join(' '));
-const d = JSON.parse(h.match(/<script type="application\/json" id="hap-data">([\s\S]*?)<\/script>/)[1]);
-console.log('DATA games', d.games.length, 'people', Object.keys(d.people).length, 'stints', d.stints.length, 'lineupGames', d.lineupGames.length, 'comps', JSON.stringify(d.comps));
-console.log('G0', JSON.stringify(d.games[0]).slice(0, 600));
-const el = readFileSync('site/euroleague.html', 'utf8'); console.log('ELHOME', el.length, el.includes('league-menu'));
-console.log('BOARDS', (h.match(/class="card board open"/g) || []).length, 'TEAMROWS', (h.match(/<tr><th scope="row">/g) || []).length);
+import { readFileSync, readdirSync } from 'node:fs';
+for (const f of ['site/team-OLY-report.html', 'site/il/' + readdirSync('site/il').find((x) => /-report\.html$/.test(x)), 'site/lba/' + readdirSync('site/lba').find((x) => /-report\.html$/.test(x))]) {
+  const h = readFileSync(f, 'utf8'); const t = h.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  console.log('REPORT', f, h.length, (h.match(/<h2>\d+\. [^<]+/g) || []).join(' | '));
+  const i = t.indexOf('Compared with Hapoel'); console.log('  HAP', i > 0 ? t.slice(i, i + 400) : 'none');
+  const j = t.indexOf('Wins vs losses'); console.log('  WL', t.slice(j, j + 300));
+}

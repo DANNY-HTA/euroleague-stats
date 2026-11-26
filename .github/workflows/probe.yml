@@ -17,4 +17,4 @@ jobs:
           path: data
           key: euroleague-data-none
           restore-keys: euroleague-data-
-      - run: ls data/raw && npm run build 2>&1 | tail -5 && node scripts/build.mjs --league il 2>&1 | tail -3 && node scripts/build-hapoel.mjs && ls -la site/index.html site/euroleague.html && node probe.mjs
+      - run: ls data/raw && npm run build 2>&1 | tail -5 && node scripts/build.mjs --league il 2>&1 | tail -2 && node scripts/build.mjs --league lba 2>&1 | tail -2 && node probe.mjs
