@@ -3,7 +3,7 @@ on:
   push:
     branches: [probe]
 permissions:
-  contents: read
+  contents: write
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -17,9 +17,7 @@ jobs:
           path: data
           key: euroleague-data-none
           restore-keys: euroleague-data-
-      - run: tar czf data.tgz data/raw/E2026 data/raw/ISR2027 && ls -la data.tgz
-      - uses: actions/upload-artifact@v4
-        with:
-          name: data
-          path: data.tgz
-          retention-days: 1
+      - run: |
+          tar czf /tmp/data.tgz data/raw/E2026 data/raw/ISR2027 data/raw/U2026
+          git config user.name probe && git config user.email probe@users.noreply.github.com
+          git checkout --orphan probe-data && git rm -rqf . && cp /tmp/data.tgz . && git add data.tgz && git commit -qm data && git push -f origin probe-data
