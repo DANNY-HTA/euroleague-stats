@@ -48,11 +48,11 @@ table{width:100%;border-collapse:collapse;margin-top:8px}td{padding:6px 4px;bord
 <label for="key">Site key</label><input id="key" type="password" autocomplete="off" placeholder="Paste the site key">
 <p class="muted" id="keyState"></p>
 <table id="list"></table>
-<label for="u">Username</label><input id="u" autocomplete="off" autocapitalize="none" placeholder="e.g. danny">
+<label for="u">Username</label><input id="u" autocomplete="off" autocapitalize="none" placeholder="e.g. htaspecial">
 <label for="p1">Password</label><input id="p1" type="password" autocomplete="new-password">
 <label for="p2">Password again</label><input id="p2" type="password" autocomplete="new-password">
 <button type="button" id="add">Add this person</button> <span id="addMsg"></span>
-<p class="muted">Use a long password (at least 10 characters). To change someone's password, remove them and add them again. Someone who is removed stays signed in on his devices until you create a new site key and add everyone again.</p>
+<p class="muted">At least 8 characters; longer is safer. To change someone's password, remove them and add them again. Someone who is removed stays signed in on his devices until you create a new site key and add everyone again.</p>
 </div>
 
 <div class="card">
@@ -96,7 +96,7 @@ table{width:100%;border-collapse:collapse;margin-top:8px}td{padding:6px 4px;bord
     const k = await checkKey(); if (!k) { m.innerHTML = '<span class="err">Enter the site key first.</span>'; return; }
     const u = $('u').value.trim().toLowerCase(), p = $('p1').value;
     if (!/^[a-z0-9._-]{2,30}$/.test(u)) { m.innerHTML = '<span class="err">Username: 2–30 letters, numbers, dot, dash.</span>'; return; }
-    if (p.length < 10) { m.innerHTML = '<span class="err">Password must be at least 10 characters.</span>'; return; }
+    if (p.length < 8) { m.innerHTML = '<span class="err">Password must be at least 8 characters.</span>'; return; }
     if (p !== $('p2').value) { m.innerHTML = '<span class="err">The two passwords are different.</span>'; return; }
     m.textContent = 'Working…';
     const id = hex(await crypto.subtle.digest('SHA-256', enc.encode('hta:' + u)));
