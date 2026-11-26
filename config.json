@@ -99,6 +99,18 @@
       "dropInvalid": true,
       "poolCode": "GR",
       "fetch": "node scripts/fetch-esake.mjs 2026"
+    },
+    "nbl": {
+      "seasonLabel": "NBL 2026–27",
+      "leagueName": "NBL (Australia)",
+      "shortName": "NBL",
+      "sourceText": "the official NBL (nbl.com.au) box scores and play-by-play",
+      "leagueLogo": "",
+      "dataDir": "NBL2026",
+      "root": "../",
+      "dropInvalid": true,
+      "poolCode": "AU",
+      "fetch": "node scripts/fetch-nbl.mjs 2026"
     }
   },
   "nameFixes": {
