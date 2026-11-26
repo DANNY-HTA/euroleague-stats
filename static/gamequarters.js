@@ -41,7 +41,7 @@ ${rows.map(({ p, iv, secs }) => `<div class="pt-row"><span class="pt-name">${p[3
 <span class="muted small">${quick === 'all' ? 'Whole game' : [...picked].sort().map(pLabel).join(' + ')}</span></div>
 ${D.ok ? boxFor('H') + boxFor('A') : '<p class="muted">The play-by-play for this game does not add up exactly to the official box score, so the quarter box score is not shown. Playing time below is exact.</p>'}
 <div class="pt-wrap">${chart('H')}${chart('A')}</div>
-<p class="muted small">Quarter lines are from the play-by-play; the "Whole game" view matches the official box score. ● = starter. Hover a bar for the exact minutes.</p>`;
+<p class="muted small">Quarter lines are from the play-by-play; in the "Whole game" view every stat matches the official box score${D.tdiff > 2 ? `, and minutes are within ${D.tdiff} seconds of the official minutes (the play-by-play clock is slightly off in this game)` : ''}. ● = starter. Hover a bar for the exact minutes.</p>`;
     app.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => {
       const q = b.dataset.q;
       if (q === 'all') { picked.clear(); for (let i = 1; i <= D.periods; i++) picked.add(i); quick = 'all'; }

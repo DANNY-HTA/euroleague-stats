@@ -17,4 +17,4 @@ jobs:
           path: data
           key: euroleague-data-none
           restore-keys: euroleague-data-
-      - run: node probe.mjs
+      - run: node scripts/fetch-acb.mjs 2026 2>&1 | tail -2 && node probe.mjs && npm run build 2>&1 | grep "Quarter box" ; for k in ec il acb bbl nbl aba vtb lba; do echo "== $k"; node scripts/build.mjs --league $k 2>&1 | grep "Quarter box"; done

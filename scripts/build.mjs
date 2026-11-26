@@ -315,15 +315,16 @@ for (const g of sortedGames) {
     const r1 = (v) => Math.round(v * 10) / 10;
     // Reliability check: each player's quarters must add up to his official box-score line.
     const CHK = [['pts', 'pts'], ['fgm2', 'fgm2'], ['fga2', 'fga2'], ['fgm3', 'fgm3'], ['fga3', 'fga3'], ['ftm', 'ftm'], ['fta', 'fta'], ['oreb', 'oreb'], ['dreb', 'dreb'], ['ast', 'ast'], ['stl', 'stl'], ['tov', 'tov'], ['blk', 'blk'], ['pf', 'fl']];
-    let statsOk = true, timeOk = true;
+    let statsOk = true, timeOk = true, tdiff = 0;
     for (const p of [...H.players, ...A.players]) {
       const tot = QK.map(() => 0); for (const c of Object.values(box[p.id] || {})) c.forEach((v, i) => { tot[i] += v; });
       for (const [bk, qk] of CHK) if ((p[bk] || 0) !== tot[QX[qk]]) { statsOk = false; QB_CHECK.why[bk] = (QB_CHECK.why[bk] || 0) + 1; }
-      if (Math.abs(p.min * 60 - tot[QX.secs]) > 2) { timeOk = false; QB_CHECK.why.secs = (QB_CHECK.why.secs || 0) + 1; if (!QB_CHECK.ex) QB_CHECK.ex = `${g.gameCode} ${p.name} ${p.min * 60} vs ${tot[QX.secs]}`; }
+      tdiff = Math.max(tdiff, Math.abs(p.min * 60 - tot[QX.secs]));
+      if (Math.abs(p.min * 60 - tot[QX.secs]) > 30) { timeOk = false; QB_CHECK.why.secs = (QB_CHECK.why.secs || 0) + 1; if (!QB_CHECK.ex) QB_CHECK.ex = `${g.gameCode} ${p.name} ${p.min * 60} vs ${tot[QX.secs]}`; }
       if ((p.pm || 0) !== tot[QX.pm]) { timeOk = false; QB_CHECK.why.pm = (QB_CHECK.why.pm || 0) + 1; }
     }
     QB_CHECK.games++; if (statsOk) QB_CHECK.stats++; if (timeOk) QB_CHECK.time++;
-    if (timeOk) qbJson = JSON.stringify({ ok: statsOk, k: QK, periods: nP, total: r1(t0), H: [H.tv, titleCase(H.name)], A: [A.tv, titleCase(A.name)],
+    if (timeOk) qbJson = JSON.stringify({ ok: statsOk, tdiff: Math.round(tdiff), k: QK, periods: nP, total: r1(t0), H: [H.tv, titleCase(H.name)], A: [A.tv, titleCase(A.name)],
       players: [...H.players.map((p) => [p.id, p.name, 'H', p.starter ? 1 : 0, playerHref(p.id)]), ...A.players.map((p) => [p.id, p.name, 'A', p.starter ? 1 : 0, playerHref(p.id)])].filter(([id]) => box[id] || iv[id]),
       box, team, iv: Object.fromEntries(Object.entries(iv).map(([id, l]) => [id, l.map(([a, b]) => [r1(a), r1(b)])])) }).replace(/</g, '\\u003c');
   }
