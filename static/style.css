@@ -770,3 +770,8 @@ nav a.nav-brain { background: #111; color: #fff; } nav a.nav-brain[aria-current=
 .pt-line { position: absolute; top: -2px; bottom: -2px; width: 1px; background: rgba(127,127,127,.5); }
 .pt-on { position: absolute; top: 2px; bottom: 2px; background: var(--red); border-radius: 2px; opacity: .85; }
 .pt-on:hover { opacity: 1; outline: 1px solid currentColor; }
+.pt-on { cursor: pointer; }
+.pt-on.sel { opacity: 1; outline: 2px solid #111; z-index: 2; }
+.pt-pop { position: absolute; top: 22px; transform: translateX(-50%); z-index: 5; background: #111; color: #fff; border-radius: 6px; padding: 6px 10px; font-size: .8rem; white-space: nowrap; display: flex; gap: .6rem; align-items: baseline; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.pt-pop::before { content: ''; position: absolute; top: -5px; left: 50%; margin-left: -5px; border: 5px solid transparent; border-top: 0; border-bottom-color: #111; }
+.pt-pop-min { font-weight: 800; font-size: 1rem; }
