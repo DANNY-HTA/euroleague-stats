@@ -83,14 +83,14 @@ ${view === 'q' ? quarterBox(g) : `<h4>Hapoel Tel Aviv</h4><div class="scroll">${
 
   // ---- Players: every stat, aggregated over the games of the chosen competition ----
   const playersBox = document.getElementById('hap-players');
-  let pMode = 'pg', pSort = 'min', pDir = -1;
+  let pMode = 'pg', pSort = 'min', pDir = -1, pPick = null, pQuick = 'all';
   const PCOLS = [['gp', 'GP'], ['gs', 'GS'], ['min', 'MIN'], ['pts', 'PTS'], ['fgm2', '2PM'], ['fga2', '2PA'], ['p2', '2P%'], ['fgm3', '3PM'], ['fga3', '3PA'], ['p3', '3P%'], ['ftm', 'FTM'], ['fta', 'FTA'], ['pft', 'FT%'], ['oreb', 'OR'], ['dreb', 'DR'], ['reb', 'REB'], ['ast', 'AST'], ['stl', 'STL'], ['tov', 'TOV'], ['blk', 'BLK'], ['blka', 'BLKA'], ['pf', 'PF'], ['fd', 'FD'], ['pm', '+/-'], ['pir', 'PIR'], ['efg', 'eFG%'], ['ts', 'TS%'], ['usg', 'USG%'], ['ato', 'AST/TO'], ['swing', 'On/off'], ['imp', 'Impact'], ['ofd', 'Charges drawn']];
   const RATE = new Set(['p2', 'p3', 'pft', 'efg', 'ts', 'usg', 'ato', 'swing', 'imp']);
   const NOSCALE = new Set(['gp', 'gs', ...RATE]);
   function playerRows() {
     const agg = new Map();
     for (const g of D.games) {
-      if (!inComp(g.c)) continue;
+      if (!inComp(g.c) || !pPick.has(g.c + '|' + g.id)) continue;
       const T = g.me.t, tFga = T[K.fga2] + T[K.fga3];
       for (const r of g.me.p) {
         if (!(r[3] > 0)) continue;
@@ -119,16 +119,32 @@ ${view === 'q' ? quarterBox(g) : `<h4>Hapoel Tel Aviv</h4><div class="scroll">${
     return v;
   }
   function renderPlayers() {
+    const avail = D.games.filter((g) => inComp(g.c));
+    const ids = new Set(avail.map((g) => g.c + '|' + g.id));
+    if (!pPick || ![...pPick].every((id) => ids.has(id))) { pPick = new Set(ids); pQuick = 'all'; }
     const rows = playerRows();
-    if (!rows.length) { playersBox.innerHTML = '<p class="muted">No games yet.</p>'; return; }
+    const nW = avail.filter((g) => pPick.has(g.c + '|' + g.id) && g.w).length, nSel = [...pPick].filter((id) => ids.has(id)).length;
+    const gLabel = (g) => `${g.c === 'el' ? 'EL' : 'IL'} ${fmtD(g.d)} ${g.h ? 'vs' : 'at'} ${g.opp[2] || g.opp[0]} ${g.w ? 'W' : 'L'} ${g.s[0]}–${g.s[1]}`;
+    const pickUI = `<div class="filters"><div class="seg" role="group" aria-label="Games">${[['all', 'All games'], ['w', 'Wins'], ['l', 'Losses'], ['h', 'Home'], ['a', 'Away'], ['l3', 'Last 3'], ['l5', 'Last 5'], ['l10', 'Last 10']].map(([k, l]) => `<button type="button" data-pq="${k}" aria-pressed="${pQuick === k}">${l}</button>`).join('')}</div></div>
+<details class="game-pick"${pQuick === 'pick' ? ' open' : ''}><summary>Games: <strong>${nSel}</strong> of ${avail.length} selected (${nW}–${nSel - nW}) — choose specific games</summary><div class="game-pick-list">${[...avail].sort((a, b) => b.d.localeCompare(a.d)).map((g) => { const id = g.c + '|' + g.id; return `<label><input type="checkbox" value="${esc(id)}"${pPick.has(id) ? ' checked' : ''}> ${esc(gLabel(g))}</label>`; }).join('')}</div></details>`;
+    const wire = () => {
+      playersBox.querySelectorAll('[data-pq]').forEach((b) => b.addEventListener('click', () => {
+        const q = b.dataset.pq, sorted = [...avail].sort((x, y) => y.d.localeCompare(x.d));
+        const sel = q === 'all' ? sorted : /^l\d+$/.test(q) ? sorted.slice(0, Number(q.slice(1))) : sorted.filter((g) => (q === 'w' ? g.w : q === 'l' ? !g.w : q === 'h' ? g.h : !g.h));
+        pPick = new Set(sel.map((g) => g.c + '|' + g.id)); pQuick = q; renderPlayers();
+      }));
+      playersBox.querySelectorAll('.game-pick input').forEach((c) => c.addEventListener('change', () => { if (c.checked) pPick.add(c.value); else pPick.delete(c.value); pQuick = 'pick'; renderPlayers(); }));
+    };
+    if (!rows.length) { playersBox.innerHTML = pickUI + '<p class="muted">No games selected.</p>'; wire(); return; }
     rows.sort((a, b) => { const x = shown(a, pSort), y = shown(b, pSort); if (pSort === 'name') return pDir * a.name.localeCompare(b.name); return (y ?? -1e9) - (x ?? -1e9) === 0 ? a.name.localeCompare(b.name) : pDir * ((x ?? -1e9) - (y ?? -1e9)); });
     const fmt = (r, k) => { const v = shown(r, k); if (v == null) return '–'; if (k === 'gp' || k === 'gs') return v; if (k === 'min') return pMode === 'tot' ? Math.round(v) : f1(v);
       if (k === 'pm' || k === 'swing' || k === 'imp') return sg(v); if (k === 'ato') return v.toFixed(2); if (pMode === 'tot' && !RATE.has(k)) return Math.round(v); return f1(v); };
-    playersBox.innerHTML = `<div class="filters"><div class="seg" role="group" aria-label="Show">${[['pg', 'Per game'], ['tot', 'Totals'], ['40', 'Per 40 min']].map(([k, l]) => `<button type="button" data-pm="${k}" aria-pressed="${pMode === k}">${l}</button>`).join('')}</div>
-<span class="muted small">${comp === 'all' ? 'Both competitions. On/off and impact are per league — pick a competition to see them.' : esc(D.comps[comp])}</span></div>
+    playersBox.innerHTML = pickUI + `<div class="filters"><div class="seg" role="group" aria-label="Show">${[['pg', 'Per game'], ['tot', 'Totals'], ['40', 'Per 40 min']].map(([k, l]) => `<button type="button" data-pm="${k}" aria-pressed="${pMode === k}">${l}</button>`).join('')}</div>
+<span class="muted small">${comp === 'all' ? 'Both competitions.' : esc(D.comps[comp])} On/off, impact and charges drawn are for the whole season${comp === 'all' ? ' (pick a competition to see them)' : ''}; everything else follows the games selected.</span></div>
 <div class="scroll"><table class="sortable hap-players"><thead><tr><th scope="col"><button type="button" data-k="name">Player</button></th><th scope="col">Pos</th><th scope="col" class="num">Ht</th><th scope="col" class="num">Age</th>${PCOLS.map(([k, l]) => `<th scope="col" class="num"><button type="button" data-k="${k}"${pSort === k ? ` aria-sort="${pDir < 0 ? 'descending' : 'ascending'}"` : ''}>${l}</button></th>`).join('')}</tr></thead><tbody>
 ${rows.map((r) => `<tr><td>${r.href ? `<a href="${esc(r.href)}">${esc(r.name)}</a>` : esc(r.name)}${r.ex.num ? ` <span class="muted small">#${esc(r.ex.num)}</span>` : ''}</td><td>${esc(r.ex.pos || '')}</td><td class="num">${r.ex.ht || '–'}</td><td class="num">${r.ex.age ?? '–'}</td>${PCOLS.map(([k]) => `<td class="num">${fmt(r, k)}</td>`).join('')}</tr>`).join('')}
 </tbody></table></div>`;
+    wire();
     playersBox.querySelectorAll('[data-pm]').forEach((b) => b.addEventListener('click', () => { pMode = b.dataset.pm; renderPlayers(); }));
     playersBox.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.k; if (pSort === k) pDir = -pDir; else { pSort = k; pDir = k === 'name' ? 1 : -1; } renderPlayers(); }));
   }

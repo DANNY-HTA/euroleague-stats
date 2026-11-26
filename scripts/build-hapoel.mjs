@@ -264,7 +264,7 @@ ${teamStatsTable}
 ${quarterTable ? `<h3>Average by quarter</h3>${quarterTable}` : ''}
 <p class="small">${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}.html"><strong>${esc(C.short)} team page →</strong></a> · <a href="${C.pfx}team-${safe(C.code)}-report.html">${esc(C.short)} team report</a>`).join(' · ')}</p></section>
 
-<section class="card" id="players"><h2>Players</h2><p class="muted">Every Hapoel player, every stat, in the competition chosen above. Click a column to sort.</p>
+<section class="card" id="players"><h2>Players</h2><p class="muted">Every Hapoel player, every stat, in the competition chosen above — per game, totals or per 40 minutes, over all games, wins, losses, home, away, the last few, or any games you tick. Click a column to sort.</p>
 <div id="hap-players"><p class="muted">Loading…</p></div></section>
 
 <section class="card" id="lineups"><h2>Lineups</h2><p class="muted">Hapoel's five-man units — and 2-, 3- and 4-man combinations — from the official play-by-play. Pick the games: all of them, the last few, wins or losses, one competition, or any games you tick.</p>
