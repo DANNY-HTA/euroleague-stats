@@ -10,7 +10,7 @@ import { validateGame } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, teamGames, quarterAverages, possessions } from '../lib/stats.mjs';
 import { esc, f1, signed, page, fmtDate, assetVersion } from '../lib/render.mjs';
 import { buildStints, checkStints, aggregate, rapm, repairPlusMinus } from '../lib/pbp.mjs';
-import { clutch as clutchOf, afterTimeouts, onOff, rates as situRates } from '../lib/situ.mjs';
+import { clutch as clutchOf, afterTimeouts, onOff, rates as situRates, flowExtras } from '../lib/situ.mjs';
 import { playerRates } from '../lib/advanced.mjs';
 import { playLog, offensiveFouls } from '../lib/game.mjs';
 import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
@@ -241,7 +241,7 @@ for (const C of COMPS) {
     const home = x.h.code === code, o = home ? x.a : x.h;
     const g = C.games.find((gg) => String(gg.gameCode) === String(x.c));
     const me = g ? (home ? g.home : g.away) : null, op = g ? (home ? g.away : g.home) : null;
-    sched.push({ c: C.key, oc: o.code, utc: x.utc || null, ok: x.ok !== false, r: x.r, rn: x.rn || '', home, opp: titleCase(o.name || o.code), crest: C.crests.get(o.code) || null, venue: x.venue || '',
+    sched.push({ c: C.key, oc: o.code, gc: x.c, utc: x.utc || null, ok: x.ok !== false, r: x.r, rn: x.rn || '', home, opp: titleCase(o.name || o.code), crest: C.crests.get(o.code) || null, venue: x.venue || '',
       res: me ? [me.score, op.score] : null, href: g ? `${C.pfx}game-${safe(g.gameCode)}.html` : null, played: !!me || played.has(String(x.c)) });
   }
 }
@@ -270,7 +270,7 @@ const hero = `<section class="cover hap-cover"><div class="wrap"><div>
 </div>${crest ? `<div class="side cover-crest"><img src="${esc(crest)}" alt=""></div>` : ''}</div></section>`;
 
 const tabs = `<div class="comp-tabs" role="tablist" aria-label="Competition"><button type="button" role="tab" data-comp="all" aria-selected="true">All competitions</button>${ACTIVE.map((C) => `<button type="button" role="tab" data-comp="${C.key}" aria-selected="false">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="18" height="18">` : ''}${esc(C.short)}</button>`).join('')}</div>`;
-const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
+const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#last-game">Last game</a><a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="recruit.html">Recruiting</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
 
 const person = (k) => (people.get(k)?.name || k);
 const data = {
@@ -284,7 +284,37 @@ const sgn1 = (v) => (v == null || !Number.isFinite(v) ? '–' : (v > 0 ? '+' : v
 const nextByComp = ACTIVE.map((C) => nextGames.find((x) => x.c === C.key)).filter(Boolean);
 const nextHtml = nextByComp.length ? `<section class="card next-opp" id="next"><h2>Next opponent — pre-game report</h2>
 <p class="muted">Rebuilt every night from the latest games: the opponent's profile, wins vs losses, compared with the league and with Hapoel, starting fives, personnel and player keys, lineups, form in the last 5 games, clutch and after-timeout plays. Print it or save it as a PDF.</p>
-<div class="next-grid">${nextByComp.map((x) => { const C = ACTIVE.find((c) => c.key === x.c); const href = `${C.pfx}team-${safe(x.oc)}-report.html`; const t = C.teams.find((tt) => tt.code === x.oc); return `<a class="next-card" href="${href}">${x.crest ? `<img src="${esc(x.crest)}" alt="" width="56" height="56">` : ''}<span class="nc-body"><span class="kicker">${compBadge(x.c)} ${esc(x.rn || (x.r ? 'Round ' + x.r : ''))}</span><strong>${x.home ? 'vs' : 'at'} ${esc(x.opp)}</strong><span class="muted small">${timeTag(x)}${t ? ` · ${t.w}–${t.l} · ${ord(t.rank)}` : ''}</span><span class="btn">Open pre-game report →</span></span></a>`; }).join('')}</div></section>` : '';
+<div class="next-grid">${nextByComp.map((x) => { const C = ACTIVE.find((c) => c.key === x.c); const href = `${C.pfx}team-${safe(x.oc)}-report.html`; const t = C.teams.find((tt) => tt.code === x.oc); return `<a class="next-card" href="${href}">${x.crest ? `<img src="${esc(x.crest)}" alt="" width="56" height="56">` : ''}<span class="nc-body"><span class="kicker">${compBadge(x.c)} ${esc(x.rn || (x.r ? 'Round ' + x.r : ''))}</span><strong>${x.home ? 'vs' : 'at'} ${esc(x.opp)}</strong><span class="muted small">${timeTag(x)}${t ? ` · ${t.w}–${t.l} · ${ord(t.rank)}` : ''}</span><span class="btn">Open pre-game report →</span></span></a>`; }).join('')}</div>${nextByComp.some((x) => x.c === 'el') ? `<p class="small">During the EuroLeague game: ${nextByComp.filter((x) => x.c === 'el').map((x) => `<a href="live.html?game=${x.gc}"><strong>Live</strong></a> · <a href="live.html?game=${x.gc}&view=half"><strong>Halftime report</strong></a> · <a href="live.html?game=${x.gc}&view=bench"><strong>Bench screen</strong></a>`).join('')}</p>` : ''}</section>` : '';
+
+// ---- Post-game summary: the last game in each competition ----
+const lastGameHtml = (() => {
+  const blocks = ACTIVE.map((C) => {
+    const g = C.mine[C.mine.length - 1]; if (!g) return '';
+    const home = g.home.code === C.code, me = home ? g.home : g.away, op = home ? g.away : g.home, won = me.score > op.score;
+    const tt = teamTable([g]), tm = tt.find((x) => x.code === me.code), to = tt.find((x) => x.code === op.code);
+    const top = (side) => side.players.filter((x) => x.min > 0).sort((a, b) => b.pir - a.pir || b.pts - a.pts).slice(0, 3).map((x) => `<li><strong>${esc(x.name)}</strong> ${x.pts} pts, ${x.reb} reb, ${x.ast} ast <span class="muted">· PIR ${x.pir}</span></li>`).join('');
+    const entry = C.pbpOk.find((e) => e.game.gameCode === g.gameCode);
+    let lu = '', fl = '';
+    if (entry) {
+      const m = new Map();
+      for (const s2 of entry.stints) { const ids = home ? s2.home : s2.away, k = ids.join(','); const u = m.get(k) || { ids, secs: 0, d: 0 }; u.secs += s2.secs; u.d += s2.pts[me.code] - s2.pts[op.code]; m.set(k, u); }
+      const nm = new Map(me.players.map((x) => [x.id, x.name]));
+      const L = [...m.values()].filter((u) => u.secs >= 120).sort((a, b) => b.d - a.d);
+      const line = (u) => `${u.ids.map((id) => esc(nm.get(id) || id)).join(' · ')} <span class="muted">(${Math.round(u.secs / 60)} min, ${u.d > 0 ? '+' : ''}${u.d})</span>`;
+      if (L.length) lu = `<p class="small"><strong>Best lineup:</strong> ${line(L[0])}${L.length > 1 ? `<br><strong>Worst lineup:</strong> ${line(L[L.length - 1])}` : ''}</p>`;
+      const F = flowExtras([entry]).find((x) => x.code === me.code);
+      if (F) fl = `<p class="small">Points off turnovers ${F.offTO}–${F.offTOA} · second-chance points ${F.second}–${F.secondA} · runs of 8+ ${F.runs}–${F.runsA} (biggest ${F.best}–0 / ${F.bestA}–0)</p>`;
+    }
+    const k = (label, a, b, d = 1, low = false) => { const better = a === b ? '' : (low ? a < b : a > b) ? 'pos' : 'neg'; return `<tr><td>${label}</td><td class="num ${better}">${d ? a.toFixed(d) : a}</td><td class="num">${d ? b.toFixed(d) : b}</td></tr>`; };
+    return `<div class="comp-block lg-card" data-comp="${C.key}"><h3 class="comp-h">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="22" height="22">` : ''}${esc(C.short)} · ${esc(fmtDate(g.date))}</h3>
+<p class="lg-res"><span class="${won ? 'pos' : 'neg'}"><strong>${won ? 'W' : 'L'} ${me.score}–${op.score}</strong></span> ${home ? 'vs' : 'at'} <strong>${esc(titleCase(op.name))}</strong> <span class="muted small">Quarters ${(me.quarters || []).join('-')} / ${(op.quarters || []).join('-')}</span> <a href="${C.pfx}game-${safe(g.gameCode)}.html">Full game page →</a></p>
+<div class="r-two"><div>${tm && to ? `<table class="rtab"><thead><tr><th>Key numbers</th><th class="num">Hapoel</th><th class="num">${esc(op.tv)}</th></tr></thead><tbody>
+${k('Offensive rating', tm.ortg, to.ortg)}${k('Effective FG%', tm.efg, to.efg)}${k('Turnovers / 100', tm.tov100, to.tov100, 1, true)}${k('Offensive reb %', tm.orebPct, to.orebPct)}${k('Free-throw rate', tm.ftr, to.ftr)}${k('3P%', tm.threePct, to.threePct)}${k('Assists', me.totals.ast, op.totals.ast, 0)}
+</tbody></table>` : ''}</div>
+<div><h4>Best Hapoel players</h4><ol class="small">${top(me)}</ol><h4>Best ${esc(op.tv)} players</h4><ol class="small">${top(op)}</ol></div></div>${lu}${fl}</div>`;
+  }).filter(Boolean);
+  return blocks.length ? `<section class="card" id="last-game"><h2>Last game — summary</h2><p class="muted">Built automatically the night after every game: result, key numbers, best players, best and worst lineups, game flow.</p>${blocks.join('')}</section>` : '';
+})();
 
 // ---- On/Off: Hapoel with and without each player ----
 const onOffHtml = ACTIVE.some((C) => C.OO.length) ? `<section class="card" id="onoff"><h2>On/Off</h2>
@@ -318,6 +348,7 @@ ${[...nextGames.slice(0, 4)].map(schedRow).join('')}${sched.filter((x) => x.res)
 </tbody></table></div></section>
 
 ${nextHtml}
+${lastGameHtml}
 
 <section class="card" id="boxscores"><h2>Box scores</h2><p class="muted">Every Hapoel game. Open a game for its full box score — basic, shooting, advanced and by quarter — or go to the game page for the flow chart, play-by-play and lineups.</p>
 <div id="hap-games"><p class="muted">Loading…</p></div></section>
@@ -345,6 +376,7 @@ ${ACTIVE.map((C) => `<div class="comp-block" data-comp="${C.key}"><h3 class="com
 
 const info = { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null };
 copyFileSync('static/hapoel.js', join(OUT, 'hapoel.js'));
+for (const f of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png']) if (existsSync(join('static', f))) copyFileSync(join('static', f), join(OUT, f));
 // ---- Data for "Ask the Brain": Hapoel's season in compact form, and the Brain page ----
 {
   const line = (C, p) => [p.name, C.short, p.gp, p.gs, +f1(p.mpg), +f1(p.ppg), +f1(p.rpg), +f1(p.apg), +f1(p.spg), +f1(p.bpg), +f1(p.tpg), p.totals.fga2 ? +(100 * p.totals.fgm2 / p.totals.fga2).toFixed(1) : null, p.totals.fga3 ? +(100 * p.totals.fgm3 / p.totals.fga3).toFixed(1) : null, p.totals.fta ? +(100 * p.totals.ftm / p.totals.fta).toFixed(1) : null, +f1(p.ts), +f1(p.usg), +f1(p.pirpg), +f1(p.pmpg), C.onoff(p.id)?.swing != null ? +C.onoff(p.id).swing.toFixed(1) : null];
@@ -372,10 +404,18 @@ copyFileSync('static/hapoel.js', join(OUT, 'hapoel.js'));
   copyFileSync('static/compare.js', join(OUT, 'compare.js'));
   writeFileSync(join(OUT, 'compare.html'), page({ title: 'Compare players', cfg: { ...cfg }, info, active: 'compare.html', sample: false,
     body: `<section class="card"><h2>Compare players</h2>
-<p class="muted">Two or three players side by side — from the same league or from different ones (EuroLeague, EuroCup, Winner League, ACB, BBL, Greece, NBL, ABA, VTB, LBA). Per game, per 40 minutes or totals. The link keeps your selection, so you can send it.</p>
+<p class="muted">Two or three players side by side — from the same league or from different ones (EuroLeague, EuroCup, Winner League, ACB, BBL, Greece, NBL, ABA, VTB, LBA). Per game, per 40 minutes or totals. The link keeps your selection, so you can send it. <a href="recruit.html">Search all players and find similar ones →</a></p>
 <div id="compare-app"><p class="muted">Loading…</p></div></section>
 <script type="application/json" id="compare-leagues">${JSON.stringify(leaguesForBrain).replace(/</g, '\\u003c')}</script>`,
     hero: null, scripts: `<script src="compare.js?v=${assetVersion()}" defer></script>` }));
+  // Recruiting: all players of all leagues, similar players, shortlist
+  copyFileSync('static/recruit.js', join(OUT, 'recruit.js'));
+  writeFileSync(join(OUT, 'recruit.html'), page({ title: 'Recruiting', cfg: { ...cfg }, info, active: 'recruit.html', sample: false,
+    body: `<section class="card"><h2>Recruiting</h2>
+<p class="muted">Every player in every league on HTA LAB in one table. Filter by league, position, age, height, games and minutes; sort by any stat; press ≈ next to a player to find the players with the most similar style in all leagues; tap ☆ to build a shortlist. <a href="compare.html">Compare players side by side →</a></p>
+<div id="recruit-app"><p class="muted">Loading…</p></div></section>
+<script type="application/json" id="recruit-leagues">${JSON.stringify(leaguesForBrain).replace(/</g, '\\u003c')}</script>`,
+    hero: null, scripts: `<script src="recruit.js?v=${assetVersion()}" defer></script>` }));
 }
 writeFileSync(join(OUT, 'index.html'), page({ title: 'Hapoel Tel Aviv', cfg, info, active: 'index.html', sample: false, body, hero, scripts: `<script src="hapoel.js?v=${assetVersion()}" defer></script>` }));
 console.log(`✓ Hapoel home page: ${gameRows.length} games (${ACTIVE.map((C) => `${C.short} ${C.mine.length}`).join(', ')}), ${people.size} players, ${lineupGames.size} games with lineups`);

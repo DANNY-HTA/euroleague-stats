@@ -44,6 +44,7 @@ ${rows.map(({ p, a }) => `<tr><td>${p[3] ? '<span class="st" title="Starter">●
 ${rows.map(({ p, iv, secs }) => `<div class="pt-row"><span class="pt-name">${p[3] ? '<span class="st">●</span> ' : ''}${esc(p[1])}</span><div class="pt-track">${per.slice(1).map((t) => `<i class="pt-line" style="left:${pct(t)}%"></i>`).join('')}${iv.map(([a, b]) => `<b class="pt-on" tabindex="0" role="button" data-a="${a}" data-b="${b}" data-n="${esc(p[1])}" style="left:${pct(a)}%;width:${pct(b - a)}%" title="${clock(a)} → ${clock(b, true)} · ${mm(b - a)}"></b>`).join('')}</div><span class="num">${mm(secs)}</span></div>`).join('')}
 </div>`;
   }
+  const filterShots = () => document.querySelectorAll('#game-shots .shot-dot').forEach((d) => { d.style.display = picked.has(Number(d.dataset.q)) ? '' : 'none'; });
   function render() {
     app.innerHTML = `${D.ok ? '' : ''}<div class="filters"${D.ok ? '' : ' hidden'}><div class="seg" role="group" aria-label="Quarters"><button type="button" data-q="all" aria-pressed="${quick === 'all'}">Whole game</button>${Array.from({ length: D.periods }, (_, i) => `<button type="button" data-q="${i + 1}" aria-pressed="${quick !== 'all' && picked.has(i + 1)}">${pLabel(i + 1)}</button>`).join('')}<button type="button" data-q="h1" aria-pressed="${quick === 'h1'}">1st half</button><button type="button" data-q="h2" aria-pressed="${quick === 'h2'}">2nd half</button></div>
 <span class="muted small">${quick === 'all' ? 'Whole game' : [...picked].sort().map(pLabel).join(' + ')}</span></div>
@@ -58,6 +59,7 @@ ${D.ok ? boxFor('H') + boxFor('A') : '<p class="muted">The play-by-play for this
       else { const n = Number(q); if (quick !== 'pick') { picked.clear(); picked.add(n); } else if (picked.has(n) && picked.size > 1) picked.delete(n); else picked.add(n); quick = 'pick'; }
       render();
     }));
+    filterShots();
   }
   // Click / tap a bar: show that stretch's minutes.
   let pop = null;

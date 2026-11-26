@@ -150,13 +150,13 @@
     const docs = [];
     for (const f of files) { try { const d = await decryptJson(key, await fetchText(f)); d._file = f; docs.push(d); } catch { /* other password or damaged */ } }
     docs.sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.title).localeCompare(String(b.title)));
-    let cat = '', q = '';
+    let cat = '', q = (new URLSearchParams(location.search).get('q') || '').toLowerCase();
     const list = el('div', { class: 'docs' });
     const cats = ['All', ...new Set(docs.map((d) => d.category).filter(Boolean))];
     const chips = el('div', { class: 'tabs', role: 'group', 'aria-label': 'Category' }, cats.map((c) => el('button', { type: 'button', 'aria-pressed': c === 'All' ? 'true' : 'false', onclick: (e) => {
       cat = c === 'All' ? '' : c; chips.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b === e.currentTarget)); render();
     } }, c)));
-    const search = el('input', { type: 'search', placeholder: 'Search titles, opponents, notes…', 'aria-label': 'Search documents', oninput: (e) => { q = e.target.value.toLowerCase(); render(); } });
+    const search = el('input', { type: 'search', placeholder: 'Search titles, opponents, notes…', 'aria-label': 'Search documents', oninput: (e) => { q = e.target.value.toLowerCase(); render(); } }); search.value = q;
     const viewer = el('div', { class: 'viewer', hidden: true });
     function render() {
       const shown = docs.filter((d) => (!cat || d.category === cat) && (!q || [d.title, d.opponent, d.author, d.category, d.text, d.fileName].join(' ').toLowerCase().includes(q)));
@@ -260,6 +260,11 @@
       file: el('input', { id: 'u-file', type: 'file' })
     };
     f.category.value = 'Scouting report';
+    // Opened from a player or team page: "Add a note" fills in the category, title and team
+    const qp = new URLSearchParams(location.search);
+    if (qp.get('cat')) { if (![...f.category.options].some((o) => o.value === qp.get('cat'))) f.category.append(el('option', { value: qp.get('cat') }, qp.get('cat'))); f.category.value = qp.get('cat'); }
+    if (qp.get('title')) f.title.value = qp.get('title');
+    if (qp.get('opp')) f.opponent.value = qp.get('opp');
     f.file.addEventListener('change', () => {
       const file = f.file.files[0];
       if (file && !f.title.value) f.title.value = file.name.replace(/\.[^.]+$/, '').replace(/_+/g, ' ').replace(/\s+-\s+/g, ' – ');

@@ -16,7 +16,7 @@
         const r = await fetch(L[2] + 'player-stats.json'); if (!r.ok) return;
         const ps = await r.json(); const I = Object.fromEntries(ps.tk.map((k, i) => [k, i]));
         const tn = new Map((ps.teams || []).map((t) => [t[0], t[1]]));
-        for (const p of ps.players) if (p[10] > 0) ALL.push({ lg: L, row: p, I, team: tn.get(p[1]) || p[2] || p[1], key: L[0] + ':' + p[3] });
+        for (const p of ps.players) if (p[10] > 0) ALL.push({ lg: L, row: p, I, team: tn.get(p[2]) || tn.get(p[1]) || p[2] || p[1], key: L[0] + ':' + p[3] });
       } catch { /* league not available */ }
     }));
     // from the address (#el:player-X.html,acb:player-Y.html)

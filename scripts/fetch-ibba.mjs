@@ -72,7 +72,7 @@ for (const g of games.filter(played)) {
   const file = `${g.game_id}.json`; keep.add(file);
   const d = dmy(g.game_date_txt), age = d ? (Date.now() - Date.UTC(+d[2], +d[1] - 1, +d[0])) / 86400000 : 0;
   let raw = null;
-  if (age > REFRESH_DAYS) { try { raw = JSON.parse(await readFile(join(OUT, file), 'utf8')); kept++; } catch { raw = null; } }
+  if (age > REFRESH_DAYS) { try { raw = JSON.parse(await readFile(join(OUT, file), 'utf8')); if (!Array.isArray(raw.shots)) raw = null; else kept++; } catch { raw = null; } } // files made before shot locations were kept are downloaded again once
   if (!raw) {
     if (!g.ExternalID) { missing++; keep.delete(file); continue; }
     const ls = await getJson(`${BASE}/livestats/data/game-${g.ExternalID}.json`).catch(() => null);

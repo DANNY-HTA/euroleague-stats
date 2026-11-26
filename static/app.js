@@ -38,6 +38,13 @@
     });
   }
 
+  // Shot chart: offense / defense switch.
+  document.querySelectorAll('[data-shots]').forEach((b) => b.addEventListener('click', () => {
+    const sec = b.closest('section');
+    sec.querySelectorAll('[data-shots]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    sec.querySelectorAll('[data-shots-pane]').forEach((p) => { p.hidden = p.dataset.shotsPane !== b.dataset.shots; });
+  }));
+
   // Sortable tables.
   document.querySelectorAll('table.sortable').forEach((table) => {
     const heads = [...table.querySelectorAll('thead th')];

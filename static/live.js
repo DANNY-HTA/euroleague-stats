@@ -1,6 +1,9 @@
 // HTA LAB live: reads the official EuroLeague live feed straight from the browser every 15 seconds.
 import { parseGame } from './lib/parse.mjs';
 import { playLog, flowStats, connections, LABEL } from './lib/game.mjs';
+import { buildStints } from './lib/pbp.mjs';
+import { zoneOf, groupOf, ZONES } from './lib/zones.mjs';
+const VIEW = new URLSearchParams(location.search).get('view') || '';
 
 const CFG = JSON.parse(document.getElementById('live-config').textContent);
 const API = 'https://live.euroleague.net/api/';
@@ -75,8 +78,8 @@ function listView() {
 
 // ---------- One game ----------
 async function loadGame(code) {
-  const [header, boxscore, pbp] = await Promise.all([get('Header', code), get('Boxscore', code).catch(() => null), get('PlaybyPlay', code).catch(() => null)]);
-  return { header, boxscore, pbp };
+  const [header, boxscore, pbp, points] = await Promise.all([get('Header', code), get('Boxscore', code).catch(() => null), get('PlaybyPlay', code).catch(() => null), VIEW === 'half' ? get('Points', code).catch(() => null) : null]);
+  return { header, boxscore, pbp, points };
 }
 const pct = (m, a) => (a ? 100 * m / a : 0);
 function compare(g) {
@@ -143,6 +146,10 @@ function gameView(code, raw, updated) {
     qA.some((v) => v != null) ? el('table', { class: 'qtable' }, el('thead', {}, el('tr', {}, el('th'), ['Q1', 'Q2', 'Q3', 'Q4'].map((q) => el('th', { scope: 'col' }, q)))),
       el('tbody', {}, [[t(h.TVCodeA), qA, qB], [t(h.TVCodeB), qB, qA]].map(([tv, me, op]) => el('tr', {}, el('th', { scope: 'row' }, tv), me.map((v, i) => el('td', { class: v != null && v > (op[i] ?? -1) ? 'w' : '' }, v == null ? '' : String(v))))))) : null);
   if (!g) return [head, el('section', { class: 'card' }, el('p', { class: 'muted' }, 'Stats appear here when the game starts.'))];
+  const tabs = el('div', { class: 'seg lv-views', role: 'group', 'aria-label': 'View' }, [['', 'Full game'], ['half', 'Halftime report'], ['bench', 'Bench screen']].map(([k, l]) => el('a', { class: 'btn ghost small', href: `?game=${code}${k ? '&view=' + k : ''}`, 'aria-pressed': String(VIEW === k) }, l)));
+  if (VIEW === 'bench') return benchView(h, g, raw, onCourt, log, st);
+  if (VIEW === 'half') return [head, tabs, ...halftimeView(h, g, raw, log, st)];
+  head.append(tabs);
   const mvpPool = st === 'final' ? (sA > sB ? g.home : g.away).players : [...g.home.players, ...g.away.players];
   const leader = mvpPool.filter((p) => p.min > 0).sort((x, y) => y.pir - x.pir || y.pts - x.pts)[0];
   const best = (s, k) => s.players.filter((p) => p.min > 0).sort((x, y) => y[k] - x[k] || y.pir - x.pir)[0];
@@ -171,6 +178,83 @@ function gameView(code, raw, updated) {
         el('span', { class: 'pt' }, `${p[0] <= 4 ? 'Q' + p[0] : 'OT' + (p[0] - 4)} ${p[1]}`), el('span', {}, p[2] ? el('b', {}, p[2] === 'H' ? t(h.TVCodeA) : t(h.TVCodeB)) : null, ' ', p[3] ? `${names[p[3]] || log.names[p[3]] || ''} · ` : '', LABEL[p[4]] || p[4]), el('span', { class: 'ps' }, `${p[5]}–${p[6]}`))))),
       el('section', { class: 'card' }, el('h2', {}, 'Best connections'), ['H', 'A'].map((s) => [sideH(s === 'H' ? g.home : g.away), el('ol', { class: 'conn' }, conn.filter((c) => c.side === s).slice(0, 5).map((c) => el('li', {}, el('span', {}, `${names[c.from] || c.from} → ${names[c.to] || c.to}`), el('strong', {}, `${c.pts} pts`), el('span', { class: 'muted small' }, `${c.n} ast`))))]))) : null,
     el('p', { class: 'muted small' }, 'Live numbers come straight from the official EuroLeague live feed and can be corrected by the league after the game. The checked, final version is published on the site the same night.')];
+}
+
+// ---------- Halftime report: everything from the first half ----------
+function halftimeView(h, g, raw, log, st) {
+  const plays = log ? log.plays.filter((p) => p[0] <= 2) : [];
+  const q = Number(t(h.Quarter)) || 0, done = st === 'final' || q >= 3 || (q === 2 && /^0?0:00$/.test(t(h.RemainingPartialTime) || ''));
+  const side = (w) => (w === 'H' ? g.home : g.away), tv = (w) => (w === 'H' ? t(h.TVCodeA) : t(h.TVCodeB));
+  // team and player numbers from the first-half plays
+  const Z = () => ({ pts: 0, fgm2: 0, fga2: 0, fgm3: 0, fga3: 0, ftm: 0, fta: 0, oreb: 0, dreb: 0, ast: 0, tov: 0, stl: 0, blk: 0, pf: 0, offTO: 0, second: 0 });
+  const T = { H: Z(), A: Z() }, P = new Map(), tag = { H: {}, A: {} };
+  const add = (o, k, n = 1) => { o[k] += n; };
+  for (const p of plays) {
+    const w = p[2], type = p[4]; if (w !== 'H' && w !== 'A') continue;
+    const o = w === 'H' ? 'A' : 'H';
+    if (!P.has(p[3]) && p[3]) P.set(p[3], { w, ...Z() });
+    const pl = P.get(p[3]);
+    const both = (k, n = 1) => { add(T[w], k, n); if (pl) add(pl, k, n); };
+    const pts = type === '2FGM' ? 2 : type === '3FGM' ? 3 : type === 'FTM' ? 1 : 0;
+    if (type === '2FGM') { both('fgm2'); both('fga2'); } else if (type === '2FGA') both('fga2'); else if (type === '3FGM') { both('fgm3'); both('fga3'); } else if (type === '3FGA') both('fga3');
+    else if (type === 'FTM') { both('ftm'); both('fta'); } else if (type === 'FTA') both('fta'); else if (type === 'O') { both('oreb'); tag[w] = { ...tag[w], sc: true }; } else if (type === 'D') { both('dreb'); tag[w] = {}; }
+    else if (type === 'AS') both('ast'); else if (type === 'TO') { both('tov'); tag[o] = { to: true }; } else if (type === 'ST') both('stl'); else if (type === 'FV') both('blk'); else if (type === 'CM' || type === 'OF' || type === 'CMU' || type === 'CMT') both('pf');
+    if (pts) { both('pts', pts); if (tag[w].to) add(T[w], 'offTO', pts); if (tag[w].sc) add(T[w], 'second', pts); tag[o] = {}; }
+  }
+  // minutes, +/- and lineups from the first-half lineups
+  let stints = null; try { const r = buildStints(g, raw.pbp); if (r.ok) stints = r.periodStints.filter((x) => x.period <= 2); } catch { /* lineups unavailable */ }
+  const mins = new Map(), pm = new Map(), units = { H: new Map(), A: new Map() };
+  if (stints) for (const x of stints) for (const [w, ids, me, op] of [['H', x.home, g.home.code, g.away.code], ['A', x.away, g.away.code, g.home.code]]) {
+    for (const id of ids) { mins.set(id, (mins.get(id) || 0) + x.secs); pm.set(id, (pm.get(id) || 0) + x.pts[me] - x.pts[op]); }
+    const k = ids.join(','); const u = units[w].get(k) || { ids, secs: 0, pf: 0, pa: 0 }; u.secs += x.secs; u.pf += x.pts[me]; u.pa += x.pts[op]; units[w].set(k, u);
+  }
+  const nm = Object.fromEntries([...g.home.players, ...g.away.players].map((p) => [p.id, p]));
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+  const pc = (m, a) => (a ? `${m}/${a} (${Math.round(100 * m / a)}%)` : '0/0');
+  const rowsT = [['Points', (x) => x.pts], ['2-pointers', (x) => pc(x.fgm2, x.fga2)], ['3-pointers', (x) => pc(x.fgm3, x.fga3)], ['Free throws', (x) => pc(x.ftm, x.fta)], ['Off. rebounds', (x) => x.oreb], ['Def. rebounds', (x) => x.dreb], ['Assists', (x) => x.ast], ['Turnovers', (x) => x.tov], ['Steals', (x) => x.stl], ['Fouls', (x) => x.pf], ['Points off turnovers', (x) => x.offTO], ['Second-chance points', (x) => x.second]];
+  const fl = plays.length ? flowStats(plays) : null;
+  // shooting zones (official shot locations)
+  const shots = (raw.points?.Rows || []).filter((r) => /^[23]FG[AM]$/.test(t(r.ID_ACTION)) && Number(r.MINUTE) <= 20 && !(Number(r.COORD_X) === -1 && Number(r.COORD_Y) === -1));
+  const zoneT = (code) => ZONES.map(([k, l]) => { const s2 = shots.filter((r) => t(r.TEAM) === code && groupOf(zoneOf(Number(r.COORD_X), Number(r.COORD_Y), t(r.ID_ACTION).startsWith('3'))) === k); const m = s2.filter((r) => t(r.ID_ACTION).endsWith('M')).length; return el('tr', {}, el('td', {}, l), el('td', { class: 'num' }, `${m}/${s2.length}`), el('td', { class: 'num' }, s2.length ? Math.round(100 * m / s2.length) + '%' : '–')); });
+  const playersT = (w) => { const s2 = side(w); const list = s2.players.filter((p) => mins.get(p.id) || P.get(p.id)).sort((a, b) => (mins.get(b.id) || 0) - (mins.get(a.id) || 0)); return el('div', { class: 'scroll' }, el('table', { class: 'gbox' }, el('thead', {}, el('tr', {}, ['Player', 'MIN', 'PTS', '2P', '3P', 'FT', 'REB', 'AST', 'TOV', 'PF', '+/-'].map((x, i) => el('th', { class: i ? 'num' : '' }, x)))),
+    el('tbody', {}, list.map((p) => { const x = P.get(p.id) || Z(), v = pm.get(p.id) || 0; return el('tr', {}, el('td', {}, p.name), el('td', { class: 'num' }, mins.has(p.id) ? mmss(mins.get(p.id)) : '–'), el('td', { class: 'num' }, el('strong', {}, String(x.pts))), el('td', { class: 'num' }, `${x.fgm2}/${x.fga2}`), el('td', { class: 'num' }, `${x.fgm3}/${x.fga3}`), el('td', { class: 'num' }, `${x.ftm}/${x.fta}`), el('td', { class: 'num' }, String(x.oreb + x.dreb)), el('td', { class: 'num' }, String(x.ast)), el('td', { class: 'num' }, String(x.tov)), el('td', { class: `num ${x.pf >= 3 ? 'neg' : x.pf >= 2 ? 'warn' : ''}` }, String(x.pf)), el('td', { class: `num ${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}` }, `${v > 0 ? '+' : ''}${v}`)); })))); };
+  const unitsT = (w) => {
+    const list = [...units[w].values()].sort((a, b) => b.secs - a.secs).slice(0, 6);
+    if (!list.length) return el('p', { class: 'muted' }, 'Lineups not available.');
+    const head = el('thead', {}, el('tr', {}, el('th', {}, 'Lineup'), el('th', { class: 'num' }, 'MIN'), el('th', { class: 'num' }, 'Score'), el('th', { class: 'num' }, '+/-')));
+    const body = el('tbody', {}, list.map((u) => { const d = u.pf - u.pa; return el('tr', {}, el('td', { class: 'small' }, u.ids.map((id) => nm[id]?.name || id).join(' · ')), el('td', { class: 'num' }, mmss(u.secs)), el('td', { class: 'num' }, `${u.pf}–${u.pa}`), el('td', { class: `num ${d > 0 ? 'pos' : d < 0 ? 'neg' : ''}` }, `${d > 0 ? '+' : ''}${d}`)); }));
+    return el('table', { class: 'gbox' }, head, body);
+  };
+  const trouble = [...P.entries()].filter(([, x]) => x.pf >= 2).sort((a, b) => b[1].pf - a[1].pf).map(([id, x]) => el('li', { class: x.pf >= 3 ? 'neg' : '' }, `${tv(x.w)} · ${nm[id]?.name || id}: ${x.pf} fouls`));
+  return [
+    el('section', { class: 'card ht-head' }, el('h2', {}, done ? 'Halftime report' : 'First half so far'), el('p', { class: 'muted' }, done ? `Score at half: ${t(h.TVCodeA)} ${T.H.pts} – ${T.A.pts} ${t(h.TVCodeB)}. Everything below is from the first half only.` : 'The game is still in the first half: numbers update every 15 seconds and are complete at halftime.'), el('button', { type: 'button', class: 'btn ghost small no-print', onclick: () => window.print() }, 'Print')),
+    el('div', { class: 'row' },
+      el('section', { class: 'card' }, el('h2', {}, 'Teams — first half'), el('table', { class: 'gbox ht-cmp' }, el('thead', {}, el('tr', {}, el('th'), el('th', { class: 'num' }, t(h.TVCodeA)), el('th', { class: 'num' }, t(h.TVCodeB)))), el('tbody', {}, rowsT.map(([l, f]) => el('tr', {}, el('td', {}, l), el('td', { class: 'num' }, String(f(T.H))), el('td', { class: 'num' }, String(f(T.A))))))),
+        fl ? el('p', { class: 'small' }, `Lead changes ${fl.leadChanges} · ties ${fl.ties} · biggest lead ${t(h.TVCodeA)} +${fl.maxLead.H} / ${t(h.TVCodeB)} +${fl.maxLead.A} · biggest run ${t(h.TVCodeA)} ${fl.bestRun.H}–0 / ${t(h.TVCodeB)} ${fl.bestRun.A}–0`) : null),
+      el('section', { class: 'card' }, el('h2', {}, 'Foul trouble'), trouble.length ? el('ul', { class: 'ht-fouls' }, trouble) : el('p', { class: 'muted' }, 'Nobody has 2 or more fouls.'),
+        shots.length ? [el('h2', {}, 'Shooting by zone'), el('div', { class: 'row two' }, [['A', t(h.CodeTeamA)], ['B', t(h.CodeTeamB)]].map(([w, code]) => el('div', {}, el('h3', {}, w === 'A' ? t(h.TVCodeA) : t(h.TVCodeB)), el('table', { class: 'gbox' }, el('tbody', {}, zoneT(code))))))] : null)),
+    el('section', { class: 'card' }, el('h2', {}, 'Players — first half'), el('h3', {}, titleCase(g.home.name)), playersT('H'), el('h3', {}, titleCase(g.away.name)), playersT('A'), el('p', { class: 'muted small' }, 'Fouls: orange = 2, red = 3+.')),
+    el('section', { class: 'card' }, el('h2', {}, 'Lineups used — first half'), el('h3', {}, titleCase(g.home.name)), el('div', { class: 'scroll' }, unitsT('H')), el('h3', {}, titleCase(g.away.name)), el('div', { class: 'scroll' }, unitsT('A')))
+  ];
+}
+
+// ---------- Bench screen: big, simple, for the bench or a tablet ----------
+function benchView(h, g, raw, onCourt, log, st) {
+  const mmss = (m) => `${Math.floor(m)}:${String(Math.round((m % 1) * 60)).padStart(2, '0')}`;
+  const recent = log ? log.plays.filter((p) => !['BP', 'EP', 'EG'].includes(p[4])).slice(-4).reverse() : [];
+  const names = Object.fromEntries([...g.home.players, ...g.away.players].map((p) => [p.id, p.name]));
+  const team = (s, w) => {
+    const on = s.players.filter((p) => onCourt.has(p.id)), bench = s.players.filter((p) => !onCourt.has(p.id) && (p.min > 0 || p.pf > 0)).sort((a, b) => b.min - a.min);
+    const row = (p, big) => el('tr', { class: big ? 'bs-on' : '' }, el('td', { class: 'bs-num' }, p.number || ''), el('td', { class: 'bs-name' }, p.name), el('td', {}, mmss(p.min)), el('td', {}, el('strong', {}, String(p.pts))), el('td', { class: p.pf >= 4 ? 'bs-f4' : p.pf >= 3 ? 'bs-f3' : '' }, `${p.pf}F`), el('td', { class: p.pm > 0 ? 'pos' : p.pm < 0 ? 'neg' : '' }, `${p.pm > 0 ? '+' : ''}${p.pm}`));
+    return el('div', { class: 'bs-team' }, el('div', { class: 'bs-th' }, crest(s.code, 34), el('span', {}, titleCase(s.name)), el('span', { class: 'bs-tf' }, `Team fouls ${t(h['Foults' + w]) || 0} · TO left ${t(h['Timeouts' + w]) || 0}`)),
+      el('table', { class: 'bs-table' }, el('thead', {}, el('tr', {}, ['#', 'On the court', 'MIN', 'PTS', 'PF', '+/-'].map((x) => el('th', {}, x)))), el('tbody', {}, on.map((p) => row(p, true)))),
+      el('table', { class: 'bs-table bs-bench' }, el('thead', {}, el('tr', {}, ['#', 'Bench', 'MIN', 'PTS', 'PF', '+/-'].map((x) => el('th', {}, x)))), el('tbody', {}, bench.map((p) => row(p, false)))));
+  };
+  return [el('section', { class: 'bench-screen' },
+    el('div', { class: 'bs-top' }, el('a', { href: `?game=${selected}`, class: 'lb-back' }, '← Full view'), el('button', { type: 'button', class: 'btn ghost small', onclick: () => document.documentElement.requestFullscreen?.() }, 'Full screen'), el('span', { class: 'lb-upd' }, st === 'live' ? 'LIVE · refreshes every 15 s' : st === 'final' ? 'FINAL' : 'Not started')),
+    el('div', { class: 'bs-score' }, el('span', {}, `${t(h.TVCodeA)} ${Number(h.ScoreA) || 0}`), el('span', { class: 'bs-clock' }, st === 'live' ? `${quarterName(h)} ${t(h.RemainingPartialTime) || ''}` : st === 'final' ? 'Final' : ''), el('span', {}, `${Number(h.ScoreB) || 0} ${t(h.TVCodeB)}`)),
+    el('div', { class: 'bs-grid' }, team(g.home, 'A'), team(g.away, 'B')),
+    recent.length ? el('ol', { class: 'bs-plays' }, recent.map((p) => el('li', {}, `${p[0] <= 4 ? 'Q' + p[0] : 'OT' + (p[0] - 4)} ${p[1]} · ${p[2] === 'H' ? t(h.TVCodeA) : p[2] === 'A' ? t(h.TVCodeB) : ''} ${p[3] ? names[p[3]] || '' : ''} ${LABEL[p[4]] || p[4]} · ${p[5]}–${p[6]}`))) : null)];
 }
 
 // ---------- Run ----------

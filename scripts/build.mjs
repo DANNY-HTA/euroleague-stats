@@ -16,7 +16,8 @@ import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
 import { poolRows, poolFromDir } from '../lib/pool.mjs';
 import { playerRates } from '../lib/advanced.mjs';
-import { clutch as clutchOf, afterTimeouts, rates as situRates } from '../lib/situ.mjs';
+import { loadShots, courtSvg, zoneRows } from '../lib/shots.mjs';
+import { clutch as clutchOf, afterTimeouts, rates as situRates, rotation as rotationOf, flowExtras } from '../lib/situ.mjs';
 import { playLog, flowStats, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
 const args = process.argv.slice(2);
@@ -35,7 +36,8 @@ const OUT = args.includes('--out') ? args[args.indexOf('--out') + 1] : IS_EL ? '
 if (!existsSync(dataDir)) { console.error(`No data in ${dataDir}. Run "npm run fetch" first.`); process.exit(1); }
 const files = readdirSync(dataDir).filter((f) => f.endsWith('.json') && !f.startsWith('_')).sort();
 const rawPbp = new Map();
-let games = files.map((f) => { const raw = JSON.parse(readFileSync(join(dataDir, f))); const g = parseGame(raw); if (raw.pbp) rawPbp.set(g.gameCode, raw.pbp); return g; });
+const rawShots = new Map();
+let games = files.map((f) => { const raw = JSON.parse(readFileSync(join(dataDir, f))); const g = parseGame(raw); if (raw.pbp) rawPbp.set(g.gameCode, raw.pbp); if (Array.isArray(raw.shots) && raw.shots.length) rawShots.set(g.gameCode, raw.shots); return g; });
 if (cfg.dropInvalid) {
   // Secondary leagues: a game that fails the checks is left out (and reported) instead of stopping the build.
   games = games.filter((g) => { const e = validateGame(g); if (e.length) console.warn(`Left out game ${g.gameCode}: ${e[0]}`); return !e.length; });
@@ -110,6 +112,22 @@ const IMPACT = PBP ? rapm(PBP.rows) : null;
 const CLUTCH = pbpOk.length ? clutchOf(pbpOk) : null;
 const ATO = pbpOk.some((e) => e.events.some((x) => x.type === 'TOUT')) ? afterTimeouts(pbpOk) : null;
 if (CLUTCH) cfg.hasClutch = true;
+const FLOW = pbpOk.length ? flowExtras(pbpOk) : null;
+// Shot locations (EuroLeague / EuroCup feed), only games whose shots match the box score
+const SHOTS = loadShots(dataDir, games); // Winner League shot locations (raw.shots) are saved but not shown yet: their coordinate scale is not confirmed
+if (SHOTS) console.log(`Shots: ${SHOTS.shots.length} field-goal attempts from ${SHOTS.ok} games (${SHOTS.bad} games left out: shot feed does not match the box score)`);
+const ALLSHOTS = SHOTS?.shots || [];
+const shotBlock = (list, { title, note = '', id = '' }) => {
+  if (!list.length) return '';
+  const rows = zoneRows(list, ALLSHOTS);
+  const pc = (v) => (v == null ? '–' : v.toFixed(1));
+  return `<div class="shot-wrap"${id ? ` id="${id}"` : ''}><div class="shot-two"><figure>${courtSvg(list, { mode: 'dots', title: title + ' — every shot' })}<figcaption><span class="lg-m"></span> made <span class="lg-x"></span> missed · ${list.length} shots</figcaption></figure>
+<figure>${courtSvg(list, { mode: 'zones', league: ALLSHOTS, title: title + ' — zones' })}<figcaption><span class="zn-key zn-hot2"></span> much better than league <span class="zn-key zn-hot"></span> better <span class="zn-key zn-avg"></span> average <span class="zn-key zn-cold"></span> worse <span class="zn-key zn-cold2"></span> much worse</figcaption></figure></div>
+<div class="scroll"><table class="shot-zones"><thead><tr><th>Zone</th><th class="num">FG</th><th class="num">FG%</th><th class="num">League FG%</th><th class="num">Diff</th><th class="num">Share of shots</th><th class="num">League share</th></tr></thead><tbody>
+${rows.map((r) => `<tr><td>${r.label}</td><td class="num">${r.m}/${r.a}</td><td class="num"><strong>${pc(r.pct)}</strong></td><td class="num muted">${pc(r.lpct)}</td><td class="num ${r.pct != null && r.lpct != null ? (r.pct >= r.lpct ? 'pos' : 'neg') : ''}">${r.pct != null && r.lpct != null ? (r.pct >= r.lpct ? '+' : '−') + Math.abs(r.pct - r.lpct).toFixed(1) : '–'}</td><td class="num">${pc(r.share)}%</td><td class="num muted">${pc(r.lshare)}%</td></tr>`).join('')}
+</tbody></table></div>${note ? `<p class="muted small">${note}</p>` : ''}</div>`;
+};
+
 if (CLUTCH) console.log(`Clutch: ${CLUTCH.teams.reduce((s, t) => s + t.games, 0) / 2} clutch games; after timeouts: ${ATO ? ATO.reduce((s, t) => s + t.off.n, 0) + ' possessions' : 'no timeouts in this feed'}`);
 if (rawPbp.size) {
   console.log(`✓ Play-by-play: ${pbpOk.length} of ${rawPbp.size} games match the box score exactly and are used for on/off, lineups and impact`);
@@ -359,6 +377,7 @@ ${flow ? `<section class="card"><h2>Game flow</h2><p class="muted">The score mar
 <section class="card"><h2>Team comparison</h2><div class="perf-head"><span>${badge(H.code, H.tv)} ${esc(H.tv)}</span><span>${f1(cmp.P)} possessions</span><span>${esc(A.tv)} ${badge(A.code, A.tv)}</span></div>${cmp.html}</section>
 </div>
 <section class="card"><h2>Box score</h2>${pmRepaired.has(g.gameCode) ? `<p class="note-warn">The league's published +/- for this game is wrong (${pmRepaired.get(g.gameCode)} players). The +/- shown here is recalculated from the official play-by-play, which reproduces the final score and every player's minutes.</p>` : ''}${sideHead(H)}${gameBox(H)}${sideHead(A)}${gameBox(A)}<p class="muted small">Click any column to sort. PIR = Performance Index Rating.</p></section>
+${(() => { const gs = ALLSHOTS.filter((x) => x.g === g.gameCode); if (!gs.length) return ''; const side = (S) => { const l = gs.filter((x) => x.team === S.code); const m = l.filter((x) => x.made).length; return `<figure><figcaption><strong>${esc(titleCase(S.name))}</strong> <span class="muted small">${m}/${l.length} FG</span></figcaption>${courtSvg(l, { mode: 'dots', title: S.name + ' shots' })}</figure>`; }; return `<section class="card" id="game-shots"><h2>Shot chart</h2><p class="muted">Every field-goal attempt of the game. ${qbJson ? 'The quarter buttons in the quarter box score below also filter these shots.' : ''}</p><div class="shot-two">${side(H)}${side(A)}</div><p class="small muted"><span class="lg-m"></span> made <span class="lg-x"></span> missed</p></section>`; })()}
 ${qbJson ? `<section class="card" id="quarters"><h2>Quarter box score &amp; playing time</h2><p class="muted">Pick one or more quarters: every player's line in just those quarters, from the official play-by-play. Below, when each player was on the court.</p><div id="qb-app"><p class="muted">Loading…</p></div></section>
 <script type="application/json" id="qb-data">${qbJson}</script>` : ''}
 ${stints ? lineupBlock(g, stints, near ? `Small difference with the official box score in this game (${esc(near.why)}). These lineups are shown for this game only and are not used in the season lineup, on/off or impact numbers.` : '') : raw ? '<p class="muted small">Lineups are not available for this game: the official play-by-play does not say who was on the court at every moment.</p>' : ''}
@@ -586,7 +605,7 @@ writePage('players.html', 'Players', `
 </section>
 <h2 class="sec-title" id="all-stats">All player stats</h2>
 <div id="players-app"><noscript><div class="scroll"><table id="players"><thead><tr>${cols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}>${l}</th>`).join('')}</tr></thead>
-<tbody>${playerRows}</tbody></table></div></noscript><p class="muted">Loading player stats…</p></div>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Every stat we have — traditional, shooting, advanced, defense, on/off and impact, highs and profile — per game, totals or per 40 minutes. Filter by team, position, minutes or games, and click any column to sort.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']], actions: `<a class="btn white" href="${cfg.root || ''}compare.html">Compare players across leagues →</a>` }), { scripts: `<script src="players.js?v=${assetVersion()}" defer></script>` });
+<tbody>${playerRows}</tbody></table></div></noscript><p class="muted">Loading player stats…</p></div>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Every stat we have — traditional, shooting, advanced, defense, on/off and impact, highs and profile — per game, totals or per 40 minutes. Filter by team, position, minutes or games, and click any column to sort.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']], actions: `<a class="btn white" href="${cfg.root || ''}compare.html">Compare players →</a> <a class="btn white" href="${cfg.root || ''}recruit.html">Recruiting search →</a>` }), { scripts: `<script src="players.js?v=${assetVersion()}" defer></script>` });
 
 // ---- Quarter splits (EuroLeague): every player's and team's season, quarter by quarter ----
 // From the games whose play-by-play matches the box score: minutes and on-court points/possessions from the
@@ -941,6 +960,33 @@ ${CMP.map(([label, k, good]) => { const a = tL5?.[k], b = t[k]; if (a == null ||
 <div class="r-grid">${stat('Clutch games', `${ct.games} <small>(${ct.w}–${ct.l})</small>`)}${stat('Clutch minutes', f1(ctR.min))}${stat('Score in clutch', `${ct.pf}–${ct.pa}`)}${stat('Net rating', `${sg(ctR.net)} <span class="rk ${ctRank <= 3 ? 'rk-top' : ctRank > CLUTCH.teams.length - 3 ? 'rk-bot' : ''}">${ord(ctRank)}</span>`)}${stat('eFG% / Opp eFG%', `${f1(ctR.efg)} / ${f1(ctR.efgD)}`)}${stat('FT', `${ct.box.ftm}/${ct.box.fta}`)}</div>
 ${ctPlayers.length ? `<table class="rtab"><thead><tr><th>Player</th><th class="num">MIN</th><th class="num">PTS</th><th class="num">FG</th><th class="num">3P</th><th class="num">FT</th><th class="num">AST</th><th class="num">TOV</th><th class="num">+/-</th></tr></thead><tbody>${ctPlayers.map((x) => `<tr><td>${esc(nm(x.id))}</td><td class="num">${f1(x.secs / 60)}</td><td class="num"><strong>${x.box.pts}</strong></td><td class="num">${x.box.fgm2 + x.box.fgm3}/${x.box.fga2 + x.box.fga3}</td><td class="num">${x.box.fgm3}/${x.box.fga3}</td><td class="num">${x.box.ftm}/${x.box.fta}</td><td class="num">${x.box.ast}</td><td class="num">${x.box.tov}</td><td class="num ${x.pm >= 0 ? 'pos' : 'neg'}">${x.pm > 0 ? '+' : ''}${x.pm}</td></tr>`).join('')}</tbody></table>` : ''}` : ''}
 ${at && at.off.n ? `<h3>After timeouts</h3><div class="r-grid">${stat('Possessions after own timeout', at.off.n)}${stat('Points per possession', `${(at.off.pts / at.off.n).toFixed(2)} <span class="rk ${atRank <= 3 ? 'rk-top' : atRank > ATO.length - 3 ? 'rk-bot' : ''}">${ord(atRank)}</span>`)}${stat('Normal offense (PPP)', (t.ortg / 100).toFixed(2))}${stat('Scored on', `${(100 * at.off.scored / at.off.n).toFixed(0)}%`)}${stat('Turnovers', `${(100 * at.off.tov / at.off.n).toFixed(0)}%`)}${stat('3P after timeouts', `${at.off.fgm3}/${at.off.fga3}`)}${at.off.late.n ? stat('Last 2 minutes', `${at.off.late.pts} pts on ${at.off.late.n}`) : ''}${at.def.n ? stat('Allowed after opp. timeouts', (at.def.pts / at.def.n).toFixed(2) + ' PPP') : ''}</div>` : ''}` : '';
+    // Rotation pattern: share of each minute on the court
+    const rot = PBP ? rotationOf(pbpOk, t.code) : null;
+    const rotPlayers = rot ? rot.players.filter((x) => x.mpg >= 3 && x.gp >= Math.min(3, rot.games)).sort((a, b) => (b.share[0] - a.share[0]) || (b.mpg - a.mpg)) : [];
+    const rotHtml = rotPlayers.length ? `<div class="scroll"><table class="rot"><thead><tr><th>Player</th><th class="num">MIN</th>${Array.from({ length: 40 }, (_, m) => `<th class="rot-m${m % 10 === 0 ? ' rot-q' : ''}">${m % 10 === 0 ? 'Q' + (m / 10 + 1) : ''}</th>`).join('')}</tr></thead><tbody>
+${rotPlayers.map((x) => `<tr><td>${esc(nm(x.id))}</td><td class="num">${f1(x.mpg)}</td>${x.share.map((v, m) => `<td class="rot-c${m % 10 === 0 ? ' rot-q' : ''}" style="--a:${Math.min(1, v).toFixed(2)}" title="${esc(nm(x.id))}, minute ${m + 1}: on the court in ${Math.round(100 * v)}% of games"></td>`).join('')}</tr>`).join('')}
+</tbody></table></div><p class="muted small">Each square is one minute of a 40-minute game; the darker, the more often the player was on the court in that minute (${rot.games} games from the play-by-play). Starters first.</p>` : '';
+    // Game flow: runs, points off turnovers, second chance, last minute of quarters
+    const fl = FLOW?.find((x) => x.code === t.code);
+    const flRank = (k, dir = 1) => { const arr = FLOW.map((x) => x[k] / (x.games || 1)).sort((a, b) => dir * (b - a)); return 1 + arr.indexOf(fl[k] / (fl.games || 1)); };
+    const flAvg = (k) => FLOW.reduce((a, x) => a + x[k] / (x.games || 1), 0) / FLOW.length;
+    const flRow = (label, k, kA, dir = 1) => { const v = fl[k] / fl.games, va = fl[kA] / fl.games, r = flRank(k, dir), ra = flRank(kA, -dir); const cls = (x, n) => (x <= 3 ? 'rk-top' : x > n - 3 ? 'rk-bot' : ''); return `<tr><td>${label}</td><td class="num">${f1(v)} <span class="rk ${cls(r, FLOW.length)}">${ord(r)}</span></td><td class="num">${f1(va)} <span class="rk ${cls(ra, FLOW.length)}">${ord(ra)}</span></td><td class="num muted">${f1(flAvg(k))}</td></tr>`; };
+    const flowHtml = fl && fl.games ? `<table class="rtab"><thead><tr><th>Per game</th><th class="num">${esc(titleCase(t.name))}</th><th class="num">Opponents</th><th class="num">League avg</th></tr></thead><tbody>
+${flRow('Points off turnovers', 'offTO', 'offTOA')}${flRow('Second-chance points', 'second', 'secondA')}${flRow('Points in the last minute of quarters', 'lastMin', 'lastMinA')}${flRow('Scoring runs of 8+ (unanswered)', 'runs', 'runsA')}
+<tr><td>Biggest run</td><td class="num">${fl.best}–0</td><td class="num">${fl.bestA}–0</td><td></td></tr>
+<tr><td>When its runs start</td><td colspan="3" class="small">${['Q1', 'Q2', 'Q3', 'Q4', 'OT'].map((q, i) => `${q}: <strong>${fl.runQ[i]}</strong>`).join(' · ')}</td></tr>
+</tbody></table><p class="muted small">From the play-by-play (${fl.games} games). Ranks: 1st = most for the team's own column, fewest allowed for the opponents' column.</p>` : '';
+    // Head-to-head with Hapoel (same league)
+    const h2hGames = HAP?.same && t.code !== HAP_CODE ? myGames.filter((g) => g.home.code === HAP_CODE || g.away.code === HAP_CODE).sort((a, b) => a.date.localeCompare(b.date)) : [];
+    const h2hNext = HAP?.same && t.code !== HAP_CODE ? upcoming.filter((x) => (x.h.code === t.code && x.a.code === HAP_CODE) || (x.a.code === t.code && x.h.code === HAP_CODE)) : [];
+    let h2hHtml = '';
+    if (h2hGames.length || h2hNext.length) {
+      const rowsH = h2hGames.map((g) => { const me = g.home.code === t.code ? g.home : g.away, hp = g.home.code === t.code ? g.away : g.home; const top = (side) => side.players.slice().sort((a, b) => b.pts - a.pts).slice(0, 3).map((x) => `${esc(x.name)} ${x.pts}`).join(' · '); return `<tr><td>${esc(fmtDate(g.date))}</td><td>${g.home.code === t.code ? `${esc(t.tv)} vs Hapoel` : `Hapoel vs ${esc(t.tv)}`}</td><td class="${hp.score > me.score ? 'pos' : 'neg'}"><a href="${gameHref(g.gameCode)}">${hp.score > me.score ? 'Hapoel won' : 'Hapoel lost'} ${hp.score}–${me.score}</a></td><td class="small">${top(me)}</td><td class="small">${top(hp)}</td></tr>`; }).join('');
+      const tH = h2hGames.length ? splitOf(t.code, h2hGames) : null, hH = h2hGames.length ? splitOf(HAP_CODE, h2hGames) : null;
+      h2hHtml = `${rowsH ? `<table class="rtab"><thead><tr><th>Date</th><th>Game</th><th>Result</th><th>${esc(t.tv)} top scorers</th><th>Hapoel top scorers</th></tr></thead><tbody>${rowsH}</tbody></table>` : '<p>No meeting yet this season.</p>'}
+${tH && hH ? `<h3>Team stats in these games</h3><table class="rtab"><thead><tr><th>Stat</th><th class="num">${esc(titleCase(t.name))}</th><th class="num">Hapoel</th></tr></thead><tbody>${CMP.map(([label, k, good]) => { const a = tH[k], b = hH[k]; if (a == null || b == null) return ''; return `<tr><td>${label}</td><td class="num ${better(good, a, b)}">${dv(k, a)}</td><td class="num ${better(good, b, a)}">${dv(k, b)}</td></tr>`; }).join('')}</tbody></table>` : ''}
+${h2hNext.length ? `<p><strong>Next meeting:</strong> ${h2hNext.map((x) => `${timeTag(x)} · Rd ${x.r} · ${x.h.code === HAP_CODE ? 'Hapoel at home' : 'Hapoel away'}`).join(' / ')}</p>` : ''}`;
+    }
     let secN = 0; const sec = (title) => `<h2>${++secN}. ${title}</h2>`;
     const body = `
 <div class="report-bar no-print"><a href="${teamHref(t.code)}">← Back to team page</a><button type="button" class="btn" id="print-btn">Print / Save as PDF</button><span class="muted small">Tip: in the print window choose “Save as PDF”. Landscape fits the wide tables best.</span></div>
@@ -977,6 +1023,10 @@ ${hapTable ? `<section class="r-sec">${sec('Compared with Hapoel Tel Aviv')}
 ${hapTable}
 </section>` : ''}
 
+${h2hHtml ? `<section class="r-sec">${sec('Head-to-head with Hapoel')}
+${h2hHtml}
+</section>` : ''}
+
 <section class="r-sec">${sec(`Starting five — last ${starters.length} games`)}
 ${sameFive === starters.length && starters.length > 1 ? `<p><strong>Same starting five in all ${starters.length} games.</strong></p>` : `<p>${sameFive} of the last ${starters.length} games with the most recent starting five.</p>`}
 <table class="rtab"><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Starters</th></tr></thead><tbody>
@@ -984,6 +1034,16 @@ ${starters.map(({ g, ids }) => `<tr><td>${esc(fmtDate(g.date))}</td><td>${g.isHo
 </tbody></table>
 <p class="small"><strong>Starts in the last ${starters.length}:</strong> ${[...startCount].sort((a, b) => b[1] - a[1]).map(([id, n]) => `${esc(nm(id))} ${n}`).join(' · ')}<br><strong>Season starts:</strong> ${R.filter((x) => x.p.gs > 0).sort((a, b) => b.p.gs - a.p.gs).map((x) => `${esc(x.p.name)} ${x.p.gs}/${x.p.gp}`).join(' · ')}</p>
 </section>
+
+${(() => { const off = ALLSHOTS.filter((x) => x.team === t.code), def = ALLSHOTS.filter((x) => x.opp === t.code); return off.length ? `<section class="r-sec">${sec('Shot zones')}
+<div class="r-two"><div><h3>Offense</h3>${courtSvg(off, { mode: 'zones', league: ALLSHOTS, title: 'Offense zones' })}</div><div><h3>Defense — opponents' shots</h3>${courtSvg(def, { mode: 'zones', league: ALLSHOTS, title: 'Defense zones' })}</div></div>
+<table class="rtab"><thead><tr><th>Zone</th><th class="num">FG% (share)</th><th class="num">League FG% (share)</th><th class="num">Opp FG% (share)</th></tr></thead><tbody>${zoneRows(off, ALLSHOTS).map((r, i) => { const d = zoneRows(def, ALLSHOTS)[i]; const f = (x, sh) => (x == null ? '–' : `${x.toFixed(1)} <span class="muted">(${sh.toFixed(0)}%)</span>`); return `<tr><td>${r.label}</td><td class="num">${f(r.pct, r.share)}</td><td class="num muted">${f(r.lpct, r.lshare || 0)}</td><td class="num">${f(d.pct, d.share)}</td></tr>`; }).join('')}</tbody></table>
+<p class="muted small">Red = better than the league average in that zone, blue = worse (for the defense chart: red = opponents shoot well there). ${off.length} shots for, ${def.length} against.</p>
+</section>` : ''; })()}
+
+${rotHtml ? `<section class="r-sec">${sec('Rotation pattern')}
+${rotHtml}
+</section>` : ''}
 
 <section class="r-sec">${sec('Personnel')}
 <div class="scroll"><table class="rtab tight"><thead><tr><th>#</th><th>Player</th><th>Pos</th><th class="num">Ht</th><th class="num">Age</th><th class="num">GP/GS</th><th class="num">MIN</th><th class="num">PTS</th><th class="num">REB</th><th class="num">AST</th><th class="num">STL</th><th class="num">BLK</th><th class="num">TOV</th><th class="num">2P</th><th class="num">3P</th><th class="num">3PA</th><th class="num">FT%</th><th class="num">FTA</th><th class="num">TS%</th><th class="num">USG%</th><th class="num">PIR</th><th class="num">+/-</th><th class="num" title="Team net per 100 with him on minus off">On/off</th><th class="num">Impact</th><th class="num" title="Last 5 games: minutes / points">Last 5</th></tr></thead><tbody>
@@ -1007,7 +1067,8 @@ ${l5Rows ? `<section class="r-sec">${sec(`Form — last ${l5Games.length} games`
 ${formTable ? `<h3>Last ${l5Games.length} games against the season</h3>${formTable}` : ''}
 </section>` : ''}
 
-${situHtml ? `<section class="r-sec">${sec('Clutch and after timeouts')}
+${situHtml || flowHtml ? `<section class="r-sec">${sec('Game flow, clutch and after timeouts')}
+${flowHtml ? `<h3>Game flow</h3>${flowHtml}` : ''}
 ${situHtml}
 <p class="muted small">From the games whose official play-by-play matches the box score. Ratings per 100 possessions.</p>
 </section>` : ''}
@@ -1065,6 +1126,8 @@ ${(() => { const up = upcoming.filter((x) => x.h.code === t.code || x.a.code ===
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Venue</th><th scope="col"></th></tr></thead><tbody>
 ${up.map((x) => { const home = x.h.code === t.code, o = home ? x.a : x.h; return `<tr><td>${timeTag(x)}</td><td class="num">${x.r}</td><td class="muted">${home ? 'vs' : 'at'}</td><td><a href="${teamHref(o.code)}">${badge(o.code, o.tv)} ${esc(titleCase(o.name || o.code))}</a></td><td class="muted">${esc(titleCase(x.venue || ''))}</td><td>${IS_EL ? `<a href="live.html?game=${Number(x.c)}">Follow live ›</a>` : ''}</td></tr>`; }).join('')}
 </tbody></table></div></section>` : ''; })()}
+${(() => { const off = ALLSHOTS.filter((x) => x.team === t.code), def = ALLSHOTS.filter((x) => x.opp === t.code); return off.length ? `<section class="card" id="shots"><h2>Shot chart</h2><div class="seg" role="group" aria-label="Side"><button type="button" data-shots="off" aria-pressed="true">Offense</button><button type="button" data-shots="def" aria-pressed="false">Defense (opponents' shots)</button></div><div data-shots-pane="off">${shotBlock(off, { title: t.name + ' offense' })}</div><div data-shots-pane="def" hidden>${shotBlock(def, { title: t.name + ' defense', note: 'Where opponents shoot against this team, and how well, compared with the league.' })}</div></section>` : ''; })()}
+<section class="card staff-notes"><h2>Staff notes</h2><p class="muted">Private notes on ${esc(titleCase(t.name))}, kept encrypted in Hapoel Internal.</p><p><a class="btn" href="${cfg.root || ''}internal-upload.html?cat=${encodeURIComponent('Team note')}&title=${encodeURIComponent(titleCase(t.name))}&opp=${encodeURIComponent(titleCase(t.name))}">Add a note</a> <a class="btn ghost" href="${cfg.root || ''}internal.html?q=${encodeURIComponent(titleCase(t.name))}">Read notes</a></p></section>
 <section class="card"><h2>Results</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col"></th><th scope="col">Opponent</th><th scope="col">Result</th></tr></thead><tbody>
 ${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td class="muted">${g.isHome ? 'vs' : 'at'}</td><td><a href="${teamHref(g.opp.code)}">${badge(g.opp.code, g.opp.tv)} ${esc(titleCase(g.opp.name))}</a></td><td><a class="${g.win ? 'pos' : 'neg'}" href="${gameHref(g.gameCode)}">${g.win ? 'W' : 'L'} ${g.for}–${g.against} ›</a></td></tr>`).join('')}
@@ -1079,6 +1142,30 @@ ${list.map((g) => `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td
   if (missing.length && peopleIndex.byId.size) console.log('  No details for: ' + missing.join(', ') + (players.length - matched > 10 ? ', …' : ''));
 }
 const logs = playerGameLogs(games);
+// Season trend: per game bars and a 3-game rolling average, for points, minutes, PIR and true shooting.
+function trendSvg(log) {
+  const L = [...log].sort((a, b) => String(a.date).localeCompare(String(b.date))).filter((g) => g.line.min > 0);
+  if (L.length < 4) return '';
+  const series = [['Points', (l) => l.pts], ['Minutes', (l) => l.min], ['PIR', (l) => l.pir], ['True shooting %', (l) => { const a = l.fga2 + l.fga3 + 0.44 * l.fta; return a ? 100 * l.pts / (2 * a) : null; }]];
+  const W = 520, H = 130, P = 26;
+  const chart = ([label, f]) => {
+    const v = L.map((g) => f(g.line));
+    const nums = v.filter((x) => x != null), max = Math.max(...nums, 1), min = Math.min(0, ...nums);
+    const xs = (i) => P + (i + 0.5) * (W - P - 6) / L.length, ys = (x) => H - 18 - (H - 30) * (x - min) / (max - min || 1);
+    const roll = v.map((_, i) => { const w = v.slice(Math.max(0, i - 2), i + 1).filter((x) => x != null); return w.length ? w.reduce((a, b) => a + b, 0) / w.length : null; });
+    const bw = Math.max(3, (W - P - 6) / L.length - 3);
+    const avg = nums.reduce((a, b) => a + b, 0) / (nums.length || 1);
+    const first = nums.slice(0, Math.ceil(nums.length / 2)), last = nums.slice(Math.ceil(nums.length / 2));
+    const mean = (a) => a.reduce((x, y) => x + y, 0) / (a.length || 1), dir = mean(last) - mean(first);
+    return `<figure class="trend"><figcaption><strong>${label}</strong> <span class="muted small">season ${avg.toFixed(1)} · 2nd half of games ${dir >= 0 ? '▲' : '▼'} ${Math.abs(dir).toFixed(1)}</span></figcaption><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label} game by game">
+<line x1="${P}" x2="${W - 4}" y1="${ys(avg).toFixed(1)}" y2="${ys(avg).toFixed(1)}" class="tr-avg"/>
+${v.map((x, i) => (x == null ? '' : `<rect x="${(xs(i) - bw / 2).toFixed(1)}" y="${ys(Math.max(x, min)).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, ys(min) - ys(x)).toFixed(1)}" class="tr-bar${L[i].win ? '' : ' tr-l'}"><title>${esc(L[i].date)} ${L[i].isHome ? 'vs' : 'at'} ${esc(L[i].opp.tv)}: ${x.toFixed(label === 'Minutes' || label.startsWith('True') ? 1 : 0)}</title></rect>`)).join('')}
+<polyline class="tr-roll" points="${roll.map((x, i) => (x == null ? '' : `${xs(i).toFixed(1)},${ys(x).toFixed(1)}`)).filter(Boolean).join(' ')}"/>
+<text x="2" y="${ys(max) + 4}" class="tr-ax">${max.toFixed(0)}</text><text x="2" y="${H - 14}" class="tr-ax">${min.toFixed(0)}</text>
+</svg></figure>`;
+  };
+  return `<section class="card" id="trend"><h2>Season trend</h2><p class="muted">Game by game (red = win, grey = loss), with the 3-game rolling average (line) and the season average (dashed). Hover a bar for the game.</p><div class="trend-grid">${series.map(chart).join('')}</div></section>`;
+}
 const today = new Date().toISOString().slice(0, 10);
 const pct = (m, a) => (a > 0 ? f1(100 * m / a) : '–');
 const per = (v, gp) => f1(gp ? v / gp : 0);
@@ -1144,7 +1231,7 @@ for (const p of players) {
     kicker, title: esc(p.name),
     meta: `${crests.has(p.team) ? `<img class="crest" src="${esc(crests.get(p.team))}" alt="">` : ''}<span>${esc(teamT ? titleCase(teamT.name) : p.tv)}</span>${position ? `<span class="sep">/</span><span>${esc(position)}</span>` : ''}${age != null ? `<span class="sep">/</span><span>${age} years</span>` : ''}${person?.height ? `<span class="sep">/</span><span>${person.height} cm</span>` : ''}${person?.country ? `<span class="sep">/</span><span>${esc(person.country)}</span>` : ''}`,
     lede: ledeParts.join(' '),
-    actions: `<button type="button" id="share-btn" class="btn white">Download as image</button> <a class="btn white" href="${cfg.root || ''}compare.html#${LEAGUE}:${playerHref(p.id)}">Compare with…</a>`,
+    actions: `<button type="button" id="share-btn" class="btn white">Download as image</button> <a class="btn white" href="${cfg.root || ''}compare.html#${LEAGUE}:${playerHref(p.id)}">Compare with…</a> <a class="btn white" href="${cfg.root || ''}recruit.html#like=${LEAGUE}:${playerHref(p.id)}">Find similar players</a>`,
     side: num ? `<div class="side jersey" aria-hidden="true">${esc(String(num).replace(/^0+(?=\d)/, ''))}</div>` : coverCrest(p.team)
   });
 
@@ -1265,6 +1352,7 @@ ${[['FG%', pct(fgm, fga) + ` <span class="muted">(${fgm}/${fga})</span>`], ['2P%
 </dl></section>
 <section class="card"><h2>Season highs</h2><dl class="bio highs">${high('pts', 'Points')}${high('reb', 'Rebounds')}${high('ast', 'Assists')}${high('fgm3', 'Threes made')}${high('stl', 'Steals')}${high('blk', 'Blocks')}${high('pir', 'PIR')}</dl></section>
 </div>
+${trendSvg(log)}<section class="card staff-notes"><h2>Staff notes</h2><p class="muted">Private notes on ${esc(p.name)}, kept encrypted in Hapoel Internal (team password needed to read them).</p><p><a class="btn" href="${cfg.root || ''}internal-upload.html?cat=${encodeURIComponent('Player note')}&title=${encodeURIComponent(p.name)}&opp=${encodeURIComponent(teamT ? titleCase(teamT.name) : '')}">Add a note</a> <a class="btn ghost" href="${cfg.root || ''}internal.html?q=${encodeURIComponent(p.name)}">Read notes on ${esc(p.name)}</a></p></section>${(() => { const mine = ALLSHOTS.filter((x) => x.pid === p.id); return mine.length >= 10 ? `<section class="card" id="shots"><h2>Shot chart</h2><p class="muted">Every field-goal attempt this season from the official shot locations, and his shooting by zone against the league.</p>${shotBlock(mine, { title: p.name })}</section>` : ''; })()}
 <section class="card"><h2>Game log</h2>
 <div class="scroll"><table><thead><tr><th scope="col">Date</th><th scope="col">Rd</th><th scope="col">Opponent</th><th scope="col">Result</th>${['MIN', 'PTS', '2P', '3P', 'FT', 'REB', 'AST', 'STL', 'TOV', 'BLK', 'PF', '+/-', 'PIR'].map(th).join('')}</tr></thead><tbody>
 ${log.map((g) => { const l = g.line; return `<tr><td>${esc(g.date)}</td><td class="num">${g.round}</td><td><a href="${teamHref(g.opp.code)}"><span class="muted">${g.isHome ? 'vs' : 'at'}&nbsp;</span>${badge(g.opp.code, g.opp.tv)}${esc(g.opp.tv)}</a></td><td><a class="${g.win ? 'pos' : 'neg'}" href="${gameHref(g.gameCode)}">${g.win ? 'W' : 'L'} ${g.for}–${g.against} ›</a></td>
@@ -1608,7 +1696,7 @@ copyFileSync('static/players.js', join(OUT, 'players.js'));
 copyFileSync('static/scouting.js', join(OUT, 'scouting.js'));
 copyFileSync('static/live.js', join(OUT, 'live.js'));
 mkdirSync(join(OUT, 'lib'), { recursive: true });
-for (const f of ['parse.mjs', 'pbp.mjs', 'game.mjs']) copyFileSync(join('lib', f), join(OUT, 'lib', f));
+for (const f of ['parse.mjs', 'pbp.mjs', 'game.mjs', 'zones.mjs']) copyFileSync(join('lib', f), join(OUT, 'lib', f));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   id: p.id, name: p.name, team: teamName.get(p.team) ? titleCase(teamName.get(p.team)) : p.team, tv: p.tv, gp: p.gp,
   stats: [['PTS', p.ppg], ['REB', p.rpg], ['AST', p.apg], ['STL', p.spg], ['BLK', p.bpg], ['PIR', p.pirpg], ['MIN', p.mpg], ['TS%', p.ts], ['USG%', p.usg]].map(([k, v]) => [k, f1(v)])
