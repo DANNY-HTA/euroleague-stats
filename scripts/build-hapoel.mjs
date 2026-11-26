@@ -10,6 +10,7 @@ import { validateGame } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, teamGames, quarterAverages, possessions } from '../lib/stats.mjs';
 import { esc, f1, signed, page, fmtDate, assetVersion } from '../lib/render.mjs';
 import { buildStints, checkStints, aggregate, rapm, repairPlusMinus } from '../lib/pbp.mjs';
+import { clutch as clutchOf, afterTimeouts, onOff, rates as situRates } from '../lib/situ.mjs';
 import { playerRates } from '../lib/advanced.mjs';
 import { playLog, offensiveFouls } from '../lib/game.mjs';
 import { indexPeople, findPerson, ageOn } from '../lib/people.mjs';
@@ -60,8 +61,11 @@ for (const C of ACTIVE) {
     const pbp = C.raw.get(g.gameCode); if (!pbp) continue;
     const r = buildStints(g, pbp); if (!r.ok) continue;
     repairPlusMinus(g, r.stints);
-    if (!checkStints(g, r.stints)) C.pbpOk.push({ game: g, stints: r.stints });
+    if (!checkStints(g, r.stints)) C.pbpOk.push({ game: g, stints: r.stints, periodStints: r.periodStints, events: r.events });
   }
+  C.OO = C.pbpOk.length ? onOff(C.pbpOk.filter((e) => isMine(C, e.game))).filter((x) => x.team === C.code) : [];
+  C.CL = C.pbpOk.length ? clutchOf(C.pbpOk) : null;
+  C.ATO = C.pbpOk.some((e) => e.events.some((x) => x.type === 'TOUT')) ? afterTimeouts(C.pbpOk) : null;
   C.PBP = C.pbpOk.length ? aggregate(C.pbpOk) : null;
   C.IMPACT = C.PBP ? rapm(C.PBP.rows) : null;
   C.OFP = new Map();
@@ -237,7 +241,7 @@ for (const C of COMPS) {
     const home = x.h.code === code, o = home ? x.a : x.h;
     const g = C.games.find((gg) => String(gg.gameCode) === String(x.c));
     const me = g ? (home ? g.home : g.away) : null, op = g ? (home ? g.away : g.home) : null;
-    sched.push({ c: C.key, utc: x.utc || null, ok: x.ok !== false, r: x.r, rn: x.rn || '', home, opp: titleCase(o.name || o.code), crest: C.crests.get(o.code) || null, venue: x.venue || '',
+    sched.push({ c: C.key, oc: o.code, utc: x.utc || null, ok: x.ok !== false, r: x.r, rn: x.rn || '', home, opp: titleCase(o.name || o.code), crest: C.crests.get(o.code) || null, venue: x.venue || '',
       res: me ? [me.score, op.score] : null, href: g ? `${C.pfx}game-${safe(g.gameCode)}.html` : null, played: !!me || played.has(String(x.c)) });
   }
 }
@@ -266,7 +270,7 @@ const hero = `<section class="cover hap-cover"><div class="wrap"><div>
 </div>${crest ? `<div class="side cover-crest"><img src="${esc(crest)}" alt=""></div>` : ''}</div></section>`;
 
 const tabs = `<div class="comp-tabs" role="tablist" aria-label="Competition"><button type="button" role="tab" data-comp="all" aria-selected="true">All competitions</button>${ACTIVE.map((C) => `<button type="button" role="tab" data-comp="${C.key}" aria-selected="false">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="18" height="18">` : ''}${esc(C.short)}</button>`).join('')}</div>`;
-const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#lineups">Lineups</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
+const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
 
 const person = (k) => (people.get(k)?.name || k);
 const data = {
@@ -275,11 +279,45 @@ const data = {
   people: Object.fromEntries([...people.values()].map((e) => [e.key, [e.name, e.href.el || e.href.il || null, extra[e.key] || {}]])),
   stints: stintRows, lineupGames: [...lineupGames]
 };
+// ---- Next opponent: pre-game scouting report (team report of the next opponent, rebuilt every night) ----
+const sgn1 = (v) => (v == null || !Number.isFinite(v) ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1));
+const nextByComp = ACTIVE.map((C) => nextGames.find((x) => x.c === C.key)).filter(Boolean);
+const nextHtml = nextByComp.length ? `<section class="card next-opp" id="next"><h2>Next opponent — pre-game report</h2>
+<p class="muted">Rebuilt every night from the latest games: the opponent's profile, wins vs losses, compared with the league and with Hapoel, starting fives, personnel and player keys, lineups, form in the last 5 games, clutch and after-timeout plays. Print it or save it as a PDF.</p>
+<div class="next-grid">${nextByComp.map((x) => { const C = ACTIVE.find((c) => c.key === x.c); const href = `${C.pfx}team-${safe(x.oc)}-report.html`; const t = C.teams.find((tt) => tt.code === x.oc); return `<a class="next-card" href="${href}">${x.crest ? `<img src="${esc(x.crest)}" alt="" width="56" height="56">` : ''}<span class="nc-body"><span class="kicker">${compBadge(x.c)} ${esc(x.rn || (x.r ? 'Round ' + x.r : ''))}</span><strong>${x.home ? 'vs' : 'at'} ${esc(x.opp)}</strong><span class="muted small">${timeTag(x)}${t ? ` · ${t.w}–${t.l} · ${ord(t.rank)}` : ''}</span><span class="btn">Open pre-game report →</span></span></a>`; }).join('')}</div></section>` : '';
+
+// ---- On/Off: Hapoel with and without each player ----
+const onOffHtml = ACTIVE.some((C) => C.OO.length) ? `<section class="card" id="onoff"><h2>On/Off</h2>
+<p class="muted">How Hapoel plays with each player on the court and without him (same games), from the official play-by-play. Ratings per 100 possessions. Diff = on minus off; green = the team is better with him on the court.</p>
+${ACTIVE.filter((C) => C.OO.length).map((C) => { const nm = new Map(C.players.map((p) => [p.id, p])); const rows = C.OO.filter((x) => nm.has(x.id) && x.on.secs >= 600).map((x) => ({ x, p: nm.get(x.id), on: situRates(x.on), off: situRates(x.off) })).sort((a, b) => b.x.on.secs - a.x.on.secs);
+  const d = (a, b, good = 1) => { if (a == null || b == null) return '<td class="num">–</td>'; const v = a - b; return `<td class="num ${!good || Math.abs(v) < 0.05 ? '' : (good * v > 0 ? 'pos' : 'neg')}">${sgn1(v)}</td>`; };
+  const trio = (k, good = 1, fmt = (v) => f1(v)) => (r) => `<td class="num">${r.on[k] == null ? '–' : fmt(r.on[k])}</td><td class="num muted">${r.off[k] == null ? '–' : fmt(r.off[k])}</td>${d(r.on[k], r.off[k], good)}`;
+  const cols = [['Net', trio('net', 1, sgn1)], ['ORtg', trio('ortg')], ['DRtg', trio('drtg', -1)], ['eFG%', trio('efg')], ['Opp eFG%', trio('efgD', -1)], ['TO%', trio('tovPct', -1)], ['Forced TO%', trio('tovPctD')], ['OREB%', trio('orebPct')], ['DREB%', trio('drebPct')], ['3PA rate', trio('threeRate', 0)], ['Pace', trio('pace', 0)]];
+  return `<div class="comp-block" data-comp="${C.key}"><h3 class="comp-h">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="22" height="22">` : ''}${esc(C.short)} <small class="muted">${C.OO.length ? `${new Set(C.pbpOk.filter((e) => isMine(C, e.game)).map((e) => e.game.gameCode)).size} games` : ''}</small></h3>
+<div class="scroll"><table class="hap-onoff"><thead><tr><th rowspan="2">Player</th><th rowspan="2" class="num">GP</th><th rowspan="2" class="num">MIN on</th><th rowspan="2" class="num">MIN off</th><th rowspan="2" class="num">Score on</th><th rowspan="2" class="num">Score off</th>${cols.map(([l]) => `<th colspan="3" class="grp">${l}</th>`).join('')}</tr><tr>${cols.map(() => '<th class="num">On</th><th class="num">Off</th><th class="num">Diff</th>').join('')}</tr></thead><tbody>
+${rows.map((r) => `<tr><td><a href="${C.pfx}${r.p.href || `player-${safe(r.p.id)}.html`}"><strong>${esc(r.p.name)}</strong></a></td><td class="num">${r.x.games}</td><td class="num">${f1(r.on.min)}</td><td class="num">${f1(r.off.min)}</td><td class="num">${r.on.pf}–${r.on.pa}</td><td class="num">${r.off.pf}–${r.off.pa}</td>${cols.map(([, f]) => f(r)).join('')}</tr>`).join('')}
+</tbody></table></div>${rows.some((r) => r.off.min < 40) ? '<p class="muted small">Off-court numbers based on fewer than 40 minutes are a small sample.</p>' : ''}</div>`; }).join('')}
+</section>` : '';
+
+// ---- Clutch and after timeouts: Hapoel ----
+const clutchHtml = ACTIVE.some((C) => C.CL) ? `<section class="card" id="clutch"><h2>Clutch &amp; after timeouts</h2>
+<p class="muted">Clutch = the last 5 minutes of the 4th quarter or overtime with the score within 5. After timeouts = Hapoel's first possession after its own timeout. Ranks are within the league.</p>
+${ACTIVE.filter((C) => C.CL).map((C) => { const ct = C.CL.teams.find((x) => x.code === C.code); const R = (x) => situRates({ secs: x.secs, poss: x.poss, possD: x.possD, pf: x.pf, pa: x.pa, box: x.box, opp: x.opp }); const r = ct ? R(ct) : null; const rk = ct ? 1 + C.CL.teams.filter((x) => (R(x).net ?? -999) > (r.net ?? -999)).length : null;
+  const nm = new Map(C.players.map((p) => [p.id, p])); const pl = C.CL.players.filter((x) => x.team === C.code && nm.has(x.id)).sort((a, b) => b.box.pts - a.box.pts || b.secs - a.secs);
+  const at = C.ATO?.find((x) => x.code === C.code); const atR = at && at.off.n ? 1 + C.ATO.filter((x) => x.off.n && x.off.pts / x.off.n > at.off.pts / at.off.n).length : null;
+  return `<div class="comp-block" data-comp="${C.key}"><h3 class="comp-h">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="22" height="22">` : ''}${esc(C.short)}</h3>
+${ct ? `<div class="strip dark-strip"><span><b>${ct.games}</b> clutch games (${ct.w}–${ct.l})</span><span><b>${f1(r.min)}</b> clutch min</span><span><b>${ct.pf}–${ct.pa}</b> score</span><span><b>${sgn1(r.net)}</b> net · ${ord(rk)} of ${C.CL.teams.length}</span>${at && at.off.n ? `<span><b>${(at.off.pts / at.off.n).toFixed(2)}</b> PPP after timeouts · ${ord(atR)} of ${C.ATO.length} (${at.off.n} poss.)</span><span><b>${(C.team.ortg / 100).toFixed(2)}</b> normal PPP</span>` : ''}</div>` : '<p class="muted">No clutch games yet.</p>'}
+${pl.length ? `<div class="scroll"><table class="hap-clutch"><thead><tr><th>Player</th><th class="num">GP</th><th class="num">MIN</th><th class="num">PTS</th><th class="num">FG</th><th class="num">3P</th><th class="num">FT</th><th class="num">REB</th><th class="num">AST</th><th class="num">TOV</th><th class="num">STL</th><th class="num">+/-</th></tr></thead><tbody>${pl.map((x) => { const b = x.box; return `<tr><td>${esc(nm.get(x.id).name)}</td><td class="num">${x.games}</td><td class="num">${f1(x.secs / 60)}</td><td class="num"><strong>${b.pts}</strong></td><td class="num">${b.fgm2 + b.fgm3}/${b.fga2 + b.fga3}</td><td class="num">${b.fgm3}/${b.fga3}</td><td class="num">${b.ftm}/${b.fta}</td><td class="num">${b.oreb + b.dreb}</td><td class="num">${b.ast}</td><td class="num">${b.tov}</td><td class="num">${b.stl}</td><td class="num ${x.pm >= 0 ? 'pos' : 'neg'}">${x.pm > 0 ? '+' : ''}${x.pm}</td></tr>`; }).join('')}</tbody></table></div>` : ''}
+<p class="small"><a href="${C.pfx}clutch.html"><strong>${esc(C.short)} clutch &amp; after-timeout rankings, every team and player →</strong></a></p></div>`; }).join('')}
+</section>` : '';
+
 const body = `${tabs}${navLinks}
 <section class="card" id="schedule"><h2>Schedule</h2><p class="muted">Next games and every result — EuroLeague and Winner League (times in your time zone). <a href="hapoel-schedule.html"><strong>Full schedule and calendar file →</strong></a></p>
 <div class="scroll"><table class="hap-sched"><thead><tr><th scope="col"></th><th scope="col">Date</th><th scope="col">Opponent</th><th scope="col">Result</th><th scope="col">Round</th></tr></thead><tbody>
 ${[...nextGames.slice(0, 4)].map(schedRow).join('')}${sched.filter((x) => x.res).reverse().slice(0, 8).map(schedRow).join('')}
 </tbody></table></div></section>
+
+${nextHtml}
 
 <section class="card" id="boxscores"><h2>Box scores</h2><p class="muted">Every Hapoel game. Open a game for its full box score — basic, shooting, advanced and by quarter — or go to the game page for the flow chart, play-by-play and lineups.</p>
 <div id="hap-games"><p class="muted">Loading…</p></div></section>
@@ -293,6 +331,8 @@ ${quarterTable ? `<h3>Average by quarter</h3>${quarterTable}` : ''}
 <section class="card" id="players"><h2>Players</h2><p class="muted">Every Hapoel player, every stat, in the competition chosen above — per game, totals or per 40 minutes, over all games, wins, losses, home, away, the last few, or any games you tick. Click a column to sort.</p>
 <div id="hap-players"><p class="muted">Loading…</p></div></section>
 
+${onOffHtml}
+${clutchHtml}
 <section class="card" id="lineups"><h2>Lineups</h2><p class="muted">Hapoel's five-man units — and 2-, 3- and 4-man combinations — from the official play-by-play. Pick the games: all of them, the last few, wins or losses, one competition, or any games you tick.</p>
 <div id="hap-lineups"><p class="muted">Loading…</p></div></section>
 
@@ -328,6 +368,14 @@ copyFileSync('static/hapoel.js', join(OUT, 'hapoel.js'));
 <div id="brain-app"><p class="muted">Loading…</p></div></section>
 <script type="application/json" id="brain-leagues">${JSON.stringify(leaguesForBrain).replace(/</g, '\\u003c')}</script>`,
     hero: null, scripts: `<script src="brain.js?v=${assetVersion()}" defer></script>` }));
+  // Player comparison across every league
+  copyFileSync('static/compare.js', join(OUT, 'compare.js'));
+  writeFileSync(join(OUT, 'compare.html'), page({ title: 'Compare players', cfg: { ...cfg }, info, active: 'compare.html', sample: false,
+    body: `<section class="card"><h2>Compare players</h2>
+<p class="muted">Two or three players side by side — from the same league or from different ones (EuroLeague, EuroCup, Winner League, ACB, BBL, Greece, NBL, ABA, VTB, LBA). Per game, per 40 minutes or totals. The link keeps your selection, so you can send it.</p>
+<div id="compare-app"><p class="muted">Loading…</p></div></section>
+<script type="application/json" id="compare-leagues">${JSON.stringify(leaguesForBrain).replace(/</g, '\\u003c')}</script>`,
+    hero: null, scripts: `<script src="compare.js?v=${assetVersion()}" defer></script>` }));
 }
 writeFileSync(join(OUT, 'index.html'), page({ title: 'Hapoel Tel Aviv', cfg, info, active: 'index.html', sample: false, body, hero, scripts: `<script src="hapoel.js?v=${assetVersion()}" defer></script>` }));
 console.log(`✓ Hapoel home page: ${gameRows.length} games (${ACTIVE.map((C) => `${C.short} ${C.mine.length}`).join(', ')}), ${people.size} players, ${lineupGames.size} games with lineups`);

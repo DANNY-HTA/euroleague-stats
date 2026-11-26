@@ -627,7 +627,7 @@ td.stars, .sc-stars button.on { color: #e8a317; }
 .top .wrap { max-width: 1560px; flex-wrap: nowrap; }
 .top nav { display: flex; flex-wrap: nowrap; gap: 2px; }
 .top .logo-sub { display: none; }
-@media (max-width: 1180px) { .top .wrap { flex-wrap: wrap; } .top nav { flex-wrap: wrap; } }
+@media (max-width: 1240px) { .top .wrap { flex-wrap: wrap; } .top nav { flex-wrap: wrap; } }
 /* ---- Hapoel schedule ---- */
 .hs-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
 .hs-bar .filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; } .hs-bar label { font-size: 13px; font-weight: 700; color: var(--ink-2); }
@@ -775,3 +775,39 @@ nav a.nav-brain { background: #111; color: #fff; } nav a.nav-brain[aria-current=
 .pt-pop { position: absolute; top: 22px; transform: translateX(-50%); z-index: 5; background: #111; color: #fff; border-radius: 6px; padding: 6px 10px; font-size: .8rem; white-space: nowrap; display: flex; gap: .6rem; align-items: baseline; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
 .pt-pop::before { content: ''; position: absolute; top: -5px; left: 50%; margin-left: -5px; border: 5px solid transparent; border-top: 0; border-bottom-color: #111; }
 .pt-pop-min { font-weight: 800; font-size: 1rem; }
+
+/* Hapoel: next opponent, on/off, clutch */
+.next-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.next-card { display: flex; gap: 14px; align-items: center; padding: 16px; border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: inherit; background: #fff; }
+.next-card:hover { border-color: var(--red); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.next-card img { width: 56px; height: 56px; object-fit: contain; }
+.nc-body { display: flex; flex-direction: column; gap: 3px; }
+.nc-body strong { font-size: 1.15rem; }
+.nc-body .btn { align-self: flex-start; margin-top: 6px; }
+.hap-onoff th.grp { text-align: center; border-bottom: 1px solid var(--line); }
+.hap-onoff td:nth-child(3n+7), .hap-onoff th:nth-child(n) { white-space: nowrap; }
+.dark-strip { display: flex; flex-wrap: wrap; gap: 8px 18px; background: #111; color: #fff; padding: 12px 16px; border-radius: 10px; margin: 8px 0 12px; }
+.dark-strip b { font-size: 1.1rem; margin-right: 4px; }
+tr.hap-row td { background: var(--red-soft, #fdecee); }
+/* More nav items (Clutch, Compare): keep one line, smaller on mid-size screens */
+.top nav a { white-space: nowrap; }
+@media (min-width: 1181px) and (max-width: 1700px) { .top nav a { font-size: 13px; padding: 8px 7px; letter-spacing: .01em; } .top .wrap { gap: 6px 8px; } .top .logo-sub { display: none; } }
+@media (min-width: 1181px) and (max-width: 1460px) { .top nav a { font-size: 12px; padding: 7px 4px; letter-spacing: 0; } .top .wrap { padding-left: 12px; padding-right: 12px; gap: 6px; } .league-menu summary { padding: 6px 10px; font-size: 12px; } .top .logo { font-size: 18px; } }
+/* Compare players */
+.cmp-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.cmp-search { position: relative; flex: 1 1 320px; max-width: 460px; }
+.cmp-search input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px; }
+.cmp-sug { position: absolute; z-index: 30; left: 0; right: 0; top: 100%; margin: 4px 0 0; padding: 4px; list-style: none; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 360px; overflow: auto; }
+.cmp-sug button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.cmp-sug button:hover { background: var(--soft, #f4f4f5); }
+.cmp-table { width: 100%; border-collapse: collapse; }
+.cmp-table th[scope="row"] { text-align: left; font-weight: 600; white-space: nowrap; padding-right: 16px; }
+.cmp-table td, .cmp-table th { padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.cmp-p { vertical-align: bottom; text-align: left; position: relative; min-width: 200px; }
+.cmp-p > * { display: block; }
+.cmp-lg { display: flex !important; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--red); margin-top: 2px; }
+.cmp-x { position: absolute; top: 0; right: 4px; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--muted); }
+.cmp-table td { position: relative; }
+.cmp-bar { position: absolute; left: 0; top: 6px; bottom: 6px; background: rgba(200,16,46,.08); border-radius: 3px; }
+.cmp-v { position: relative; }
+.cmp-best .cmp-v { color: var(--pos); font-weight: 800; }

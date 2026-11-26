@@ -16,6 +16,7 @@ import { GLOSSARY } from '../lib/glossary.mjs';
 import { teamSplits } from '../lib/teamsplits.mjs';
 import { poolRows, poolFromDir } from '../lib/pool.mjs';
 import { playerRates } from '../lib/advanced.mjs';
+import { clutch as clutchOf, afterTimeouts, rates as situRates } from '../lib/situ.mjs';
 import { playLog, flowStats, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
 const args = process.argv.slice(2);
@@ -78,7 +79,7 @@ for (const g of games) {
   if (r.ok) { const fix = repairPlusMinus(g, r.stints); if (fix) { pmRepaired.set(g.gameCode, fix.fixed); console.log(`  game ${g.gameCode} (${g.home.tv}–${g.away.tv}): official +/- is wrong for ${fix.fixed} players (off by up to ${fix.maxDiff}), recalculated from the play-by-play`); } }
   const why = r.ok ? checkStints(g, r.stints) : r.reason;
   if (why && r.ok && !why.startsWith('play-by-play score')) pbpNear.set(g.gameCode, { stints: r.stints, why });
-  if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints, periodStints: r.periodStints });
+  if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints, periodStints: r.periodStints, events: r.events });
 }
 const PBP = pbpOk.length ? aggregate(pbpOk) : null;
 
@@ -105,6 +106,11 @@ const qual = qualified(players, teams, cfg);
 const info = seasonInfo(games);
 
 const IMPACT = PBP ? rapm(PBP.rows) : null;
+// Clutch (last 5 min of Q4/OT, within 5) and after-timeout possessions, from the checked play-by-play.
+const CLUTCH = pbpOk.length ? clutchOf(pbpOk) : null;
+const ATO = pbpOk.some((e) => e.events.some((x) => x.type === 'TOUT')) ? afterTimeouts(pbpOk) : null;
+if (CLUTCH) cfg.hasClutch = true;
+if (CLUTCH) console.log(`Clutch: ${CLUTCH.teams.reduce((s, t) => s + t.games, 0) / 2} clutch games; after timeouts: ${ATO ? ATO.reduce((s, t) => s + t.off.n, 0) + ' possessions' : 'no timeouts in this feed'}`);
 if (rawPbp.size) {
   console.log(`✓ Play-by-play: ${pbpOk.length} of ${rawPbp.size} games match the box score exactly and are used for on/off, lineups and impact`);
   for (const b of pbpBad.slice(0, 8)) console.log('  left out: ' + b);
@@ -580,7 +586,7 @@ writePage('players.html', 'Players', `
 </section>
 <h2 class="sec-title" id="all-stats">All player stats</h2>
 <div id="players-app"><noscript><div class="scroll"><table id="players"><thead><tr>${cols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}>${l}</th>`).join('')}</tr></thead>
-<tbody>${playerRows}</tbody></table></div></noscript><p class="muted">Loading player stats…</p></div>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Every stat we have — traditional, shooting, advanced, defense, on/off and impact, highs and profile — per game, totals or per 40 minutes. Filter by team, position, minutes or games, and click any column to sort.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']] }), { scripts: `<script src="players.js?v=${assetVersion()}" defer></script>` });
+<tbody>${playerRows}</tbody></table></div></noscript><p class="muted">Loading player stats…</p></div>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Every stat we have — traditional, shooting, advanced, defense, on/off and impact, highs and profile — per game, totals or per 40 minutes. Filter by team, position, minutes or games, and click any column to sort.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']], actions: `<a class="btn white" href="${cfg.root || ''}compare.html">Compare players across leagues →</a>` }), { scripts: `<script src="players.js?v=${assetVersion()}" defer></script>` });
 
 // ---- Quarter splits (EuroLeague): every player's and team's season, quarter by quarter ----
 // From the games whose play-by-play matches the box score: minutes and on-court points/possessions from the
@@ -637,6 +643,37 @@ if (IS_EL && pbpOk.length) {
 <div class="scroll"><table class="qs-table"><thead></thead><tbody></tbody></table></div>
 </section>
 <script type="application/json" id="qs-data">${JSON.stringify(qData).replace(/</g, '\\u003c')}</script>`, 'quarter-split.html', null, { scripts: `<script src="quarter-split.js?v=${assetVersion()}" defer></script>` });
+}
+
+// ---- Clutch and after-timeout page ----
+if (CLUTCH) {
+  const sgn = (v) => (v == null || !Number.isFinite(v) ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1));
+  const pc = (m, a) => (a ? (100 * m / a).toFixed(1) : '–');
+  const cell = (v, txt, cls = '') => `<td class="num ${cls}" data-v="${v == null || !Number.isFinite(v) ? -1e9 : v}">${txt}</td>`;
+  const tcell = (txt, v = txt) => `<td data-v="${esc(String(v))}">${txt}</td>`;
+  const head = (cols) => `<thead><tr>${cols.map(([l, num, tip]) => `<th scope="col"${num ? ' class="num"' : ''}${tip ? ` title="${esc(tip)}"` : ''}><button type="button">${l}</button></th>`).join('')}</tr></thead>`;
+  const tname = (code) => { const t = teams.find((x) => x.code === code); return t ? titleCase(t.name) : code; };
+  const crest = (code) => (crests.has(code) ? `<img class="crest small" src="${esc(crests.get(code))}" alt="" width="20" height="20"> ` : '');
+  const CT = CLUTCH.teams.map((t) => ({ t, r: situRates({ secs: t.secs, poss: t.poss, possD: t.possD, pf: t.pf, pa: t.pa, box: t.box, opp: t.opp }) })).sort((a, b) => (b.t.w - b.t.l) - (a.t.w - a.t.l) || (b.r.net ?? -99) - (a.r.net ?? -99));
+  const teamRows = CT.map(({ t, r }) => `<tr${t.code === (cfg.hapoelCode || 'HTA') ? ' class="hap-row"' : ''}>${tcell(`${crest(t.code)}<a href="${teamHref(t.code)}">${esc(tname(t.code))}</a>`, tname(t.code))}${cell(t.games, t.games)}${cell(t.w - t.l, `${t.w}–${t.l}`)}${cell(r.min, f1(r.min))}${cell(t.pf - t.pa, `${t.pf}–${t.pa}`)}${cell(r.ortg, f1(r.ortg))}${cell(r.drtg, f1(r.drtg))}${cell(r.net, sgn(r.net), r.net >= 0 ? 'pos' : 'neg')}${cell(r.efg, f1(r.efg))}${cell(r.efgD, f1(r.efgD))}${cell(r.tovPct, f1(r.tovPct))}${cell(r.ftr, f1(r.ftr))}${cell(t.box.ftm / (t.box.fta || 1), pc(t.box.ftm, t.box.fta))}</tr>`).join('');
+  const CP = CLUTCH.players.filter((p) => nameOf.has(p.id)).map((p) => ({ p, b: p.box, reb: p.box.oreb + p.box.dreb })).sort((a, b) => b.b.pts - a.b.pts || b.p.secs - a.p.secs);
+  const plRows = CP.map(({ p, b, reb }) => `<tr data-team="${esc(p.team)}"${p.team === (cfg.hapoelCode || 'HTA') ? ' class="hap-row"' : ''}>${tcell(`<a href="${playerHref(p.id)}">${esc(nameOf.get(p.id))}</a>`, nameOf.get(p.id))}${tcell(esc(teams.find((x) => x.code === p.team)?.tv || p.team), p.team)}${cell(p.games, p.games)}${cell(p.secs, f1(p.secs / 60))}${cell(b.pts, `<strong>${b.pts}</strong>`)}${cell(b.fgm2 + b.fgm3, `${b.fgm2 + b.fgm3}/${b.fga2 + b.fga3}`)}${cell((b.fgm2 + b.fgm3) / (b.fga2 + b.fga3 || 1), pc(b.fgm2 + b.fgm3, b.fga2 + b.fga3))}${cell(b.fgm3, `${b.fgm3}/${b.fga3}`)}${cell(b.ftm, `${b.ftm}/${b.fta}`)}${cell(reb, reb)}${cell(b.ast, b.ast)}${cell(b.tov, b.tov)}${cell(b.stl, b.stl)}${cell(b.blk, b.blk)}${cell(p.pm, sgn(p.pm).replace('.0', ''), p.pm >= 0 ? 'pos' : 'neg')}</tr>`).join('');
+  let atoHtml = '';
+  if (ATO) {
+    const A = ATO.map((t) => ({ t, ppp: t.off.n ? t.off.pts / t.off.n : null, dppp: t.def.n ? t.def.pts / t.def.n : null, base: (teams.find((x) => x.code === t.code)?.ortg ?? 0) / 100 })).sort((a, b) => (b.ppp ?? 0) - (a.ppp ?? 0));
+    atoHtml = `<section class="card" id="ato"><h2>After timeouts</h2>
+<p class="muted">The first possession after a team's own timeout, when it has the ball: points per possession (PPP), how often it scores, turns it over, and how that compares with its normal offense (season points per possession). "Allowed" = opponents' first possession after <em>their</em> timeouts against this team.</p>
+<div class="scroll"><table class="sortable">${head([['Team'], ['ATO poss', 1], ['Pts', 1], ['PPP', 1, 'Points per possession after own timeout'], ['Normal PPP', 1, 'Season points per possession'], ['Diff', 1], ['Score %', 1, 'Possessions with at least 1 point'], ['TO %', 1], ['FG', 1], ['3P', 1], ['Last 2 min', 1, 'ATO possessions in the last 2 minutes of Q4/OT: points / possessions'], ['Allowed PPP', 1, "Opponents' PPP after their own timeouts"]])}
+<tbody>${A.map(({ t, ppp, dppp, base }) => `<tr${t.code === (cfg.hapoelCode || 'HTA') ? ' class="hap-row"' : ''}>${tcell(`${crest(t.code)}<a href="${teamHref(t.code)}">${esc(tname(t.code))}</a>`, tname(t.code))}${cell(t.off.n, t.off.n)}${cell(t.off.pts, t.off.pts)}${cell(ppp, ppp == null ? '–' : ppp.toFixed(2))}${cell(base, base.toFixed(2))}${cell(ppp == null ? null : ppp - base, ppp == null ? '–' : (ppp - base >= 0 ? '+' : '−') + Math.abs(ppp - base).toFixed(2), ppp != null && ppp >= base ? 'pos' : 'neg')}${cell(t.off.scored / (t.off.n || 1), pc(t.off.scored, t.off.n))}${cell(t.off.tov / (t.off.n || 1), pc(t.off.tov, t.off.n))}${cell(t.off.fgm / (t.off.fga || 1), `${t.off.fgm}/${t.off.fga}`)}${cell(t.off.fgm3 / (t.off.fga3 || 1), `${t.off.fgm3}/${t.off.fga3}`)}${cell(t.off.late.n ? t.off.late.pts / t.off.late.n : null, t.off.late.n ? `${t.off.late.pts}/${t.off.late.n}` : '–')}${cell(dppp, dppp == null ? '–' : dppp.toFixed(2), dppp != null && dppp <= 1 ? 'pos' : '')}</tr>`).join('')}</tbody></table></div>
+</section>`;
+  }
+  writePage('clutch.html', 'Clutch & after timeouts', `<section class="card" id="clutch-teams"><h2>Clutch — teams</h2>
+<p class="muted">Clutch = the last 5 minutes of the 4th quarter or overtime with the score within 5 points. From the ${pbpOk.length} of ${games.length} games whose official play-by-play matches the box score. Record = results of games that had clutch time. Ratings per 100 possessions in clutch time only. Click a column to sort.</p>
+<div class="scroll"><table class="sortable">${head([['Team'], ['Games', 1], ['W–L', 1], ['MIN', 1], ['Score', 1, 'Points for–against in clutch time'], ['ORtg', 1], ['DRtg', 1], ['Net', 1], ['eFG%', 1], ['Opp eFG%', 1], ['TO%', 1], ['FT rate', 1], ['FT%', 1]])}<tbody>${teamRows}</tbody></table></div></section>
+<section class="card" id="clutch-players"><h2>Clutch — players</h2>
+<p class="muted">Every player's totals in clutch time. +/- = points scored minus allowed by his team while he was on the court in clutch time.</p>
+<div class="scroll"><table class="sortable">${head([['Player'], ['Team'], ['GP', 1], ['MIN', 1], ['PTS', 1], ['FG', 1], ['FG%', 1], ['3P', 1], ['FT', 1], ['REB', 1], ['AST', 1], ['TOV', 1], ['STL', 1], ['BLK', 1], ['+/-', 1]])}<tbody>${plRows}</tbody></table></div></section>
+${atoHtml}`, 'clutch.html', cover({ kicker: esc(roundLine), title: 'Clutch & after timeouts', lede: 'Who wins the close ones, who delivers in the last five minutes, and who draws up the best plays out of a timeout.' }));
 }
 
 // ---- Player stats tool data (player-stats.json): everything we have for every player ----
@@ -886,6 +923,24 @@ ${CMP.map(([label, k, good]) => { const a = t[k], b = HAP.t[k]; if (b == null) r
       const W = sub(new Set(wG.map((g) => g.gameCode))), Ls = sub(new Set(lG.map((g) => g.gameCode)));
       return `<div class="r-two"><div><h3>Most used lineups in wins</h3>${uTable(byMin(W, 6))}</div><div><h3>Most used lineups in losses</h3>${uTable(byMin(Ls, 6))}</div></div>`;
     })();
+    // Form: last 5 games against the season
+    const l5Games = last5.map((x) => gameOf(x.gameCode)).filter(Boolean);
+    const tL5 = l5Games.length ? splitOf(t.code, l5Games) : null;
+    const formTable = tL5 ? `<table class="rtab"><thead><tr><th>Stat</th><th class="num">Last ${l5Games.length}</th><th class="num">Season</th><th class="num">Difference</th></tr></thead><tbody>
+${CMP.map(([label, k, good]) => { const a = tL5?.[k], b = t[k]; if (a == null || b == null) return ''; return `<tr><td>${label}</td><td class="num ${better(good, a, b)}">${dv(k, a)}</td><td class="num muted">${dv(k, b)}</td><td class="num">${sg(a - b)}</td></tr>`; }).join('')}
+</tbody></table>` : '';
+    const l5Rows = last5.map((g) => { const gm = gameOf(g.gameCode); if (!gm) return ''; const me = g.isHome ? gm.home : gm.away, op = g.isHome ? gm.away : gm.home; const top = me.players.slice().sort((a, b) => b.pts - a.pts).slice(0, 3); const q = (side) => (side.quarters || []).join('-'); return `<tr><td>${esc(fmtDate(g.date))}</td><td>${g.isHome ? 'vs' : 'at'} ${esc(titleCase(g.opp.name))}</td><td class="${g.win ? 'pos' : 'neg'}"><a href="${gameHref(g.gameCode)}">${g.win ? 'W' : 'L'} ${g.for}–${g.against}</a></td><td class="small">${q(me)}${me.quarters ? ' <span class="muted">/</span> ' + q(op) : ''}</td><td class="small">${top.map((x) => `${esc(x.name)} ${x.pts}`).join(' · ')}</td></tr>`; }).join('');
+    // Clutch and after timeouts for this team
+    const ct = CLUTCH?.teams.find((x) => x.code === t.code);
+    const ctR = ct ? situRates({ secs: ct.secs, poss: ct.poss, possD: ct.possD, pf: ct.pf, pa: ct.pa, box: ct.box, opp: ct.opp }) : null;
+    const ctRank = ct ? 1 + (CLUTCH.teams.map((x) => situRates({ secs: x.secs, poss: x.poss, possD: x.possD, pf: x.pf, pa: x.pa, box: x.box, opp: x.opp }).net ?? -999).filter((v) => v > (ctR.net ?? -999)).length) : null;
+    const ctPlayers = CLUTCH ? CLUTCH.players.filter((x) => x.team === t.code && x.secs >= 60).sort((a, b) => b.box.pts - a.box.pts || b.secs - a.secs).slice(0, 8) : [];
+    const at = ATO?.find((x) => x.code === t.code);
+    const atRank = at && at.off.n ? 1 + ATO.filter((x) => x.off.n && x.off.pts / x.off.n > at.off.pts / at.off.n).length : null;
+    const situHtml = (ct || at) ? `${ct ? `<h3>Clutch <small class="muted">(last 5 min of Q4/OT, score within 5)</small></h3>
+<div class="r-grid">${stat('Clutch games', `${ct.games} <small>(${ct.w}–${ct.l})</small>`)}${stat('Clutch minutes', f1(ctR.min))}${stat('Score in clutch', `${ct.pf}–${ct.pa}`)}${stat('Net rating', `${sg(ctR.net)} <span class="rk ${ctRank <= 3 ? 'rk-top' : ctRank > CLUTCH.teams.length - 3 ? 'rk-bot' : ''}">${ord(ctRank)}</span>`)}${stat('eFG% / Opp eFG%', `${f1(ctR.efg)} / ${f1(ctR.efgD)}`)}${stat('FT', `${ct.box.ftm}/${ct.box.fta}`)}</div>
+${ctPlayers.length ? `<table class="rtab"><thead><tr><th>Player</th><th class="num">MIN</th><th class="num">PTS</th><th class="num">FG</th><th class="num">3P</th><th class="num">FT</th><th class="num">AST</th><th class="num">TOV</th><th class="num">+/-</th></tr></thead><tbody>${ctPlayers.map((x) => `<tr><td>${esc(nm(x.id))}</td><td class="num">${f1(x.secs / 60)}</td><td class="num"><strong>${x.box.pts}</strong></td><td class="num">${x.box.fgm2 + x.box.fgm3}/${x.box.fga2 + x.box.fga3}</td><td class="num">${x.box.fgm3}/${x.box.fga3}</td><td class="num">${x.box.ftm}/${x.box.fta}</td><td class="num">${x.box.ast}</td><td class="num">${x.box.tov}</td><td class="num ${x.pm >= 0 ? 'pos' : 'neg'}">${x.pm > 0 ? '+' : ''}${x.pm}</td></tr>`).join('')}</tbody></table>` : ''}` : ''}
+${at && at.off.n ? `<h3>After timeouts</h3><div class="r-grid">${stat('Possessions after own timeout', at.off.n)}${stat('Points per possession', `${(at.off.pts / at.off.n).toFixed(2)} <span class="rk ${atRank <= 3 ? 'rk-top' : atRank > ATO.length - 3 ? 'rk-bot' : ''}">${ord(atRank)}</span>`)}${stat('Normal offense (PPP)', (t.ortg / 100).toFixed(2))}${stat('Scored on', `${(100 * at.off.scored / at.off.n).toFixed(0)}%`)}${stat('Turnovers', `${(100 * at.off.tov / at.off.n).toFixed(0)}%`)}${stat('3P after timeouts', `${at.off.fgm3}/${at.off.fga3}`)}${at.off.late.n ? stat('Last 2 minutes', `${at.off.late.pts} pts on ${at.off.late.n}`) : ''}${at.def.n ? stat('Allowed after opp. timeouts', (at.def.pts / at.def.n).toFixed(2) + ' PPP') : ''}</div>` : ''}` : '';
     let secN = 0; const sec = (title) => `<h2>${++secN}. ${title}</h2>`;
     const body = `
 <div class="report-bar no-print"><a href="${teamHref(t.code)}">← Back to team page</a><button type="button" class="btn" id="print-btn">Print / Save as PDF</button><span class="muted small">Tip: in the print window choose “Save as PDF”. Landscape fits the wide tables best.</span></div>
@@ -945,6 +1000,16 @@ ${PBP ? `<section class="r-sec">${sec('Lineups')}
 <div class="r-two"><div><h3>Most used pairs</h3>${uTable(byMin(L2, 10))}</div><div><h3>Most used trios</h3>${uTable(byMin(L3, 10))}</div></div>
 <div class="r-two"><div><h3>Best pairs <small class="muted">(100+ possessions)</small></h3>${uTable(byNet(L2, 5, 100, 1))}</div><div><h3>Worst pairs <small class="muted">(100+ possessions)</small></h3>${uTable(byNet(L2, 5, 100, -1))}</div></div>
 <p class="muted small">From ${new Set(teamStints.map((x) => x.game.gameCode)).size} of ${list.length} games where the official play-by-play matches the box score exactly. ORtg/DRtg = points scored/allowed per 100 possessions.</p>
+</section>` : ''}
+
+${l5Rows ? `<section class="r-sec">${sec(`Form — last ${l5Games.length} games`)}
+<table class="rtab"><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Quarters (team / opp)</th><th>Top scorers</th></tr></thead><tbody>${l5Rows}</tbody></table>
+${formTable ? `<h3>Last ${l5Games.length} games against the season</h3>${formTable}` : ''}
+</section>` : ''}
+
+${situHtml ? `<section class="r-sec">${sec('Clutch and after timeouts')}
+${situHtml}
+<p class="muted small">From the games whose official play-by-play matches the box score. Ratings per 100 possessions.</p>
 </section>` : ''}
 
 <section class="r-sec">${sec(`Results${upcomingT.length ? ' and schedule' : ''}`)}
@@ -1079,7 +1144,7 @@ for (const p of players) {
     kicker, title: esc(p.name),
     meta: `${crests.has(p.team) ? `<img class="crest" src="${esc(crests.get(p.team))}" alt="">` : ''}<span>${esc(teamT ? titleCase(teamT.name) : p.tv)}</span>${position ? `<span class="sep">/</span><span>${esc(position)}</span>` : ''}${age != null ? `<span class="sep">/</span><span>${age} years</span>` : ''}${person?.height ? `<span class="sep">/</span><span>${person.height} cm</span>` : ''}${person?.country ? `<span class="sep">/</span><span>${esc(person.country)}</span>` : ''}`,
     lede: ledeParts.join(' '),
-    actions: `<button type="button" id="share-btn" class="btn white">Download as image</button>`,
+    actions: `<button type="button" id="share-btn" class="btn white">Download as image</button> <a class="btn white" href="${cfg.root || ''}compare.html#${LEAGUE}:${playerHref(p.id)}">Compare with…</a>`,
     side: num ? `<div class="side jersey" aria-hidden="true">${esc(String(num).replace(/^0+(?=\d)/, ''))}</div>` : coverCrest(p.team)
   });
 
