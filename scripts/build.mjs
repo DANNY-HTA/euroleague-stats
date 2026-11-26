@@ -147,7 +147,7 @@ const qualNote = `Players averaging at least ${cfg.minMinutesForLeaders} minutes
 // ---- Game pages: every game in full (modelled on the EuroLeague Media Game Center) ----
 const gameHref = (code) => `game-${safe(code)}.html`;
 const stintsOf = new Map(pbpOk.map(({ game, stints }) => [game.gameCode, stints]));
-const QB_CHECK = { games: 0, stats: 0, time: 0 };
+const QB_CHECK = { games: 0, stats: 0, time: 0, why: {} };
 const periodStintsOf = new Map(pbpOk.map(({ game, periodStints }) => [game.gameCode, periodStints]));
 const nameOf = new Map(players.map((q) => [q.id, q.name]));
 const pctTxt = (m, a) => (a ? f1(100 * m / a) : '–');
@@ -318,8 +318,9 @@ for (const g of sortedGames) {
     let statsOk = true, timeOk = true;
     for (const p of [...H.players, ...A.players]) {
       const tot = QK.map(() => 0); for (const c of Object.values(box[p.id] || {})) c.forEach((v, i) => { tot[i] += v; });
-      if (CHK.some(([bk, qk]) => (p[bk] || 0) !== tot[QX[qk]])) statsOk = false;
-      if (Math.abs(p.min * 60 - tot[QX.secs]) > 2 || (p.pm || 0) !== tot[QX.pm]) timeOk = false;
+      for (const [bk, qk] of CHK) if ((p[bk] || 0) !== tot[QX[qk]]) { statsOk = false; QB_CHECK.why[bk] = (QB_CHECK.why[bk] || 0) + 1; }
+      if (Math.abs(p.min * 60 - tot[QX.secs]) > 2) { timeOk = false; QB_CHECK.why.secs = (QB_CHECK.why.secs || 0) + 1; if (!QB_CHECK.ex) QB_CHECK.ex = `${g.gameCode} ${p.name} ${p.min * 60} vs ${tot[QX.secs]}`; }
+      if ((p.pm || 0) !== tot[QX.pm]) { timeOk = false; QB_CHECK.why.pm = (QB_CHECK.why.pm || 0) + 1; }
     }
     QB_CHECK.games++; if (statsOk) QB_CHECK.stats++; if (timeOk) QB_CHECK.time++;
     if (timeOk) qbJson = JSON.stringify({ ok: statsOk, k: QK, periods: nP, total: r1(t0), H: [H.tv, titleCase(H.name)], A: [A.tv, titleCase(A.name)],
@@ -1547,7 +1548,7 @@ writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({
   stats: [['PTS', p.ppg], ['REB', p.rpg], ['AST', p.apg], ['STL', p.spg], ['BLK', p.bpg], ['PIR', p.pirpg], ['MIN', p.mpg], ['TS%', p.ts], ['USG%', p.usg]].map(([k, v]) => [k, f1(v)])
 }))));
 writeFileSync(join(OUT, '.nojekyll'), '');
-console.log(`Quarter box: ${QB_CHECK.games} games with play-by-play, ${QB_CHECK.time} playing time exact, ${QB_CHECK.stats} quarter stats exact`);
+console.log(`Quarter box: ${QB_CHECK.games} games with play-by-play, ${QB_CHECK.time} playing time exact, ${QB_CHECK.stats} quarter stats exact`, JSON.stringify(QB_CHECK.why), QB_CHECK.ex || '');
 console.log(`✓ Site written to ${OUT}/ (${teams.length} teams, ${players.length} players)`);
 
 function boardsJson() {
