@@ -1,0 +1,12 @@
+{
+ "v": 1,
+ "check": "E2LQWgrt39tRJouNh89azBbGojlnpT997JKMECa6zV/USOo=",
+ "users": [
+  {
+   "id": "8f1b55bfde683b32ef30d16636e8a8fbf76adf6dcc733fec64d8236fa8ea4dae",
+   "salt": "QrWjdKhUsR1HRLW2sB89uw==",
+   "it": 600000,
+   "w": "dGRYdA9MMVcxNQICZ+eKpN/AliGrFjLxJbsUjlkaakHIYMFKpK9jFruE5kH8Qeu80oRA70aWFrCUv8to"
+  }
+ ]
+}
