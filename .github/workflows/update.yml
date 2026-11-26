@@ -63,6 +63,10 @@ jobs:
       - name: Link players who play in more than one competition
         run: node scripts/build-cross.mjs
         continue-on-error: true
+      - name: Lock the site (sign-in required once access/users.json exists)
+        env:
+          SITE_KEY: ${{ secrets.SITE_KEY }}
+        run: cp static/access-setup.html site/ && node scripts/lock-site.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
