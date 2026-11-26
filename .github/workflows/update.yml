@@ -47,6 +47,9 @@ jobs:
       - name: Download the other leagues (Israel, Italy …)
         continue-on-error: true
         run: node -e "for (const L of Object.values(require('./config.json').leagues||{})) console.log(L.fetch)" | while read -r cmd; do $cmd || true; done
+      - name: Download shot locations (EuroLeague, EuroCup)
+        continue-on-error: true
+        run: node scripts/fetch-shots.mjs $(node -p "require('./config.json').seasonCode") && node scripts/fetch-shots.mjs $(node -p "(require('./config.json').leagues.ec||{}).dataDir||'U2026'")
       - name: Remember downloaded games for the next run
         if: always()
         uses: actions/cache/save@v4
