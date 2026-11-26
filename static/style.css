@@ -719,3 +719,10 @@ table.box.q { max-width: 520px; }
 .cross-table tfoot th, .cross-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); }
 .cc-lg { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
 .cc-lg img { width: 22px; height: 22px; object-fit: contain; }
+.hap-players tfoot th, .hap-players tfoot td { font-weight: 800; border-top: 2px solid var(--line); background: #fafafa; }
+.hap-players tfoot tr + tr th, .hap-players tfoot tr + tr td { font-weight: 600; color: var(--muted); border-top: 1px solid var(--line); }
+.qs-table td, .qs-table th { white-space: nowrap; font-size: 13px; }
+.qs-table th button { all: unset; cursor: pointer; font-weight: 700; }
+.qs-table th button[aria-sort] { color: var(--red); }
+.qs-table tr.hap td { background: var(--red-soft); font-weight: 700; }
+.qs-filters { align-items: center; gap: 10px 16px; }

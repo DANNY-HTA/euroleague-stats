@@ -78,7 +78,7 @@ for (const g of games) {
   if (r.ok) { const fix = repairPlusMinus(g, r.stints); if (fix) { pmRepaired.set(g.gameCode, fix.fixed); console.log(`  game ${g.gameCode} (${g.home.tv}–${g.away.tv}): official +/- is wrong for ${fix.fixed} players (off by up to ${fix.maxDiff}), recalculated from the play-by-play`); } }
   const why = r.ok ? checkStints(g, r.stints) : r.reason;
   if (why && r.ok && !why.startsWith('play-by-play score')) pbpNear.set(g.gameCode, { stints: r.stints, why });
-  if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints });
+  if (why) pbpBad.push(`game ${g.gameCode} (${g.home.tv}–${g.away.tv}): ${why}`); else pbpOk.push({ game: g, stints: r.stints, periodStints: r.periodStints });
 }
 const PBP = pbpOk.length ? aggregate(pbpOk) : null;
 
@@ -534,6 +534,63 @@ writePage('players.html', 'Players', `
 <h2 class="sec-title" id="all-stats">All player stats</h2>
 <div id="players-app"><noscript><div class="scroll"><table id="players"><thead><tr>${cols.map(([k, l, t]) => `<th scope="col"${t === 's' ? '' : ' class="num"'}>${l}</th>`).join('')}</tr></thead>
 <tbody>${playerRows}</tbody></table></div></noscript><p class="muted">Loading player stats…</p></div>`, 'players.html', cover({ kicker: esc(roundLine), title: 'Players', lede: `${players.length} players have stepped on the court this season. Every stat we have — traditional, shooting, advanced, defense, on/off and impact, highs and profile — per game, totals or per 40 minutes. Filter by team, position, minutes or games, and click any column to sort.`, strip: [[qual.length, 'qualified for leaderboards'], [players.length, 'players used']] }), { scripts: `<script src="players.js?v=${assetVersion()}" defer></script>` });
+
+// ---- Quarter splits (EuroLeague): every player's and team's season, quarter by quarter ----
+// From the games whose play-by-play matches the box score: minutes and on-court points/possessions from the
+// lineups, counting stats from the plays. Quarter 5 = all overtimes.
+if (IS_EL && pbpOk.length) {
+  const QF = ['g', 'secs', 'pf', 'pa', 'poss', 'pts', 'fgm2', 'fga2', 'fgm3', 'fga3', 'ftm', 'fta', 'oreb', 'dreb', 'ast', 'stl', 'tov', 'blk', 'blka', 'fl', 'fd'];
+  const QI = Object.fromEntries(QF.map((k, i) => [k, i]));
+  const EV = { '2FGM': [['pts', 2], ['fgm2', 1], ['fga2', 1]], '2FGA': [['fga2', 1]], '3FGM': [['pts', 3], ['fgm3', 1], ['fga3', 1]], '3FGA': [['fga3', 1]], FTM: [['pts', 1], ['ftm', 1], ['fta', 1]], FTA: [['fta', 1]],
+    O: [['oreb', 1]], D: [['dreb', 1]], AS: [['ast', 1]], ST: [['stl', 1]], TO: [['tov', 1]], FV: [['blk', 1]], AG: [['blka', 1]], RV: [['fd', 1]], OF: [['fl', 1]] };
+  const evOf = (type) => EV[type] || (/^CM/.test(type) ? [['fl', 1]] : null);
+  const P = new Map(), T = new Map(), O = new Map(), teamOf = new Map();
+  const cell = (map, id, q) => { if (!map.has(id)) map.set(id, {}); const m = map.get(id); return (m[q] ||= QF.map(() => 0)); };
+  const qOf = (per) => Math.min(5, per);
+  for (const { game, periodStints } of pbpOk) {
+    const H = game.home.code, A = game.away.code;
+    for (const side of [game.home, game.away]) for (const pl of side.players) teamOf.set(pl.id, side.code);
+    const seen = new Set();
+    for (const s of periodStints) {
+      const q = qOf(s.period);
+      for (const [ids, me, op, possMe, possOp] of [[s.home, H, A, s.possH, s.possA], [s.away, A, H, s.possA, s.possH]]) {
+        const poss = (possMe + possOp) / 2;
+        for (const id of ids) { const c = cell(P, id, q); c[QI.secs] += s.secs; c[QI.pf] += s.pts[me]; c[QI.pa] += s.pts[op]; c[QI.poss] += poss; if (!seen.has(id + '|' + q) && s.secs > 0) { seen.add(id + '|' + q); c[QI.g]++; } }
+        const t = cell(T, me, q); t[QI.secs] += s.secs; t[QI.pf] += s.pts[me]; t[QI.pa] += s.pts[op]; t[QI.poss] += poss;
+        if (!seen.has('T' + me + '|' + q)) { seen.add('T' + me + '|' + q); t[QI.g]++; }
+      }
+    }
+    for (const [per, , side, pid, type] of playLog(game, rawPbp.get(game.gameCode)).plays) {
+      const ev = evOf(type); if (!ev || !side) continue;
+      const q = qOf(per), me = side === 'H' ? H : A, op = side === 'H' ? A : H;
+      const t = cell(T, me, q), o = cell(O, op, q);
+      for (const [k, v] of ev) { t[QI[k]] += v; o[QI[k]] += v; }
+      if (pid) { const c = cell(P, pid, q); for (const [k, v] of ev) c[QI[k]] += v; }
+    }
+  }
+  const nameOf = new Map(players.map((p) => [p.id, p]));
+  const qData = {
+    f: QF, games: pbpOk.length, total: games.length, hapoel: cfg.hapoelCode || 'HTA',
+    players: [...P].filter(([id]) => nameOf.has(id)).map(([id, q]) => { const p = nameOf.get(id); return [p.name, p.tv, teamOf.get(id) || p.team, playerHref(id), q]; }),
+    teams: [...T].map(([code, q]) => { const t = teams.find((x) => x.code === code); return [t ? titleCase(t.name) : code, code, crests.get(code) || null, `team-${safe(code)}.html`, q, O.get(code) || {}]; })
+  };
+  const tOpts = teams.slice().sort((a, b) => a.name.localeCompare(b.name)).map((t) => `<option value="${esc(t.code)}">${esc(titleCase(t.name))}</option>`).join('');
+  writePage('quarter-split.html', 'Quarter splits', `<section class="card"><h2>Quarter splits</h2>
+<p class="muted">Every player's and every team's EuroLeague season, quarter by quarter: pick one or more quarters and see the stats accumulated over the season. From the ${pbpOk.length} of ${games.length} games whose official play-by-play matches the box score (minutes, +/- and on-court ratings from the lineups; counting stats from the plays).</p>
+<div class="filters qs-filters">
+<div class="seg" role="group" aria-label="View"><button type="button" data-view="players" aria-pressed="true">Players</button><button type="button" data-view="teams" aria-pressed="false">Teams</button></div>
+<div class="seg" role="group" aria-label="Quarters">${['Q1', 'Q2', 'Q3', 'Q4', 'OT'].map((l, i) => `<button type="button" data-q="${i + 1}" aria-pressed="${i === 0}">${l}</button>`).join('')}</div>
+<div class="seg" role="group" aria-label="Show"><button type="button" data-mode="tot" aria-pressed="true">Totals</button><button type="button" data-mode="pg" aria-pressed="false">Per game</button><button type="button" data-mode="40" aria-pressed="false">Per 40</button></div>
+<label>Team <select data-f="team"><option value="">All teams</option>${tOpts}</select></label>
+<label>Min. minutes <input data-f="min" type="number" min="0" step="5" value="30" style="width:70px"></label>
+<label>Min. games <input data-f="gp" type="number" min="0" value="3" style="width:60px"></label>
+<label><input data-f="q" type="search" placeholder="Search player…"></label>
+</div>
+<p class="muted small" id="qs-note"></p>
+<div class="scroll"><table class="qs-table"><thead></thead><tbody></tbody></table></div>
+</section>
+<script type="application/json" id="qs-data">${JSON.stringify(qData).replace(/</g, '\\u003c')}</script>`, 'quarter-split.html', null, { scripts: `<script src="quarter-split.js?v=${assetVersion()}" defer></script>` });
+}
 
 // ---- Player stats tool data (player-stats.json): everything we have for every player ----
 {
@@ -1420,6 +1477,7 @@ copyFileSync('static/lineups.js', join(OUT, 'lineups.js'));
 copyFileSync('static/teams.js', join(OUT, 'teams.js'));
 copyFileSync('static/teambox.js', join(OUT, 'teambox.js'));
 copyFileSync('static/share.js', join(OUT, 'share.js'));
+if (existsSync('static/quarter-split.js')) copyFileSync('static/quarter-split.js', join(OUT, 'quarter-split.js'));
 copyFileSync('static/game.js', join(OUT, 'game.js'));
 copyFileSync('static/mvp.js', join(OUT, 'mvp.js'));
 copyFileSync('static/boards.js', join(OUT, 'boards.js'));

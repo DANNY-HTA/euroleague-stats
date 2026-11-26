@@ -118,6 +118,22 @@ ${view === 'q' ? quarterBox(g) : `<h4>Hapoel Tel Aviv</h4><div class="scroll">${
     if (pMode === '40') return r.min ? 40 * v / r.min : null;
     return v;
   }
+  // Team and opponents over the same selected games (same columns; percentages from the totals).
+  function teamRows(rows) {
+    const make = (name, side, pmSign) => {
+      const tot = TK.map(() => 0); let gp = 0, min = 0, pm = 0, oFga = 0, oFta = 0, oTov = 0;
+      for (const g of D.games) {
+        if (!inComp(g.c) || !pPick.has(g.c + '|' + g.id)) continue;
+        const t = g[side].t; gp++; min += g[side].min / 5; pm += pmSign * (g.s[0] - g.s[1]); t.forEach((v, i) => { tot[i] += v; });
+      }
+      if (!gp) return null;
+      const s = Object.fromEntries(TK.map((k, i) => [k, tot[i]])), fga = s.fga2 + s.fga3, fgm = s.fgm2 + s.fgm3;
+      return { name, gp, gs: null, min, pm, ...s, p2: s.fga2 ? 100 * s.fgm2 / s.fga2 : null, p3: s.fga3 ? 100 * s.fgm3 / s.fga3 : null, pft: s.fta ? 100 * s.ftm / s.fta : null,
+        efg: fga ? 100 * (fgm + 0.5 * s.fgm3) / fga : null, ts: (fga + 0.44 * s.fta) ? 100 * s.pts / (2 * (fga + 0.44 * s.fta)) : null, usg: side === 'me' ? 100 : null, ato: s.tov ? s.ast / s.tov : null,
+        swing: null, imp: null, ofd: side === 'me' ? rows.reduce((t, r) => t + (r.ofd || 0), 0) : null };
+    };
+    return [make('Hapoel (team)', 'me', 1), make('Opponents', 'op', -1)].filter(Boolean);
+  }
   function renderPlayers() {
     const avail = D.games.filter((g) => inComp(g.c));
     const ids = new Set(avail.map((g) => g.c + '|' + g.id));
@@ -143,7 +159,7 @@ ${view === 'q' ? quarterBox(g) : `<h4>Hapoel Tel Aviv</h4><div class="scroll">${
 <span class="muted small">${comp === 'all' ? 'Both competitions.' : esc(D.comps[comp])} On/off, impact and charges drawn are for the whole season${comp === 'all' ? ' (pick a competition to see them)' : ''}; everything else follows the games selected.</span></div>
 <div class="scroll"><table class="sortable hap-players"><thead><tr><th scope="col"><button type="button" data-k="name">Player</button></th><th scope="col">Pos</th><th scope="col" class="num">Ht</th><th scope="col" class="num">Age</th>${PCOLS.map(([k, l]) => `<th scope="col" class="num"><button type="button" data-k="${k}"${pSort === k ? ` aria-sort="${pDir < 0 ? 'descending' : 'ascending'}"` : ''}>${l}</button></th>`).join('')}</tr></thead><tbody>
 ${rows.map((r) => `<tr><td>${r.href ? `<a href="${esc(r.href)}">${esc(r.name)}</a>` : esc(r.name)}${r.ex.num ? ` <span class="muted small">#${esc(r.ex.num)}</span>` : ''}</td><td>${esc(r.ex.pos || '')}</td><td class="num">${r.ex.ht || '–'}</td><td class="num">${r.ex.age ?? '–'}</td>${PCOLS.map(([k]) => `<td class="num">${fmt(r, k)}</td>`).join('')}</tr>`).join('')}
-</tbody></table></div>`;
+</tbody><tfoot>${teamRows(rows).map((r) => `<tr><th scope="row">${esc(r.name)}</th><td></td><td></td><td></td>${PCOLS.map(([k]) => `<td class="num">${k === 'gs' ? '' : fmt(r, k)}</td>`).join('')}</tr>`).join('')}</tfoot></table></div>`;
     wire();
     playersBox.querySelectorAll('[data-pm]').forEach((b) => b.addEventListener('click', () => { pMode = b.dataset.pm; renderPlayers(); }));
     playersBox.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.k; if (pSort === k) pDir = -pDir; else { pSort = k; pDir = k === 'name' ? 1 : -1; } renderPlayers(); }));

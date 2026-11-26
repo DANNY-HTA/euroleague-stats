@@ -267,6 +267,7 @@ ${[...nextGames.slice(0, 4)].map(schedRow).join('')}${sched.filter((x) => x.res)
 <section class="card" id="team"><h2>Team stats</h2><p class="muted">Hapoel's numbers in each competition, with the league rank and league average, and both competitions together split by wins, losses, home and away.</p>
 ${teamStatsTable}
 ${quarterTable ? `<h3>Average by quarter</h3>${quarterTable}` : ''}
+<p class="small"><a href="quarter-split.html"><strong>EuroLeague quarter splits — every player and team, quarter by quarter →</strong></a></p>
 <p class="small">${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}.html"><strong>${esc(C.short)} team page →</strong></a> · <a href="${C.pfx}team-${safe(C.code)}-report.html">${esc(C.short)} team report</a>`).join(' · ')}</p></section>
 
 <section class="card" id="players"><h2>Players</h2><p class="muted">Every Hapoel player, every stat, in the competition chosen above — per game, totals or per 40 minutes, over all games, wins, losses, home, away, the last few, or any games you tick. Click a column to sort.</p>
