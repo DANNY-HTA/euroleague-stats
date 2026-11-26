@@ -1,5 +1,8 @@
-const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats', Accept: 'text/html' };
-const nd = (t) => { const m = t.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/); return m && JSON.parse(m[1]).props.pageProps; };
-const pp = nd(await (await fetch('https://www.easycredit-bbl.de/spiele/2006838', { headers: H })).text());
-for (const [k, v] of Object.entries(pp.initialRecentGames)) console.log('RG', k, v.length, v.map(g => `${g.id}:${g.matchDay}:${g.homeTeam.tlc}-${g.guestTeam.tlc}:${g.status}`).join(' '));
-for (const u of ['/teams/413', '/team/413', '/teams/alba-berlin', '/clubs/413', '/bbl/teams/413', '/saison/teams/', '/teams/']) { const r = await fetch('https://www.easycredit-bbl.de' + u, { headers: H }); const t = await r.text(); const ids = new Set(t.match(/\/spiele\/\d{7}/g) || []); console.log('TEAM', r.status, u, ids.size, [...t.matchAll(/href="(\/[a-z-]+\/[a-z0-9-]+\/?)"/g)].map(m => m[1]).filter(h => /team|club|verein/.test(h)).slice(0, 8).join(' ')); }
+const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats', Accept: 'text/html,application/json' };
+for (const u of ['https://gleague.nba.com/robots.txt', 'https://gleague.nba.com/', 'https://gleague.nba.com/schedule', 'https://gleague.nba.com/stats', 'https://stats.gleague.nba.com/', 'https://www.nba.com/robots.txt', 'https://www.nba.com/termsofuse']) {
+  try { const r = await fetch(u, { headers: H }); const t = await r.text(); console.log('R', r.status, u, t.length);
+    if (/robots/.test(u)) console.log(t.slice(0, 1500));
+    if (/termsofuse/.test(u)) { const i = t.search(/scrap|robot|spider|data mining|automated/i); console.log('TERMS', i >= 0 ? t.slice(Math.max(0, i - 300), i + 500).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ') : 'no match'); }
+    const ids = [...new Set(t.match(/https?:\/\/[a-z0-9.-]*(stats|api|cdn)[a-z0-9.-]*\.nba\.com[^"' ]{0,50}/g) || [])].slice(0, 8); if (ids.length) console.log('  URLS', ids.join(' | '));
+  } catch (e) { console.log('R ERR', u, e.cause?.code || e.message); }
+}
