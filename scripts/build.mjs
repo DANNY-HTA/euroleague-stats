@@ -1741,8 +1741,48 @@ q.addEventListener('input',f);document.querySelectorAll('[data-gl]').forEach(fun
           .map((p) => ({ name: p.name, href: playerHref(p.id), mpg: +p.mpg.toFixed(1), ppg: +p.ppg.toFixed(1), rpg: +p.rpg.toFixed(1), apg: +p.apg.toFixed(1), pir: +p.pirpg.toFixed(1) }))
       };
     }),
-    games: games.map((g) => ({ h: g.home.code, v: g.away.code, hs: g.home.score, vs: g.away.score, date: g.date, round: g.round }))
+    games: games.map((g) => ({ h: g.home.code, v: g.away.code, hs: g.home.score, vs: g.away.score, date: g.date, round: g.round, gc: g.gameCode, href: gameHref(g.gameCode) }))
   };
+  // ---- More for the matchup: situations, quarters, shot zones, every player (with ranks across the league) ----
+  const rankIn = (vals, hi) => { const arr = Object.values(vals).filter((v) => v != null && Number.isFinite(v)).sort((x, y) => (hi ? y - x : x - y)); return (v) => (v == null || !Number.isFinite(v) ? null : 1 + arr.indexOf(v)); };
+  const X = {};
+  for (const t of teams) {
+    const list = games.filter((g) => g.home.code === t.code || g.away.code === t.code), n = list.length || 1;
+    const fl = FLOW?.find((x) => x.code === t.code), ct = CLUTCH?.teams.find((x) => x.code === t.code), at = ATO?.find((x) => x.code === t.code);
+    const sh = ALLSHOTS.filter((x) => x.team === t.code), shD = ALLSHOTS.filter((x) => x.opp === t.code);
+    const ctR = ct ? situRates({ secs: ct.secs, poss: ct.poss, possD: ct.possD, pf: ct.pf, pa: ct.pa, box: ct.box, opp: ct.opp }) : null;
+    const q = [0, 1, 2, 3].map((i) => { let f = 0, a = 0, k = 0; for (const g of list) { const me = g.home.code === t.code ? g.home : g.away, op = g.home.code === t.code ? g.away : g.home; if (me.quarters?.length > i && op.quarters?.length > i) { f += me.quarters[i]; a += op.quarters[i]; k++; } } return k ? (f - a) / k : null; });
+    const benchPg = list.reduce((s2, g) => { const me = g.home.code === t.code ? g.home : g.away; return s2 + me.players.filter((p) => !p.starter).reduce((a, p) => a + p.pts, 0); }, 0) / n;
+    X[t.code] = {
+      offTO: fl ? fl.offTO / fl.games : null, offTOA: fl ? fl.offTOA / fl.games : null, second: fl ? fl.second / fl.games : null, secondA: fl ? fl.secondA / fl.games : null,
+      runs: fl ? fl.runs / fl.games : null, runsA: fl ? fl.runsA / fl.games : null, lastMin: fl ? fl.lastMin / fl.games : null,
+      fb: sh.length ? sh.filter((x) => x.made && x.fb).reduce((a, x) => a + (x.is3 ? 3 : 2), 0) / n : null, fbA: shD.length ? shD.filter((x) => x.made && x.fb).reduce((a, x) => a + (x.is3 ? 3 : 2), 0) / n : null,
+      paint: sh.length ? 2 * sh.filter((x) => x.made && !x.is3 && (x.z === 'rim' || x.z === 'paint')).length / n : null, paintA: shD.length ? 2 * shD.filter((x) => x.made && !x.is3 && (x.z === 'rim' || x.z === 'paint')).length / n : null,
+      bench: benchPg, clutchNet: ctR?.net ?? null, clutchRec: ct ? `${ct.w}–${ct.l}` : null, atoPPP: at && at.off.n ? at.off.pts / at.off.n : null, atoN: at?.off.n ?? null, atoDef: at && at.def.n ? at.def.pts / at.def.n : null,
+      q1: q[0], q2: q[1], q3: q[2], q4: q[3],
+      zones: sh.length ? { off: zoneRows(sh, ALLSHOTS).map((r) => [r.label, r.pct, r.share, r.lpct, r.m, r.a]), def: zoneRows(shD, ALLSHOTS).map((r) => [r.label, r.pct, r.share, r.lpct, r.m, r.a]),
+        svgOff: courtSvg(sh, { mode: 'zones', league: ALLSHOTS, title: 'Offense zones' }), svgDef: courtSvg(shD, { mode: 'zones', league: ALLSHOTS, title: 'Defense zones' }) } : null
+    };
+  }
+  // [key, label, higher is better, hint]
+  const XM = [['offTO', 'Points off turnovers', true], ['offTOA', 'Opp points off turnovers', false], ['second', 'Second-chance points', true], ['secondA', 'Opp second-chance points', false],
+    ['fb', 'Fast-break points', true], ['fbA', 'Opp fast-break points', false], ['paint', 'Points in the paint', true], ['paintA', 'Opp points in the paint', false],
+    ['bench', 'Bench points', true], ['runs', 'Runs of 8+ per game', true], ['runsA', 'Opp runs of 8+ per game', false], ['lastMin', 'Points in last minute of quarters', true],
+    ['clutchNet', 'Clutch net rating', true, 'last 5 min, within 5'], ['atoPPP', 'Points per possession after timeouts', true], ['atoDef', 'Allowed after opp timeouts', false],
+    ['q1', '1st quarter margin', true], ['q2', '2nd quarter margin', true], ['q3', '3rd quarter margin', true], ['q4', '4th quarter margin', true]].filter(([k]) => teams.some((t) => X[t.code][k] != null));
+  for (const [k, , hi] of XM) { const r = rankIn(Object.fromEntries(teams.map((t) => [t.code, X[t.code][k]])), hi); for (const t of teams) { X[t.code].xr ||= {}; X[t.code].xr[k] = r(X[t.code][k]); } }
+  data.xmetrics = XM;
+  const r1 = (v, d = 1) => (v == null || !Number.isFinite(v) ? null : +v.toFixed(d));
+  const clutchPts = new Map((CLUTCH?.players || []).map((p) => [p.id + '|' + p.team, p.box.pts]));
+  for (const T of data.teams) {
+    T.x = Object.fromEntries(Object.entries(X[T.code]).map(([k, v]) => [k, typeof v === 'number' ? r1(v, k.startsWith('ato') ? 2 : 1) : v]));
+    T.roster = players.filter((p) => p.team === T.code && p.mpg >= 4 && p.gp >= 2).sort((a, b) => b.totalMin - a.totalMin).map((p) => {
+      const t2 = p.totals; const oo = onOffOf(p.id);
+      return { name: p.name, href: playerHref(p.id), pos: posOf.get(p.id) || '', gp: p.gp, gs: p.gs, mpg: r1(p.mpg), ppg: r1(p.ppg), rpg: r1(p.rpg), apg: r1(p.apg), spg: r1(p.spg), bpg: r1(p.bpg), tpg: r1(p.tpg),
+        p2: t2.fga2 ? r1(100 * t2.fgm2 / t2.fga2) : null, p3: t2.fga3 ? r1(100 * t2.fgm3 / t2.fga3) : null, a3: r1(t2.fga3 / p.gp), ft: t2.fta ? r1(100 * t2.ftm / t2.fta) : null,
+        ts: r1(p.ts), usg: r1(p.usg), pir: r1(p.pirpg), pm: r1(p.pmpg), onoff: r1(oo?.swing ?? null), imp: r1(IMPACT?.values.get(p.id) ?? null), clutch: clutchPts.get(p.id + '|' + p.team) ?? null };
+    });
+  }
   writeFileSync(join(OUT, 'matchup.json'), JSON.stringify(data));
   writePage('matchup.html', 'Matchup', `<div id="matchup-app"><p class="muted">Loading…</p></div>`, 'matchup.html',
     cover({ kicker: esc(roundLine), title: 'Matchup', lede: 'Put any two teams side by side: ratings, four factors, this season’s meetings, key players, and where the mismatches are.' }),

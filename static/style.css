@@ -938,3 +938,40 @@ td.warn { color: #d97a00; font-weight: 700; }
   .split-page table.rot .rot-c { width: 9px; min-width: 9px; height: 12px; }
   .split-page * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+/* Matchup: more sections + PDF */
+.mu-pdf { margin: 10px 0 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mu-shot-pair { margin-top: 14px; } .mu-court svg.court { max-width: 420px; }
+table.mu-z { width: 100%; font-size: 13px; border-collapse: collapse; margin-top: 8px; }
+table.mu-z td, table.mu-z th { padding: 5px 6px; border-bottom: 1px solid var(--line); }
+tr.mu-hot td { background: #fdecee; font-weight: 600; }
+.mu-bt { border-top: 1px solid var(--line); padding: 10px 0; }
+.mu-bt h3 { margin: 0 0 6px; }
+.mu-bt-row { display: grid; grid-template-columns: 1fr 40px 1fr; gap: 10px; align-items: start; }
+.mu-bt-vs { text-align: center; font: 800 16px var(--display); color: var(--muted); padding-top: 10px; }
+.mu-pc { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.mu-bt-row > div:last-child .mu-pc { text-align: right; }
+table.mu-pl { font-size: 12.5px; border-collapse: collapse; width: 100%; }
+table.mu-pl th, table.mu-pl td { padding: 5px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mu-ptab + .mu-ptab { margin-top: 16px; }
+@media print {
+  body:has(#matchup-app) .cover { display: none !important; }
+  body:has(#matchup-app) main, body:has(#matchup-app) main.wrap { margin-top: 0 !important; }
+  #matchup-app { font-size: 11px; }
+  #matchup-app .card { box-shadow: none; border: 0; padding: 0; margin: 0 0 12px; }
+  #matchup-app .mu-row { padding: 2px 0; grid-template-columns: 56px minmax(0,1fr) 170px minmax(0,1fr) 56px; }
+  #matchup-app .mu-val { font-size: 14px; } #matchup-app .mu-bar { height: 7px; }
+  #matchup-app .mu-row, #matchup-app tr, #matchup-app .mu-pc, #matchup-app figure { break-inside: avoid; }
+  #matchup-app h2, #matchup-app h3 { break-after: avoid; }
+  @page mupdf { size: A4 portrait; margin: 9mm; }
+  #matchup-app { page: mupdf; }
+  #matchup-app .mu-hero { padding: 10px 14px; margin-bottom: 8px; } #matchup-app .mu-hero strong { font-size: 18px; } #matchup-app .mu-crest { width: 40px; height: 40px; }
+  #matchup-app .mu-lab { font-size: 9.5px; line-height: 1.15; } #matchup-app .mu-lab small { display: none; }
+  #matchup-app .mu-val small { font-size: 8px; margin-top: 1px; }
+  #matchup-app .row:has(.mu-team) { display: none; }
+  #matchup-app .mu-shots, #matchup-app .mu-players { break-before: page; }
+  #matchup-app .mu-court svg.court { max-width: 260px; }
+  #matchup-app .mu-bt { padding: 4px 0; } #matchup-app .mu-pc { padding: 2px 0; }
+  #matchup-app .shot-two { grid-template-columns: 1fr 1fr; }
+  #matchup-app table.mu-pl { font-size: 8px; } #matchup-app table.mu-pl th, #matchup-app table.mu-pl td { padding: 2px 3px; }
+  #matchup-app * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
