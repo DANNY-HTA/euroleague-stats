@@ -1,6 +1,10 @@
-const r0 = await fetch('https://basket.co.il/ws/ws.asmx/Games?league_id=0&team_uid=0&cYear=2027&board_id=0&board_round=0&team_id=0&game_id=0', { headers: { 'User-Agent': 'HTA LAB stats' } });
-let j = JSON.parse((await r0.text()).replace(/^﻿/, '')); j = j.d ?? j; if (!Array.isArray(j)) j = Object.values(j).find(Array.isArray);
-const d = (s) => s.split('/').reverse().join('-');
-const next = j.filter((x) => /winner league/i.test(x.board_name_eng || '') && !(+x.score_team1 > 0)).sort((a, b) => (d(a.game_date_txt) + a.TimeOfGame).localeCompare(d(b.game_date_txt) + b.TimeOfGame));
-console.log('SOON', next.slice(0, 8).map((g) => `${d(g.game_date_txt)} ${g.TimeOfGame} ${g.team1_name_eng} - ${g.team2_name_eng} ext=${g.ExternalID}`).join(' || '));
-console.log('HAP', next.filter((g) => /IBI Tel Aviv/.test(g.team1_name_eng + g.team2_name_eng)).slice(0, 2).map((g) => `${d(g.game_date_txt)} ${g.TimeOfGame} ${g.team1_name_eng} - ${g.team2_name_eng} ext=${g.ExternalID}`).join(' || '));
+const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats', Accept: 'text/html,application/json' };
+const get = async (u) => { try { const r = await fetch(u, { headers: H, redirect: 'follow' }); const t = await r.text(); return [r.status, t, r]; } catch (e) { return [0, String(e)]; } };
+for (const u of ['https://www.championsleague.basketball/en/games', 'https://www.championsleague.basketball/en/schedule', 'https://www.championsleague.basketball/en/', 'https://www.championsleague.basketball/robots.txt']) {
+  const [s, t] = await get(u);
+  console.log('P', u, s, t.length);
+  if (u.endsWith('robots.txt')) console.log('ROBOTS', t.slice(0, 800).replace(/\n/g, ' | '));
+  const ids = [...new Set((t.match(/fibalivestats[^"' <]+|geniussports[^"' <]+|\/game\/[^"' <]+|"gameId"\s*:\s*"?\d+|api[^"' <]*\.(?:fiba|basketball)[^"' <]*/gi) || []))].slice(0, 25);
+  console.log('IDS', ids.join(' '));
+  const nx = t.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/); if (nx) console.log('NEXT', nx[1].slice(0, 1500));
+}
