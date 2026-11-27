@@ -18,7 +18,7 @@ import { poolRows, poolFromDir } from '../lib/pool.mjs';
 import { playerRates } from '../lib/advanced.mjs';
 import { loadShots, courtSvg, zoneRows } from '../lib/shots.mjs';
 import { clutch as clutchOf, afterTimeouts, rates as situRates, rotation as rotationOf, flowExtras } from '../lib/situ.mjs';
-import { playLog, flowStats, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
+import { playLog, flowStats, flowDetail, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
 
 const args = process.argv.slice(2);
 const LEAGUE = args.includes('--league') ? args[args.indexOf('--league') + 1] : 'el';
@@ -219,29 +219,58 @@ ${labels.map(([t, l]) => `<text x="${sx(t)}" y="${H - 8}" text-anchor="middle">$
 <text x="${L + 6}" y="${T + 12}" class="lbl">${esc(hTv)} ahead</text><text x="${L + 6}" y="${H - B - 6}" class="lbl">${esc(aTv)} ahead</text></svg>`;
 }
 const per100 = (pts, poss) => (poss ? 100 * pts / poss : 0);
-function compareRows(g) {
+function compareRows(g, x = {}) {
   const h = g.home.totals, a = g.away.totals;
-  const poss = (t, o) => t.fga2 + t.fga3 - t.oreb + t.tov + 0.44 * t.fta;
+  const poss = (t) => t.fga2 + t.fga3 - t.oreb + t.tov + 0.44 * t.fta;
   const P = (poss(h) + poss(a)) / 2;
   const efg = (t) => (t.fga2 + t.fga3 ? 100 * (t.fgm2 + t.fgm3 + 0.5 * t.fgm3) / (t.fga2 + t.fga3) : 0);
   const ts = (t) => (t.fga2 + t.fga3 + 0.44 * t.fta ? 100 * t.pts / (2 * (t.fga2 + t.fga3 + 0.44 * t.fta)) : 0);
-  const pct = (m, x) => (x ? 100 * m / x : 0);
-  const rows = [
-    ['Points', h.pts, a.pts], ['Points per 100 possessions', per100(h.pts, P), per100(a.pts, P), 1],
-    ['2-point %', pct(h.fgm2, h.fga2), pct(a.fgm2, a.fga2), 1, `${h.fgm2}/${h.fga2}`, `${a.fgm2}/${a.fga2}`],
-    ['3-point %', pct(h.fgm3, h.fga3), pct(a.fgm3, a.fga3), 1, `${h.fgm3}/${h.fga3}`, `${a.fgm3}/${a.fga3}`],
-    ['Free throw %', pct(h.ftm, h.fta), pct(a.ftm, a.fta), 1, `${h.ftm}/${h.fta}`, `${a.ftm}/${a.fta}`],
-    ['Effective FG %', efg(h), efg(a), 1], ['True shooting %', ts(h), ts(a), 1],
-    ['Rebounds', h.reb, a.reb], ['Offensive rebounds', h.oreb, a.oreb], ['Defensive rebounds', h.dreb, a.dreb],
-    ['Assists', h.ast, a.ast], ['Steals', h.stl, a.stl], ['Blocks', h.blk, a.blk],
-    ['Turnovers', h.tov, a.tov, 0, '', '', true], ['Fouls', h.pf, a.pf, 0, '', '', true], ['PIR', h.pir, a.pir]
+  const pct = (m, n) => (n ? 100 * m / n : 0);
+  const sum = (side, k) => side.players.reduce((acc, p) => acc + (p[k] || 0), 0);
+  const fdH = h.fd ?? sum(g.home, 'fd'), fdA = a.fd ?? sum(g.away, 'fd');
+  const stB = (side) => { const st = side.players.filter((p) => p.starter).reduce((acc, p) => acc + p.pts, 0); return [st, side.score - st]; };
+  const [sH, bH] = stB(g.home), [sA, bA] = stB(g.away);
+  const D = x.detail?.pts, fb = x.fastBreak;
+  // [label, home, away, decimals, home note, away note, fewer is better, neutral (no "better" side), home text, away text]
+  const groups = [
+    ['Scoring', [
+      ['Points', h.pts, a.pts],
+      ['2-pointers', pct(h.fgm2, h.fga2), pct(a.fgm2, a.fga2), 1, `${h.fgm2}/${h.fga2}`, `${a.fgm2}/${a.fga2}`],
+      ['3-pointers', pct(h.fgm3, h.fga3), pct(a.fgm3, a.fga3), 1, `${h.fgm3}/${h.fga3}`, `${a.fgm3}/${a.fga3}`],
+      ['Free throws', pct(h.ftm, h.fta), pct(a.ftm, a.fta), 1, `${h.ftm}/${h.fta}`, `${a.ftm}/${a.fta}`],
+      ['Effective FG %', efg(h), efg(a), 1], ['True shooting %', ts(h), ts(a), 1],
+      ['Possessions', poss(h), poss(a), 1, '', '', false, true],
+      ['Points per possession', P ? h.pts / P : 0, P ? a.pts / P : 0, 2],
+      fb ? ['Fast-break points', fb.H, fb.A] : null,
+      D ? ['Points off turnovers', D.H.offTO, D.A.offTO] : null
+    ]],
+    ['Rebounds & ball', [
+      ['Rebounds', h.reb, a.reb, 0, `(${h.oreb}+${h.dreb})`, `(${a.oreb}+${a.dreb})`],
+      ['Offensive rebound %', pct(h.oreb, h.oreb + a.dreb), pct(a.oreb, a.oreb + h.dreb), 1],
+      ['Defensive rebound %', pct(h.dreb, h.dreb + a.oreb), pct(a.dreb, a.dreb + h.oreb), 1],
+      ['Assists', h.ast, a.ast], ['Assists / turnovers', h.tov ? h.ast / h.tov : h.ast, a.tov ? a.ast / a.tov : a.ast, 2],
+      ['Turnovers', h.tov, a.tov, 0, '', '', true], ['Steals', h.stl, a.stl], ['Blocks', h.blk, a.blk],
+      ['Fouls', h.pf, a.pf, 0, '', '', true], ['Fouls drawn', fdH, fdA], ['PIR', h.pir, a.pir]
+    ]],
+    ['Game flow', [
+      ['Starters · bench points', sH + bH, sA + bA, 0, '', '', false, true, `${sH} · ${bH}`, `${sA} · ${bA}`],
+      D ? ['Points after steals', D.H.afterSteal, D.A.afterSteal] : null,
+      D ? ['Second-chance points', D.H.second, D.A.second] : null,
+      x.flow ? ['Biggest lead', x.flow.maxLead.H, x.flow.maxLead.A] : null,
+      x.flow ? ['Biggest run', x.flow.bestRun.H, x.flow.bestRun.A, 0, '', '', false, false, `${x.flow.bestRun.H}–0`, `${x.flow.bestRun.A}–0`] : null
+    ]]
   ];
-  return { P, html: rows.map(([label, x, y, dec, sx, sy, low]) => {
-    const tot = Math.abs(x) + Math.abs(y) || 1, wx = (100 * Math.abs(x) / tot).toFixed(1);
-    const better = x === y ? '' : (low ? x < y : x > y) ? 'h' : 'a';
-    const fx = dec ? f1(x) : x, fy = dec ? f1(y) : y;
+  const row = ([label, hv, av, dec, sx, sy, low, neutral, tx, ty]) => {
+    const tot = Math.abs(hv) + Math.abs(av) || 1, wx = (100 * Math.abs(hv) / tot).toFixed(1);
+    const better = neutral || hv === av ? '' : (low ? hv < av : hv > av) ? 'h' : 'a';
+    const fx = tx ?? (dec ? hv.toFixed(dec) : hv), fy = ty ?? (dec ? av.toFixed(dec) : av);
     return `<div class="cmp ${better ? 'b-' + better : ''}"><span class="v h">${fx}${sx ? ` <small>${sx}</small>` : ''}</span><span class="lab">${label}${low ? ' <small>(fewer is better)</small>' : ''}</span><span class="v a">${fy}${sy ? ` <small>${sy}</small>` : ''}</span><div class="split"><i style="width:${wx}%"></i><i style="width:${(100 - wx).toFixed(1)}%"></i></div></div>`;
-  }).join('') };
+  };
+  // ties and lead changes, in order, with who did it
+  const chips = (list) => list.map((r) => `<span class="fl-chip fl-${r.side === 'H' ? 'h' : 'a'}"><b>${esc(r.side === 'H' ? g.home.tv : g.away.tv)}</b> ${r.period <= 4 ? 'Q' + r.period : 'OT' + (r.period - 4)} ${esc(r.clock)} <strong>${r.hs}–${r.as}</strong> ${esc(nameOf.get(r.pid) || '')} ${r.type === 'FTM' ? 'FT' : r.type === '3FGM' ? '3PT' : '2PT'}</span>`).join('');
+  const lists = x.detail ? `<div class="fl-list"><h4>Times tied · ${x.detail.ties.length} <small>in order, who tied the game</small></h4>${chips(x.detail.ties) || '<span class="muted small">None</span>'}</div>
+<div class="fl-list"><h4>Lead changes · ${x.detail.changes.length} <small>in order, who took the lead</small></h4>${chips(x.detail.changes) || '<span class="muted small">None</span>'}</div>` : '';
+  return { P, html: groups.map(([title, rows]) => `<h3 class="cmp-grp">${title}</h3>${rows.filter(Boolean).map(row).join('')}`).join('') + lists };
 }
 const sideHead = (s) => `<h3 class="side-h">${badge(s.code, s.tv)} ${esc(titleCase(s.name))}</h3>`;
 function gameUnits(g, stints, size) {
@@ -272,7 +301,17 @@ ${list.map((u) => {
 function lineupBlock(g, stints, note) {
   const sizes = [5, 4, 3, 2], U = Object.fromEntries(sizes.map((k) => [k, gameUnits(g, stints, k)]));
   const name = { 5: 'Five-man lineups', 4: '4-man', 3: '3-man', 2: 'Pairs' };
-  return `<section class="card" id="lineups"><h2>Lineups</h2><p class="muted">Every unit that played in this game, with the full stats while it was on the court. Click any column to sort.</p>
+  const mm = (secs) => `${Math.floor(secs / 60)}:${String(Math.round(secs % 60)).padStart(2, '0')}`;
+  const nmL = (ids) => ids.map((id) => esc(nameOf.get(id) || id)).join(' · ');
+  const sumSide = (side) => {
+    const fives = U[5][side], pairs = U[2][side];
+    const f2 = fives.filter((u) => u.secs >= 120), p5 = pairs.filter((u) => u.secs >= 300);
+    const by = (list, dir) => list.slice().sort((x, y) => dir * ((y.pf - y.pa) - (x.pf - x.pa)) || y.secs - x.secs)[0];
+    const rows = [['Most used five', fives[0]], ['Best five +/-', by(f2, 1)], ['Worst five +/-', by(f2, -1)], ['Best pair +/-', by(p5, 1)], ['Worst pair +/-', by(p5, -1)]];
+    return rows.filter(([, u]) => u).map(([l, u]) => { const d = u.pf - u.pa; return `<tr><th scope="row">${l}</th><td>${nmL(u.ids)}</td><td class="num ${d > 0 ? 'pos' : d < 0 ? 'neg' : ''}"><strong>${d > 0 ? '+' : ''}${d}</strong></td><td class="num muted">${mm(u.secs)}</td></tr>`; }).join('');
+  };
+  const summary = `<div class="lu-sum">${[['H', g.home], ['A', g.away]].map(([k, S]) => `<div>${sideHead(S)}<table class="lu-sum-t"><tbody>${sumSide(k)}</tbody></table></div>`).join('')}</div><p class="muted small">Best and worst: fives with at least 2:00 together, pairs with at least 5:00.</p>`;
+  return `<section class="card" id="lineups"><h2>Lineups</h2>${summary}<p class="muted">Every unit that played in this game, with the full stats while it was on the court. Click any column to sort.</p>
 ${note ? `<p class="note-warn">${note}</p>` : ''}
 <div class="seg" role="group" aria-label="Lineup size">${sizes.map((k, i) => `<button type="button" data-size="${k}" aria-pressed="${i === 0}">${name[k]}</button>`).join('')}</div>
 ${sizes.map((k, i) => `<div class="unit-size" data-size="${k}"${i ? ' hidden' : ''}>${sideHead(g.home)}${unitTable(U[k].H)}${sideHead(g.away)}${unitTable(U[k].A)}</div>`).join('')}
@@ -295,7 +334,9 @@ for (const g of sortedGames) {
   const qs = (s) => { const q = s.quarters || []; const ot = q.length ? s.score - q.reduce((x, y) => x + y, 0) : 0; return [...q, ...(periods > 4 || ot ? [ot] : [])]; };
   const qH = qs(H), qA = qs(A);
   const mvp = gameMvp(g);
-  const cmp = compareRows(g);
+  const gShots = ALLSHOTS.filter((x) => x.g === g.gameCode && x.made && x.fb);
+  const fastBreak = ALLSHOTS.some((x) => x.g === g.gameCode) ? { H: gShots.filter((x) => x.team === H.code).reduce((acc, x) => acc + (x.is3 ? 3 : 2), 0), A: gShots.filter((x) => x.team === A.code).reduce((acc, x) => acc + (x.is3 ? 3 : 2), 0) } : null;
+  const cmp = compareRows(g, { detail: log ? flowDetail(log.plays) : null, flow, fastBreak });
   const best = (side, k) => side.players.filter((p) => p.min > 0).sort((x, y) => y[k] - x[k] || y.pir - x.pir)[0];
   const perf = [['pts', 'Points'], ['reb', 'Rebounds'], ['ast', 'Assists'], ['pir', 'PIR']].map(([k, l]) => {
     const x = best(H, k), y = best(A, k);

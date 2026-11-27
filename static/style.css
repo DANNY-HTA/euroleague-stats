@@ -887,3 +887,16 @@ td.warn { color: #d97a00; font-weight: 700; }
 .lg-card { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
 .lg-res { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
 .staff-notes p:last-child { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Game page: comparison groups, ties / lead changes, lineup summary */
+.cmp-grp { margin: 18px 0 2px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.fl-list { margin-top: 14px; }
+.fl-list h4 { margin: 0 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.fl-list h4 small { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.fl-chip { display: inline-block; margin: 0 6px 6px 0; padding: 4px 8px; border: 1px solid var(--line); border-left: 3px solid #9a9aa2; border-radius: 4px; font: 500 12px ui-monospace, SFMono-Regular, monospace; white-space: nowrap; }
+.fl-chip.fl-h { border-left-color: var(--red); } .fl-chip b { color: var(--red); } .fl-chip.fl-a b { color: #555; }
+.lu-sum { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.lu-sum-t td:nth-child(2) { width: 100%; }
+.lu-sum-t td.num { white-space: nowrap; }
+.lu-sum-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lu-sum-t th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; white-space: nowrap; padding: 6px 8px 6px 0; }
+.lu-sum-t td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
