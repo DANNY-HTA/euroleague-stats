@@ -19,6 +19,7 @@ import { playerRates } from '../lib/advanced.mjs';
 import { loadShots, courtSvg, zoneRows } from '../lib/shots.mjs';
 import { clutch as clutchOf, afterTimeouts, rates as situRates, rotation as rotationOf, flowExtras } from '../lib/situ.mjs';
 import { playLog, flowStats, flowDetail, connections, offensiveFouls, LABEL as PLAY_LABEL, GROUP as PLAY_GROUP } from '../lib/game.mjs';
+import { runs as runsOf, foulTrouble, WINDOWS, windowPoints, STATES, scoreStates, possOf, winProb, winProbSvg, assistPairs, passingSvg, shotModel, coachGame } from '../lib/insights.mjs';
 
 const args = process.argv.slice(2);
 const LEAGUE = args.includes('--league') ? args[args.indexOf('--league') + 1] : 'el';
@@ -463,6 +464,7 @@ ${lines.sort((a, b) => b.p.min - a.p.min).map(({ p, s }) => { const d = s ? p.pi
 </article>`;
   writePage(hapReportHref(g.gameCode), `Hapoel game report — ${me.tv} ${me.score}–${op.score} ${op.tv}`, body, HOME, '', { scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` });
 }
+const WP_HCA = Math.max(0, Math.min(5, games.reduce((a, g) => a + g.home.score - g.away.score, 0) / Math.max(1, games.length)));
 const sortedGames = [...games].sort((a, b) => a.date.localeCompare(b.date) || a.gameCode - b.gameCode);
 for (const g of sortedGames) {
   const H = g.home, A = g.away, raw = rawPbp.get(g.gameCode);
@@ -555,6 +557,9 @@ ${flow ? `<div class="tile"><span class="label">Lead changes</span><span class="
 <div class="tile"><span class="label">Biggest lead</span><span class="big">${Math.max(flow.maxLead.H, flow.maxLead.A)}</span><span class="sub">${esc(H.tv)} +${flow.maxLead.H} · ${esc(A.tv)} +${flow.maxLead.A}</span></div>
 <div class="tile"><span class="label">Biggest run</span><span class="big">${Math.max(flow.bestRun.H, flow.bestRun.A)}–0</span><span class="sub">${esc(H.tv)} ${flow.bestRun.H}–0 · ${esc(A.tv)} ${flow.bestRun.A}–0</span></div>` : `<div class="tile"><span class="label">Possessions</span><span class="big">${f1(cmp.P)}</span><span class="sub">per team</span></div>`}
 </div>
+${log && flow ? (() => { const W = winProb(log.plays, { hca: WP_HCA, sigma: 12 }); const nm = (id) => nameOf.get(id) || log.names[id] || ''; const lbl = { '3FGM': 'three', '2FGM': 'two', FTM: 'free throw' };
+  return `<section class="card"><h2>Win probability</h2><p class="muted">${esc(H.tv)}'s chance to win after every basket, from the score and the time left (home court counted). The numbered dots are the 5 baskets that swung it most.</p>${winProbSvg(W.line, W.end, { home: esc(H.tv), away: esc(A.tv), marks: W.swings.map((x) => ({ t: x.row[7], v: x.after })) })}
+<ol class="wp-swings">${W.swings.map((x) => `<li><strong>Q${x.row[0] > 4 ? 'OT' : x.row[0]} ${esc(x.row[1])}</strong> — ${esc(nm(x.row[3]))} ${lbl[x.row[4]] || ''} (${esc(x.row[2] === 'H' ? H.tv : A.tv)}), ${x.row[5]}–${x.row[6]}: ${esc(H.tv)} ${Math.round(100 * x.before)}% → <strong>${Math.round(100 * x.after)}%</strong></li>`).join('')}</ol></section>`; })() : ''}
 ${flow ? `<section class="card"><h2>Game flow</h2><p class="muted">The score margin after every basket. Red: ${esc(H.tv)} ahead. Dark: ${esc(A.tv)} ahead.</p>${flowSvg(flow.line, periods, H.tv, A.tv)}</section>` : ''}
 <div class="row">
 <section class="card"><h2>Top performers</h2><div class="perf-head"><span>${badge(H.code, H.tv)} ${esc(H.tv)}</span><span></span><span>${esc(A.tv)} ${badge(A.code, A.tv)}</span></div>${perf}</section>
@@ -1862,6 +1867,146 @@ if (HAP_GAME_CODE && pbpOk.some((e) => e.game.home.code === HAP_GAME_CODE || e.g
     { scripts: `<script src="lineupbuilder.js?v=${assetVersion()}" defer></script>` });
 }
 
+/** Same person key as static/staff.js: accents, case, punctuation and word order ignored. */
+const pkey = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
+// Compact game log for the cross-league pages (injury report, opponents' domestic games): scripts/build-availability.mjs
+writeFileSync(join(OUT, 'gamelog.json'), JSON.stringify({ league: LEAGUE, name: cfg.leagueName || cfg.shortName || LEAGUE, short: cfg.shortName || LEAGUE, hap: HAP_GAME_CODE || null,
+  teams: Object.fromEntries(teams.map((t) => [t.code, [titleCase(t.name), t.tv]])),
+  upcoming: upcoming.slice(0, 60).map((x) => [x.utc || null, x.h.code, x.a.code, x.r || null, Number(x.c) || null]),
+  games: sortedGames.map((g) => [g.date, g.gameCode, g.round ?? null, g.home.code, g.home.score, g.away.code, g.away.score, [...g.home.players.map((q) => [q.name, g.home.code, +(q.min || 0).toFixed(1), q.pts, q.reb, q.ast, q.pir, q.id]), ...g.away.players.map((q) => [q.name, g.away.code, +(q.min || 0).toFixed(1), q.pts, q.reb, q.ast, q.pir, q.id])]]) }));
+// Staff store (availability marks, keys to the game, season goals): encrypted with the team password, see static/staff.js
+const STAFF_CFG = JSON.stringify({ salt: cfg.internal?.salt, iterations: cfg.internal?.iterations, repo: process.env.GITHUB_REPOSITORY || cfg.internal?.repo || 'hta-lab/hta-lab.github.io', branch: process.env.GITHUB_REF_NAME || 'main', path: 'scouting/plan.enc', root: IS_EL ? '' : '../', comp: LEAGUE }).replace(/</g, '\\u003c');
+const STAFF_TAG = `<script>window.HTA_STAFF_CFG = ${STAFF_CFG};</script><script src="${IS_EL ? '' : '../'}staff.js?v=${assetVersion()}" defer></script>`;
+// ---- Insights: inside our games (runs, foul trouble, quarter edges, score situations), coach habits, passing, shot quality, clip list ----
+const INS = (() => {
+  if (!HAP_GAME_CODE || !pbpOk.length) return null;
+  const sgn = (v) => (v == null || !Number.isFinite(v) ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1));
+  const per = pbpOk.map((e) => { const raw = rawPbp.get(e.game.gameCode); return raw ? { e, g: e.game, plays: playLog(e.game, raw).plays, ps: e.periodStints } : null; }).filter(Boolean);
+  const sideOf = (g, code) => (g.home.code === code ? 'H' : g.away.code === code ? 'A' : null);
+  const T = new Map(teams.map((t) => [t.code, { code: t.code, tv: t.tv, name: titleCase(t.name), g: 0, runsF: 0, runsA: 0, win: Object.fromEntries(WINDOWS.map(([k]) => [k, { pf: 0, pa: 0 }])), st: Object.fromEntries(STATES.map(([k]) => [k, { pf: 0, pa: 0, fga: 0, oreb: 0, tov: 0, fta: 0, ofga: 0, ooreb: 0, otov: 0, ofta: 0, secs: 0 }])), coach: [], pairs: [], drawn: new Map() }]));
+  const runList = [];
+  for (const x of per) {
+    const rr = runsOf(x.plays, x.ps, 8);
+    for (const side of ['H', 'A']) {
+      const code = side === 'H' ? x.g.home.code : x.g.away.code, o = T.get(code); if (!o) continue;
+      o.g++;
+      o.runsF += rr.filter((r) => r.side === side).length; o.runsA += rr.filter((r) => r.side !== side).length;
+      const w = windowPoints(x.plays, side); for (const k in w) { o.win[k].pf += w[k].pf; o.win[k].pa += w[k].pa; }
+      const st = scoreStates(x.plays, side); for (const k in st) for (const f in st[k]) o.st[k][f] += st[k][f];
+      const sideObj = side === 'H' ? x.g.home : x.g.away;
+      o.coach.push({ g: x.g, ...coachGame(x.plays, x.ps, side, sideObj.players.filter((p) => p.starter).map((p) => p.id)) });
+      o.pairs.push({ pairs: connections(x.plays), side });
+      for (const p of x.plays) if (p[4] === 'RV' && p[2] === side && p[3]) o.drawn.set(p[3], (o.drawn.get(p[3]) || 0) + 1);
+    }
+    for (const r of rr) runList.push({ ...r, g: x.g });
+  }
+  const TL = [...T.values()].filter((o) => o.g);
+  const rankBy = (f, hi = true) => { const v = TL.map(f).sort((a, b) => (hi ? b - a : a - b)); return (o) => 1 + v.indexOf(f(o)); };
+  const H0 = T.get(HAP_GAME_CODE);
+  const hapGames = per.filter((x) => sideOf(x.g, HAP_GAME_CODE));
+  const nm = (id) => nameOf.get(id) || id;
+  const qc = (per0, clock) => `Q${per0 > 4 ? 'OT' : per0} ${clock}`;
+  const gameLbl = (g) => { const s = sideOf(g, HAP_GAME_CODE), op = s === 'H' ? g.away : g.home; return `${s === 'H' ? 'vs' : 'at'} ${op.tv}`; };
+  // ---- Inside our games ----
+  let insideHtml = '';
+  if (H0 && hapGames.length) {
+    const myRuns = runList.filter((r) => sideOf(r.g, HAP_GAME_CODE)).map((r) => ({ ...r, mine: (r.side === 'H') === (r.g.home.code === HAP_GAME_CODE) })).sort((a, b) => b.g.date.localeCompare(a.g.date) || a.t0 - b.t0);
+    const against = myRuns.filter((r) => !r.mine), forUs = myRuns.filter((r) => r.mine);
+    const onCount = (list, mineSide) => { const m = new Map(); for (const r of list) { const s = r.g.home.code === HAP_GAME_CODE ? 'H' : 'A'; for (const id of r.onStart[s] || []) m.set(id, (m.get(id) || 0) + 1); } return m; };
+    const onA = onCount(against), onF = onCount(forUs);
+    const ids = [...new Set([...onA.keys(), ...onF.keys()])].sort((a, b) => ((onF.get(b) || 0) - (onA.get(b) || 0)) - ((onF.get(a) || 0) - (onA.get(a) || 0)));
+    const toStop = against.filter((r) => r.timeoutBy && r.timeoutBy !== r.side);
+    const runRow = (r) => { const s = r.g.home.code === HAP_GAME_CODE ? 'H' : 'A'; const sc = s === 'H' ? r.scoreBefore : [r.scoreBefore[1], r.scoreBefore[0]];
+      return `<tr><td><a href="${gameHref(r.g.gameCode)}">${esc(fmtDate(r.g.date))} ${esc(gameLbl(r.g))}</a></td><td class="num">${qc(r.period, r.clock0)}</td><td class="num"><strong class="${r.mine ? 'pos' : 'neg'}">${r.pts}–0</strong></td><td class="num">${sc[0]}–${sc[1]}</td><td class="small">${r.oppTov ? `${r.oppTov} TO` : ''}${r.oppTov && r.oppMiss ? ' · ' : ''}${r.oppMiss ? `${r.oppMiss} missed (${r.oppMiss3} threes)` : ''}</td><td class="small">${r.timeoutBy && r.timeoutBy !== r.side ? '<span class="chip">Timeout</span> ' : ''}${r.stopper ? esc(nm(r.stopper)) : 'end of game'}</td><td class="small">${(r.onStart[s] || []).map((id) => esc(nm(id))).join(' · ')}</td></tr>`; };
+    const runTable = (list) => `<div class="scroll"><table class="rtab"><thead><tr><th>Game</th><th class="num">Started</th><th class="num">Run</th><th class="num">Score before (us–them)</th><th>During the run, the other team had</th><th>Stopped by</th><th>Hapoel five at the start</th></tr></thead><tbody>${list.slice(0, 25).map(runRow).join('')}</tbody></table></div>`;
+    // foul trouble
+    const ft = new Map(); let fo = new Map();
+    for (const x of hapGames) { const s = sideOf(x.g, HAP_GAME_CODE); const r = foulTrouble(x.plays, x.ps, s); for (const e of r.episodes) { const o = ft.get(e.pid) || { n: 0, played: 0, exp: 0, kinds: {} }; o.n++; o.played += e.played; o.exp += e.share * e.left; o.kinds[e.kind] = (o.kinds[e.kind] || 0) + 1; ft.set(e.pid, o); } for (const id of r.fouledOut) fo.set(id, (fo.get(id) || 0) + 1); }
+    const ftRows = [...ft].sort((a, b) => (b[1].exp - b[1].played) - (a[1].exp - a[1].played)).map(([id, o]) => `<tr><td><a href="${playerHref(id)}">${esc(nm(id))}</a></td><td class="num">${o.n}</td><td class="small">${Object.entries(o.kinds).map(([k, v]) => `${v}× ${k}`).join(', ')}</td><td class="num">${(o.played / 60 / o.n).toFixed(1)}</td><td class="num">${(o.exp / 60 / o.n).toFixed(1)}</td><td class="num"><strong class="${o.exp - o.played > 0 ? 'neg' : 'pos'}">${((o.exp - o.played) / 60).toFixed(1)}</strong></td><td class="num">${fo.get(id) || ''}</td></tr>`).join('');
+    const totalLost = [...ft.values()].reduce((a, o) => a + Math.max(0, o.exp - o.played), 0) / 60;
+    // windows
+    const winRank = (k) => rankBy((o) => (o.win[k].pf - o.win[k].pa) / o.g);
+    const winRows = WINDOWS.map(([k, l]) => { const w = H0.win[k], n = (w.pf - w.pa) / H0.g; const lg = TL.reduce((a, o) => a + o.win[k].pf, 0) / TL.reduce((a, o) => a + o.g, 0); return `<tr><td>${l}</td><td class="num">${(w.pf / H0.g).toFixed(1)}</td><td class="num">${(w.pa / H0.g).toFixed(1)}</td><td class="num"><strong class="${n >= 0 ? 'pos' : 'neg'}">${sgn(n)}</strong></td><td class="num">${ord(winRank(k)(H0))}</td><td class="num muted">${lg.toFixed(1)}</td></tr>`; }).join('');
+    // score states
+    const stRate = (o, k) => { const s = o.st[k], p = possOf(s); return { ortg: p.off ? 100 * s.pf / p.off : null, drtg: p.def ? 100 * s.pa / p.def : null, min: s.secs / 60 }; };
+    const lgSt = (k) => { const s = TL.reduce((a, o) => { for (const f in o.st[k]) a[f] = (a[f] || 0) + o.st[k][f]; return a; }, {}); const p = possOf(s); return p.off ? 100 * s.pf / p.off : null; };
+    const stRows = STATES.map(([k, l]) => { const r = stRate(H0, k); return `<tr${k === 'garbage' ? ' class="muted"' : ''}><td>${l}</td><td class="num">${(r.min / H0.g).toFixed(1)}</td><td class="num">${f1(r.ortg)}</td><td class="num">${f1(r.drtg)}</td><td class="num"><strong class="${(r.ortg ?? 0) - (r.drtg ?? 0) >= 0 ? 'pos' : 'neg'}">${r.ortg == null || r.drtg == null ? '–' : sgn(r.ortg - r.drtg)}</strong></td><td class="num muted">${f1(lgSt(k))}</td></tr>`; }).join('');
+    insideHtml = `<nav class="hap-toc"><a href="#runs">Runs</a><a href="#fouls">Foul trouble</a><a href="#quarters">Start and end of quarters</a><a href="#states">Score situations</a></nav>
+<section class="card" id="runs"><h2>Scoring runs (8–0 or more)</h2><div class="r-grid"><div class="rs"><span>Our runs per game</span><b>${(H0.runsF / H0.g).toFixed(2)} <small>${ord(rankBy((o) => o.runsF / o.g)(H0))}</small></b></div><div class="rs"><span>Runs against per game</span><b>${(H0.runsA / H0.g).toFixed(2)} <small>${ord(rankBy((o) => o.runsA / o.g, false)(H0))}</small></b></div><div class="rs"><span>Runs against stopped with a timeout</span><b>${toStop.length} of ${against.length}</b></div><div class="rs"><span>Turnovers during runs against</span><b>${against.reduce((a, r) => a + r.oppTov, 0)}</b></div></div>
+<h3>Runs against us</h3>${against.length ? runTable(against) : '<p class="muted">None.</p>'}
+<h3>Our runs</h3>${forUs.length ? runTable(forUs) : '<p class="muted">None.</p>'}
+<h3>Who is on the court when runs start</h3><div class="scroll"><table class="rtab"><thead><tr><th>Player</th><th class="num">Our runs</th><th class="num">Runs against</th><th class="num">Difference</th></tr></thead><tbody>${ids.slice(0, 14).map((id) => { const f = onF.get(id) || 0, a = onA.get(id) || 0; return `<tr><td>${esc(nm(id))}</td><td class="num">${f}</td><td class="num">${a}</td><td class="num"><strong class="${f - a >= 0 ? 'pos' : 'neg'}">${f - a > 0 ? '+' : ''}${f - a}</strong></td></tr>`; }).join('')}</tbody></table></div><p class="muted small">A run is unanswered points by one team. "During the run" counts the other team's turnovers and missed shots from their last basket to the end of the run.</p></section>
+<section class="card" id="fouls"><h2>Foul trouble</h2><div class="r-grid"><div class="rs"><span>Minutes lost to foul trouble</span><b>${totalLost.toFixed(0)} <small>in ${H0.g} games</small></b></div></div>
+${ftRows ? `<div class="scroll"><table class="rtab"><thead><tr><th>Player</th><th class="num">Times</th><th>When</th><th class="num">Played for the rest of the half (min)</th><th class="num">Would normally play</th><th class="num">Minutes lost (total)</th><th class="num">Fouled out</th></tr></thead><tbody>${ftRows}</tbody></table></div>` : '<p class="muted">No foul trouble yet.</p>'}
+<p class="muted small">Foul trouble = 2nd foul (or 3rd before the last 5 minutes) in the 1st half, or 4th foul in the 2nd half before the last 2 minutes. "Would normally play" uses his share of minutes in that game before the foul.</p></section>
+<section class="card" id="quarters"><h2>Start and end of quarters</h2><div class="scroll"><table class="rtab"><thead><tr><th>Stretch</th><th class="num">Our pts/g</th><th class="num">Their pts/g</th><th class="num">Margin</th><th class="num">League rank</th><th class="num">League avg pts</th></tr></thead><tbody>${winRows}</tbody></table></div></section>
+<section class="card" id="states"><h2>Score situations</h2><div class="scroll"><table class="rtab"><thead><tr><th>Score</th><th class="num">Min/g</th><th class="num">Off. rating</th><th class="num">Def. rating</th><th class="num">Net</th><th class="num">League off. rating</th></tr></thead><tbody>${stRows}</tbody></table></div><p class="muted small">The margin before each possession. Garbage time (4th quarter, 20+ points apart, or 15+ in the last 4 minutes) is shown separately and left out of the other rows. Close games in the last 5 minutes: see the clutch page.</p></section>`;
+    writePage(`team-${safe(HAP_GAME_CODE)}-inside.html`, 'Inside our games', `<div class="split-page">${insideHtml}</div>`, HOME,
+      cover({ kicker: 'Hapoel', title: 'Inside our games', lede: `Runs for and against, foul trouble, the start and end of quarters, and how we play by score — from the play-by-play of ${H0.g} ${cfg.shortName || ''} games.` }));
+  }
+  // ---- Coach habits (every team) ----
+  const habit = (o) => { const c = o.coach, tos = c.flatMap((x) => x.tos), n = c.length; const fs = c.map((x) => x.firstSub).filter((v) => v != null).sort((a, b) => a - b); const sq = c.map((x) => x.startersQ1).filter((v) => v != null); const close = c.filter((x) => x.close35);
+    return { n, toG: tos.length / n, run6: tos.length ? tos.filter((t) => t.oppRun >= 6).length / tos.length : null, avgRun: tos.length ? tos.reduce((a, t) => a + t.oppRun, 0) / tos.length : null, byQ: [1, 2, 3, 4].map((q) => tos.filter((t) => t.period === q).length / n), late: tos.filter((t) => t.t >= 2280 && t.period === 4).length / n, firstSub: fs.length ? fs[Math.floor(fs.length / 2)] : null, sq: sq.length ? sq.reduce((a, b) => a + b, 0) / sq.length : null, lateUsed: close.length ? close.reduce((a, x) => a + x.lateUsed, 0) / close.length : null, used: c.reduce((a, x) => a + x.used, 0) / n, closeN: close.length }; };
+  const HB = new Map(TL.map((o) => [o.code, habit(o)]));
+  const clk = (s) => { if (s == null) return '–'; const rem = Math.round(600 - (s % 600)); return `${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`; };
+  const coachRows = TL.sort((a, b) => a.tv.localeCompare(b.tv)).map((o) => { const h = HB.get(o.code); return `<tr${o.code === HAP_GAME_CODE ? ' class="hap-row"' : ''}><td><a href="${teamHref(o.code)}">${badge(o.code, o.tv)} ${esc(o.name)}</a></td><td class="num">${h.toG.toFixed(1)}</td><td class="num">${h.avgRun == null ? '–' : h.avgRun.toFixed(1)}</td><td class="num">${h.run6 == null ? '–' : Math.round(100 * h.run6) + '%'}</td><td class="num small">${h.byQ.map((v) => v.toFixed(1)).join(' / ')}</td><td class="num">${h.late.toFixed(1)}</td><td class="num">${clk(h.firstSub)}</td><td class="num">${h.sq == null ? '–' : (h.sq / 60).toFixed(1)}</td><td class="num">${h.used.toFixed(1)}</td><td class="num">${h.lateUsed == null ? '–' : h.lateUsed.toFixed(1)}</td></tr>`; }).join('');
+  writePage('coach-habits.html', 'Coach habits', `<div class="scroll"><table class="rtab"><thead><tr><th>Team</th><th class="num">Timeouts/g</th><th class="num">Their run before a timeout (pts)</th><th class="num">Timeouts after a 6+ run</th><th class="num">By quarter Q1/Q2/Q3/Q4</th><th class="num">Last 2 min of Q4</th><th class="num">First sub (Q1 clock, median)</th><th class="num">Starters' Q1 minutes</th><th class="num">Players used/g</th><th class="num">Players used in last 5 min of close games</th></tr></thead><tbody>${coachRows}</tbody></table></div>
+<p class="muted small">From the play-by-play of every checked game. "Their run before a timeout" = opponent points since the team's own last basket when it called the timeout. Close game = within 8 points with 5 minutes left. TV timeouts are not counted.</p>`, HOME,
+    cover({ kicker: 'Opponents', title: 'Coach habits', lede: 'When each coach calls timeouts, how fast he goes to the bench, how long his starters play in the first quarter, and how short his rotation gets late.' }));
+  // ---- Passing networks (every team) ----
+  for (const o of TL) {
+    const pairs = assistPairs(o.pairs);
+    const pl = players.filter((p) => p.team === o.code && p.gp >= 2);
+    const madeBy = new Map(pl.map((p) => [p.id, { m2: p.totals.fgm2, m3: p.totals.fgm3 }]));
+    const recv = new Map(); for (const e of pairs) { const r = recv.get(e.to) || { a2: 0, a3: 0 }; if (e.pts === 2 * e.n) r.a2 += e.n; else { const n3 = e.pts - 2 * e.n; r.a3 += n3; r.a2 += e.n - n3; } recv.set(e.to, r); }
+    const nodes = pl.filter((p) => p.mpg >= 8).slice(0, 12).map((p) => ({ id: p.id, label: esc(p.name.split(' ').slice(-1)[0]), ast: pairs.filter((e) => e.from === p.id).reduce((a, e) => a + e.n, 0), made: pairs.filter((e) => e.to === p.id).reduce((a, e) => a + e.n, 0) }));
+    const edges = pairs.map((e) => ({ ...e, fromLabel: esc(nm(e.from)), toLabel: esc(nm(e.to)) }));
+    const selfRows = pl.filter((p) => p.totals.fgm2 + p.totals.fgm3 >= 10).map((p) => { const r = recv.get(p.id) || { a2: 0, a3: 0 }, m = madeBy.get(p.id); return { p, u2: m.m2 ? 1 - r.a2 / m.m2 : null, u3: m.m3 ? 1 - r.a3 / m.m3 : null, u: 1 - (r.a2 + r.a3) / (m.m2 + m.m3), made: m.m2 + m.m3 }; }).sort((a, b) => b.u * b.made - a.u * a.made);
+    const pct0 = (v) => (v == null ? '–' : Math.round(100 * Math.max(0, v)) + '%');
+    writePage(`team-${safe(o.code)}-passing.html`, `${o.tv} passing network`, `<section class="card"><h2>Who assists whom</h2>${passingSvg(nodes, edges)}<p class="muted small">Arrows go from the passer to the scorer; thicker = more assists (2 or more shown). The number in each circle is assists given.</p></section>
+<div class="r-two"><section class="card"><h2>Top connections</h2><table class="rtab"><thead><tr><th>Passer → scorer</th><th class="num">Assists</th><th class="num">Points</th></tr></thead><tbody>${pairs.slice(0, 15).map((e) => `<tr><td>${esc(nm(e.from))} → ${esc(nm(e.to))}</td><td class="num">${e.n}</td><td class="num">${e.pts}</td></tr>`).join('')}</tbody></table></section>
+<section class="card"><h2>Creates his own shot</h2><table class="rtab"><thead><tr><th>Player</th><th class="num">Made FG</th><th class="num">Unassisted</th><th class="num">Unassisted 2s</th><th class="num">Unassisted 3s</th></tr></thead><tbody>${selfRows.slice(0, 12).map((x) => `<tr><td>${esc(x.p.name)}</td><td class="num">${x.made}</td><td class="num"><strong>${pct0(x.u)}</strong></td><td class="num">${pct0(x.u2)}</td><td class="num">${pct0(x.u3)}</td></tr>`).join('')}</tbody></table><p class="muted small">Unassisted = made shots with no assist credited. Free throws not counted.</p></section></div>`, HOME,
+      cover({ kicker: `<a href="${teamHref(o.code)}">${esc(o.name)}</a>`, title: 'Passing network', lede: `Assists between ${esc(o.name)} players in ${o.g} checked games, and who scores without help.` }));
+  }
+  // ---- Shot quality (leagues with shot locations) ----
+  if (ALLSHOTS.some((s) => s.z)) {
+    const M = shotModel(ALLSHOTS);
+    const byP = new Map(); for (const s of ALLSHOTS) { if (!s.z) continue; if (!byP.has(s.pid)) byP.set(s.pid, []); byP.get(s.pid).push(s); }
+    const pRows = [...byP].map(([id, sh]) => ({ id, p: players.find((q) => q.id === id), r: M.sum(sh) })).filter((x) => x.p && x.r.a >= 60).sort((a, b) => b.r.diff - a.r.diff);
+    const tRows = TL.map((o) => ({ o, off: M.sum(ALLSHOTS.filter((s) => s.team === o.code)), def: M.sum(ALLSHOTS.filter((s) => s.opp === o.code)) })).sort((a, b) => (b.off.diff - b.def.diff) - (a.off.diff - a.def.diff));
+    const pr = (x) => `<tr${x.p.team === HAP_GAME_CODE ? ' class="hap-row"' : ''}><td><a href="${playerHref(x.id)}">${esc(x.p.name)}</a> <span class="muted small">${esc(x.p.tv)}</span></td><td class="num">${x.r.a}</td><td class="num">${x.r.xpps.toFixed(2)}</td><td class="num">${x.r.pps.toFixed(2)}</td><td class="num"><strong class="${x.r.diff >= 0 ? 'pos' : 'neg'}">${sgn(x.r.diff)}</strong></td></tr>`;
+    const zl = Object.entries(M.pps).map(([k, v]) => `${{ rim: 'At the rim', paint: 'Paint', mid: 'Mid-range', c3: 'Corner 3', ab3: 'Above-the-break 3' }[k] || k} ${v.toFixed(2)}`).join(' · ');
+    writePage('shot-quality.html', 'Shot quality', `<section class="card"><h2>Teams</h2><div class="scroll"><table class="rtab"><thead><tr><th>Team</th><th class="num">Expected pts/shot</th><th class="num">Actual</th><th class="num">Shot-making (pts per 100 shots over expected)</th><th class="num">Opponents expected</th><th class="num">Opponents actual</th><th class="num">Opp shot-making</th></tr></thead><tbody>${tRows.map((x) => `<tr${x.o.code === HAP_GAME_CODE ? ' class="hap-row"' : ''}><td>${badge(x.o.code, x.o.tv)} ${esc(x.o.name)}</td><td class="num">${x.off.xpps.toFixed(2)}</td><td class="num">${x.off.pps.toFixed(2)}</td><td class="num"><strong class="${x.off.diff >= 0 ? 'pos' : 'neg'}">${sgn(x.off.diff)}</strong></td><td class="num">${x.def.xpps.toFixed(2)}</td><td class="num">${x.def.pps.toFixed(2)}</td><td class="num"><strong class="${x.def.diff <= 0 ? 'pos' : 'neg'}">${sgn(x.def.diff)}</strong></td></tr>`).join('')}</tbody></table></div>
+<p class="muted small">Expected = what an average shooter scores from the same zones (league points per shot: ${zl}). A team far above expected on offense, or opponents far above on defense, usually comes back toward the middle. Free throws not counted.</p></section>
+<div class="r-two"><section class="card"><h2>Shooting above expected</h2><table class="rtab"><thead><tr><th>Player</th><th class="num">Shots</th><th class="num">Expected pts/shot</th><th class="num">Actual</th><th class="num">Per 100 shots</th></tr></thead><tbody>${pRows.slice(0, 25).map(pr).join('')}</tbody></table></section>
+<section class="card"><h2>Shooting below expected</h2><table class="rtab"><thead><tr><th>Player</th><th class="num">Shots</th><th class="num">Expected pts/shot</th><th class="num">Actual</th><th class="num">Per 100 shots</th></tr></thead><tbody>${pRows.slice(-25).reverse().map(pr).join('')}</tbody></table></section></div>
+${pRows.some((x) => x.p.team === HAP_GAME_CODE) ? `<section class="card"><h2>Hapoel</h2><table class="rtab"><thead><tr><th>Player</th><th class="num">Shots</th><th class="num">Expected pts/shot</th><th class="num">Actual</th><th class="num">Per 100 shots</th></tr></thead><tbody>${pRows.filter((x) => x.p.team === HAP_GAME_CODE).map(pr).join('')}</tbody></table><p class="muted small">Players with 60+ shots with a location.</p></section>` : ''}`, HOME,
+      cover({ kicker: 'Shots', title: 'Shot quality', lede: 'How good the shots are (expected points from where they are taken) and how well they are made. Shows who is shooting above his level and which teams are likely to cool off.' }));
+  }
+  // ---- Clip list: every play of Hapoel's games and of the next opponent's games ----
+  const nxt = upcoming.find((x) => x.h.code === HAP_GAME_CODE || x.a.code === HAP_GAME_CODE), nOpp = nxt ? (nxt.h.code === HAP_GAME_CODE ? nxt.a.code : nxt.h.code) : null;
+  const clipGames = per.filter((x) => sideOf(x.g, HAP_GAME_CODE) || (nOpp && sideOf(x.g, nOpp))).sort((a, b) => b.g.date.localeCompare(a.g.date));
+  const clipData = { teams: Object.fromEntries(TL.map((o) => [o.code, o.tv])), hap: HAP_GAME_CODE, opp: nOpp, names: {}, games: [] };
+  for (const x of clipGames) {
+    for (const p of [...x.g.home.players, ...x.g.away.players]) clipData.names[p.id] = p.name;
+    let lastTO = { H: -99, A: -99 };
+    const rows = [];
+    x.plays.forEach((p, i) => {
+      if (p[4] === 'TOUT' && p[2]) { lastTO[p[2]] = i; return; }
+      if (!p[2] || p[4] === 'IN' || p[4] === 'OUT') return;
+      const ato = i - lastTO[p[2]] <= 4 ? 1 : 0;
+      const m = Math.abs(p[5] - p[6]), clutch = p[7] >= 2100 && m <= 5 ? 1 : 0;
+      rows.push([p[0], p[1], p[2] === 'H' ? x.g.home.code : x.g.away.code, p[3], p[4], p[5], p[6], ato, clutch]);
+    });
+    clipData.games.push({ code: x.g.gameCode, date: x.g.date, h: x.g.home.code, a: x.g.away.code, hs: x.g.home.score, as: x.g.away.score, rows });
+  }
+  writeFileSync(join(OUT, 'clips.json'), JSON.stringify(clipData));
+  writePage('clips.html', 'Clip list', `<div id="clips-app"><p class="muted">Loading…</p></div>`, HOME,
+    cover({ kicker: 'Video', title: 'Clip list', lede: `Pick games and a filter (our turnovers, plays after timeouts, clutch possessions, threes…) and get a list with quarter and game clock, ready for the video coordinator. Covers Hapoel's games${nOpp ? ` and ${esc(T.get(nOpp)?.name || nOpp)}'s games` : ''}. Download as CSV.` }),
+    { scripts: `<script src="clips.js?v=${assetVersion()}" defer></script>` });
+  return { HB, T, habitFor: (code) => HB.get(code), clk };
+})();
+
 // ---- Game-day pack for Hapoel's next game: summary, end-of-game sheet, opponent player cards (printable) ----
 {
   const nx = HAP_GAME_CODE ? upcoming.find((x) => x.h.code === HAP_GAME_CODE || x.a.code === HAP_GAME_CODE) : null;
@@ -1888,16 +2033,16 @@ if (HAP_GAME_CODE && pbpOk.some((e) => e.game.home.code === HAP_GAME_CODE || e.g
     const ctR = ct ? situRates({ secs: ct.secs, poss: ct.poss, possD: ct.possD, pf: ct.pf, pa: ct.pa, box: ct.box, opp: ct.opp }) : null;
     const clutchBy = new Map((CLUTCH?.players || []).filter((x) => x.team === oc).map((x) => [x.id, x]));
     const mmss = (s2) => `${Math.floor(s2 / 60)}:${String(Math.round(s2 % 60)).padStart(2, '0')}`;
-    const endSheet = `<div class="r-two"><div><h3>Free-throw shooters — worst first</h3><table class="rtab"><thead><tr><th>Player</th><th class="num">FT</th><th class="num">FT%</th><th class="num">On court at the end</th></tr></thead><tbody>${ftList.map((x) => `<tr${x.pct < 70 && x.close > 0.3 ? ' class="hap-row"' : ''}><td>${esc(x.p.name)}</td><td class="num">${x.p.totals.ftm}/${x.p.totals.fta}</td><td class="num ${x.pct < 70 ? 'neg' : x.pct >= 85 ? 'pos' : ''}"><strong>${x.pct.toFixed(0)}%</strong></td><td class="num">${Math.round(100 * x.close)}%</td></tr>`).join('')}</tbody></table><p class="muted small">Highlighted: under 70% from the line and often on the court in the last 4 minutes — candidates to foul.</p></div>
-<div><h3>Who closes games</h3><table class="rtab"><thead><tr><th>Player</th><th class="num">On court, last 4 min</th><th class="num">Clutch PTS</th><th class="num">Clutch FG</th></tr></thead><tbody>${closers.map((x) => { const c = clutchBy.get(x.p.id); return `<tr><td>${esc(x.p.name)}</td><td class="num"><strong>${Math.round(100 * x.close)}%</strong></td><td class="num">${c ? c.box.pts : '–'}</td><td class="num">${c ? `${c.box.fgm2 + c.box.fgm3}/${c.box.fga2 + c.box.fga3}` : '–'}</td></tr>`; }).join('')}</tbody></table></div></div>
-${lf.length ? `<h3>Their most used fives in the last 5 minutes of the 4th quarter</h3><table class="rtab"><thead><tr><th>Lineup</th><th class="num">MIN</th><th class="num">Games</th><th class="num">Score</th></tr></thead><tbody>${lf.map((u) => `<tr><td class="small">${u.ids.map((id) => esc(nameOf.get(id) || id)).join(' · ')}</td><td class="num">${mmss(u.secs)}</td><td class="num">${u.g.size}</td><td class="num">${Math.round(u.pf)}–${Math.round(u.pa)}</td></tr>`).join('')}</tbody></table>` : ''}
+    const endSheet = `<div class="r-two"><div><h3>Free-throw shooters — worst first</h3><table class="rtab"><thead><tr><th>Player</th><th class="num">FT</th><th class="num">FT%</th><th class="num">On court at the end</th></tr></thead><tbody>${ftList.map((x) => `<tr data-pname="${esc(pkey(x.p.name))}"${x.pct < 70 && x.close > 0.3 ? ' class="hap-row"' : ''}><td>${esc(x.p.name)}</td><td class="num">${x.p.totals.ftm}/${x.p.totals.fta}</td><td class="num ${x.pct < 70 ? 'neg' : x.pct >= 85 ? 'pos' : ''}"><strong>${x.pct.toFixed(0)}%</strong></td><td class="num">${Math.round(100 * x.close)}%</td></tr>`).join('')}</tbody></table><p class="muted small">Highlighted: under 70% from the line and often on the court in the last 4 minutes — candidates to foul.</p></div>
+<div><h3>Who closes games</h3><table class="rtab"><thead><tr><th>Player</th><th class="num">On court, last 4 min</th><th class="num">Clutch PTS</th><th class="num">Clutch FG</th></tr></thead><tbody>${closers.map((x) => { const c = clutchBy.get(x.p.id); return `<tr data-pname="${esc(pkey(x.p.name))}"><td>${esc(x.p.name)}</td><td class="num"><strong>${Math.round(100 * x.close)}%</strong></td><td class="num">${c ? c.box.pts : '–'}</td><td class="num">${c ? `${c.box.fgm2 + c.box.fgm3}/${c.box.fga2 + c.box.fga3}` : '–'}</td></tr>`; }).join('')}</tbody></table></div></div>
+${lf.length ? `<h3>Their most used fives in the last 5 minutes of the 4th quarter</h3><table class="rtab"><thead><tr><th>Lineup</th><th class="num">MIN</th><th class="num">Games</th><th class="num">Score</th></tr></thead><tbody>${lf.map((u) => `<tr data-pnames="${esc(u.ids.map((id) => pkey(nameOf.get(id) || id)).join('|'))}"><td class="small">${u.ids.map((id) => esc(nameOf.get(id) || id)).join(' · ')}</td><td class="num">${mmss(u.secs)}</td><td class="num">${u.g.size}</td><td class="num">${Math.round(u.pf)}–${Math.round(u.pa)}</td></tr>`).join('')}</tbody></table>` : ''}
 <div class="r-grid">${ct ? `<div class="rs"><span>Clutch record</span><b>${ct.w}–${ct.l}</b></div><div class="rs"><span>Clutch net rating</span><b>${sg(ctR.net)}</b></div><div class="rs"><span>Clutch FT</span><b>${ct.box.ftm}/${ct.box.fta}</b></div>` : ''}${at && at.off.n ? `<div class="rs"><span>Points per possession after their timeouts</span><b>${(at.off.pts / at.off.n).toFixed(2)} <small>${ord(1 + ATO.filter((x) => x.off.n && x.off.pts / x.off.n > at.off.pts / at.off.n).length)}</small></b></div><div class="rs"><span>Last 2 min after timeouts</span><b>${at.off.late.n ? `${at.off.late.pts} pts / ${at.off.late.n}` : '–'}</b></div>` : ''}<div class="rs"><span>Team FT%</span><b>${f1(O.ftPct)}</b></div></div>`;
     // opponent player cards
     const cards = roster.filter((p) => p.mpg >= 10).slice(0, 9).map((p) => {
       const sh = ALLSHOTS.filter((x) => x.pid === p.id), r = rotBy.get(p.id), c = clutchBy.get(p.id), oo = onOffOf(p.id);
       const last = games.filter((g) => [...g.home.players, ...g.away.players].some((x) => x.id === p.id && x.min > 0)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map((g) => { const x = [...g.home.players, ...g.away.players].find((y) => y.id === p.id); return `${x.pts}<small>/${Math.round(x.min)}′</small>`; }).join(' · ');
       const t = p.totals;
-      return `<article class="pcard"><header><strong>${esc(p.name)}</strong><span class="muted small">${esc(posOf.get(p.id) || '')}</span></header>
+      return `<article class="pcard" data-pname="${esc(pkey(p.name))}"><header><strong>${esc(p.name)}</strong><span class="muted small">${esc(posOf.get(p.id) || '')}</span></header>
 <div class="pc-stats"><span><b>${f1(p.ppg)}</b> pts</span><span><b>${f1(p.rpg)}</b> reb</span><span><b>${f1(p.apg)}</b> ast</span><span><b>${f1(p.mpg)}</b> min</span><span><b>${f1(p.ts)}</b> TS%</span><span><b>${f1(p.usg)}</b> USG%</span><span><b>${t.fga3 ? (100 * t.fgm3 / t.fga3).toFixed(0) : '–'}%</b> 3P (${(t.fga3 / p.gp).toFixed(1)}/g)</span><span><b>${t.fta ? (100 * t.ftm / t.fta).toFixed(0) : '–'}%</b> FT</span>${oo?.swing != null ? `<span><b>${sg(oo.swing)}</b> on/off</span>` : ''}${c ? `<span><b>${c.box.pts}</b> clutch pts</span>` : ''}</div>
 <p class="small"><span class="muted">Last 5 (pts/min):</span> ${last}</p>
 ${r ? `<div class="pc-rot" title="Share of games on the court in each minute">${r.share.map((v, m) => `<i class="${m % 10 === 0 ? 'q' : ''}" style="opacity:${(0.08 + 0.92 * Math.min(1, v)).toFixed(2)}"></i>`).join('')}</div><p class="muted small">Minutes pattern: Q1 → Q4</p>` : ''}
@@ -1908,11 +2053,15 @@ ${sh.length >= 15 ? courtSvg(sh, { mode: 'zones', league: ALLSHOTS, title: p.nam
 <header class="print-only split-ph"><div class="r-kicker">HTA LAB · Game-day pack</div><h1>${home ? 'Hapoel vs ' + esc(ON) : 'Hapoel at ' + esc(ON)}</h1><div class="r-meta">${esc(nx.utc ? nx.utc.slice(0, 16).replace('T', ' ') + ' UTC' : '')}${nx.rn ? ' · ' + esc(nx.rn) : ''}</div></header>
 <section class="card"><h2>The game</h2><div class="r-grid"><div class="rs"><span>Records</span><b>Hapoel ${Hh.w}–${Hh.l} · ${esc(O.tv)} ${O.w}–${O.l}</b></div>${pr ? `<div class="rs"><span>Expected score</span><b>${home ? `Hapoel ${Math.round(pr.ph)}–${Math.round(pr.pa)}` : `Hapoel ${Math.round(pr.pa)}–${Math.round(pr.ph)}`}</b></div><div class="rs"><span>Hapoel win chance</span><b>${Math.round(100 * hapWin)}%</b></div>` : ''}<div class="rs"><span>Earlier meetings</span><b>${H2H.length ? H2H.map((g) => { const me = g.home.code === HAP_GAME_CODE ? g.home : g.away, op = me === g.home ? g.away : g.home; return `${me.score > op.score ? 'W' : 'L'} ${me.score}–${op.score}`; }).join(', ') : 'None this season'}</b></div></div>
 <h3>Team numbers</h3>${compTable}<p class="muted small">Small numbers are league ranks. Green = Hapoel better.</p></section>
+<div id="avail-note" class="no-print"></div>
 <section class="card gd-end"><h2>End-of-game sheet — ${esc(ON)}</h2>${endSheet}</section>
+${(() => { const h = INS?.habitFor(oc); if (!h) return ''; return `<section class="card"><h2>${esc(ON)} coach habits</h2><div class="r-grid"><div class="rs"><span>Timeouts per game</span><b>${h.toG.toFixed(1)}</b></div><div class="rs"><span>Calls a timeout after a 6+ run</span><b>${h.run6 == null ? '–' : Math.round(100 * h.run6) + '%'}</b></div><div class="rs"><span>Our run before his timeout (avg)</span><b>${h.avgRun == null ? '–' : h.avgRun.toFixed(1)} pts</b></div><div class="rs"><span>First substitution (Q1 clock)</span><b>${INS.clk(h.firstSub)}</b></div><div class="rs"><span>Starters' Q1 minutes</span><b>${h.sq == null ? '–' : (h.sq / 60).toFixed(1)}</b></div><div class="rs"><span>Players used in last 5 min of close games</span><b>${h.lateUsed == null ? '–' : h.lateUsed.toFixed(1)}</b></div></div><p class="muted small"><a href="coach-habits.html">Every coach</a> · <a href="team-${safe(oc)}-passing.html">${esc(ON)} passing network</a></p></section>`; })()}
+<!--DOMESTIC:${esc(oc)}-->
+
 <section class="card gd-cards"><h2>${esc(ON)} — player cards</h2><div class="pcards">${cards}</div><p class="muted small">Season numbers. On/off = their team's net rating with him on minus off. Zones: red = better than the league, blue = worse.</p></section>`;
     writePage('gameday-next.html', `Game-day pack: Hapoel ${home ? 'vs' : 'at'} ${O.tv}`, `<div class="split-page">${body}</div>`, HOME,
       cover({ kicker: esc(nx.rn || 'Next game'), title: `Game-day pack: ${home ? 'vs' : 'at'} ${esc(ON)}`, lede: 'Everything for the next game in one place: the numbers, a prediction, the end-of-game sheet and a card for every opponent player. Download it as one PDF.' }),
-      { scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` });
+      { scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>${STAFF_TAG}` });
   }
 }
 
@@ -2190,6 +2339,7 @@ copyFileSync('static/charges.js', join(OUT, 'charges.js'));
 copyFileSync('static/players.js', join(OUT, 'players.js'));
 copyFileSync('static/scouting.js', join(OUT, 'scouting.js'));
 copyFileSync('static/live.js', join(OUT, 'live.js'));
+for (const f of ['clips.js', 'staff.js', 'keys.js', 'injuries.js']) if (existsSync('static/' + f)) copyFileSync('static/' + f, join(OUT, f));
 mkdirSync(join(OUT, 'lib'), { recursive: true });
 for (const f of ['parse.mjs', 'pbp.mjs', 'game.mjs', 'zones.mjs']) copyFileSync(join('lib', f), join(OUT, 'lib', f));
 writeFileSync(join(OUT, 'players.json'), JSON.stringify(players.map((p) => ({

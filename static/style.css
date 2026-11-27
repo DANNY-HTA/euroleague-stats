@@ -1040,3 +1040,39 @@ td.bm-strip b { width: 13px; height: 13px; border-radius: 50%; background: var(-
   .pcard svg { max-height: 200px; }
   .gd-cards { break-before: page; }
 }
+/* availability marks (staff.js) */
+.av-out { opacity: .45; text-decoration: line-through; text-decoration-color: #c8102e; }
+.av-out .av-badge, .av-doubt .av-badge { text-decoration: none; }
+.av-doubt { background: #fff8e1; }
+.av-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: .72rem; font-weight: 700; color: #fff; background: #c8102e; vertical-align: middle; }
+.av-badge.av-doubt { background: #b7791f; }
+tr.av-ok td:first-child::after { content: ' ✓'; color: #1a7f37; }
+.staff-unlock { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.staff-unlock input { max-width: 200px; }
+.inj-add, .key-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.inj-add input[list] { min-width: 220px; }
+.inj-game.hap-game { border-left: 4px solid #c8102e; }
+.inj-t td, .inj-t th { font-size: .86rem; }
+/* win probability */
+.wp-svg { width: 100%; height: auto; max-height: 260px; }
+.wp-swings { margin: 8px 0 0; padding-left: 22px; font-size: .9rem; }
+.wp-swings li { margin: 3px 0; }
+/* passing network */
+.pn-svg { width: 100%; max-width: 620px; height: auto; display: block; margin: 0 auto; }
+/* clip list */
+.clip-games { margin-bottom: 8px; }
+.clip-games summary { cursor: pointer; font-weight: 600; }
+.clip-g { display: block; font-size: .86rem; margin: 2px 0; }
+.clip-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+/* keys and goals */
+.key-game { border-top: 1px solid var(--line, #e4e4e4); padding-top: 10px; margin-top: 10px; }
+.key-list { margin: 4px 0 6px; padding-left: 22px; }
+.goal-strip { display: inline-flex; gap: 2px; }
+.goal-strip i { width: 12px; height: 16px; border-radius: 2px; display: inline-block; }
+.goal-strip i.ok { background: #1a7f37; } .goal-strip i.no { background: #c8102e; }
+/* form lines */
+.fl-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.fl-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid #f0f0f0; padding: 4px 0; }
+.fl-row b { font-size: 1.1rem; }
+.fl-spark { width: 60%; height: 46px; }
+@media print { .av-out { opacity: .5; } }

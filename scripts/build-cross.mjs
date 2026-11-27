@@ -89,3 +89,6 @@ for (const g of people) for (const e of g) {
 }
 const pairs = new Map(); for (const g of people) { const k = [...new Set(g.map((e) => e.lg))].sort((a, b) => order.get(a) - order.get(b)).join(' + '); pairs.set(k, (pairs.get(k) || 0) + 1); }
 console.log(`✓ Players in more than one competition: ${people.length} (${pages} player pages updated) — ${[...pairs].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}: ${n}`).join(', ')}`);
+
+// Injury report and the next EuroLeague opponent's domestic games (needs every league's gamelog.json)
+await import('./build-availability.mjs');

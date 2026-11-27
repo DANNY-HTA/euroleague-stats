@@ -263,7 +263,9 @@ async function tick() {
   let next = 60000;
   try {
     if (selected) {
-      const raw = await loadGame(selected);
+      let raw, cachedAt = null;
+      try { raw = await loadGame(selected); if (raw?.header && t(raw.header.TeamA)) { try { localStorage.setItem('hta-live-' + selected, JSON.stringify({ at: Date.now(), raw })); } catch { /* storage full or blocked */ } } }
+      catch (err) { const c = (() => { try { return JSON.parse(localStorage.getItem('hta-live-' + selected) || 'null'); } catch { return null; } })(); if (!c) throw err; raw = c.raw; cachedAt = c.at; offlineErr = err; }
       if (!raw.header || !t(raw.header.TeamA)) {
         const x = CFG.schedule.find((y) => y.c === selected);
         host.replaceChildren(el('section', { class: 'live-board' },
@@ -273,17 +275,23 @@ async function tick() {
             el('div', { class: 'sb-score' }, el('span', { class: 'dash' }, 'vs'), el('small', {}, x.venue || '')),
             el('div', { class: 'sb-team' }, CFG.crests[x.a.code] ? el('span', { class: 'sb-crest' }, el('img', { src: CFG.crests[x.a.code], alt: '' })) : null, el('span', { class: 'sb-name' }, titleCase(x.a.name)), el('span', { class: 'muted-w' }, 'Away'))) : el('p', {}, 'This game is not in the live feed yet.')));
       }
-      else { host.replaceChildren(...gameView(selected, raw, new Date()).filter(Boolean)); if (status(raw.header) === 'live') next = 15000; else if (status(raw.header) === 'final') next = 0; }
+      else {
+        host.replaceChildren(...gameView(selected, raw, cachedAt ? new Date(cachedAt) : new Date()).filter(Boolean));
+        if (cachedAt) { host.prepend(el('p', { class: 'note-warn lv-offline' }, `No connection (${offlineErr?.message || 'offline'}). Showing the last numbers received at ${new Date(cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}. Trying again every 10 seconds.`)); next = 10000; }
+        else if (status(raw.header) === 'live') next = 15000; else if (status(raw.header) === 'final') next = 0;
+      }
     } else {
       await loadList();
       host.replaceChildren(...listView());
       if ([...headers.values()].some((h) => status(h) === 'live')) next = 30000;
     }
   } catch (e) {
-    host.prepend(el('p', { class: 'note-warn' }, `Could not reach the EuroLeague live feed (${e.message}). Trying again shortly.`));
+    host.querySelector(':scope > .lv-offline')?.remove();
+    host.prepend(el('p', { class: 'note-warn lv-offline' }, `Could not reach the EuroLeague live feed (${e.message}). The numbers below stay as they were; trying again shortly.`));
     next = 20000;
   }
   if (next) timer = setTimeout(() => (document.hidden ? document.addEventListener('visibilitychange', tick, { once: true }) : tick()), next);
 }
+let offlineErr = null;
 selected = Number(new URLSearchParams(location.search).get('game')) || null;
 tick();

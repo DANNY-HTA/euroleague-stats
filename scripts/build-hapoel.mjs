@@ -270,7 +270,7 @@ const hero = `<section class="cover hap-cover"><div class="wrap"><div>
 </div>${crest ? `<div class="side cover-crest"><img src="${esc(crest)}" alt=""></div>` : ''}</div></section>`;
 
 const tabs = `<div class="comp-tabs" role="tablist" aria-label="Competition"><button type="button" role="tab" data-comp="all" aria-selected="true">All competitions</button>${ACTIVE.map((C) => `<button type="button" role="tab" data-comp="${C.key}" aria-selected="false">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="18" height="18">` : ''}${esc(C.short)}</button>`).join('')}</div>`;
-const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="weekly.html"><strong>This week</strong></a><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#last-game">Last game</a>${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-wins-losses.html">Wins vs losses (${esc(C.short)})</a>`).join('')}${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-benchmark.html">Vs top 10 (${esc(C.short)})</a>`).join('')}${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-lineup-builder.html">Lineup builder (${esc(C.short)})</a>`).join('')}<a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#load">Load &amp; rest</a><a href="#referees">Referees</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="recruit.html">Recruiting</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
+const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="weekly.html"><strong>This week</strong></a><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#last-game">Last game</a>${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-wins-losses.html">Wins vs losses (${esc(C.short)})</a>`).join('')}${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-benchmark.html">Vs top 10 (${esc(C.short)})</a>`).join('')}${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-lineup-builder.html">Lineup builder (${esc(C.short)})</a>`).join('')}${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-inside.html">Inside our games (${esc(C.short)})</a>`).join('')}<a href="keys.html">Keys to the game &amp; goals</a><a href="hapoel-form.html">Form lines</a><a href="injuries.html">Injury report</a><a href="coach-habits.html">Coach habits</a><a href="clips.html">Clip list</a><a href="shot-quality.html">Shot quality</a>${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-passing.html">Passing network (${esc(C.short)})</a>`).join('')}<a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#load">Load &amp; rest</a><a href="#referees">Referees</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="recruit.html">Recruiting</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
 
 const person = (k) => (people.get(k)?.name || k);
 const data = {
@@ -462,6 +462,53 @@ ${heavy.length ? `<h3>Load warning</h3><ul class="small">${heavy.map((e) => `<li
   writeFileSync(join(OUT, 'weekly.html'), page({ title: 'Weekly summary', cfg, info: { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null }, active: 'index.html', sample: false,
     body: `<div class="split-page">${bodyW}</div>`, hero: `<section class="cover"><div class="wrap"><div><div class="kicker">Weekly summary</div><h1>Hapoel's week</h1><p class="lede">${esc(d10(end - 7 * DAY + DAY))} to ${esc(d10(end))}: results, players up and down, standings, the games ahead with predictions, and load warnings. Rebuilt every night.</p></div></div></section>`,
     scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` }));
+}
+
+// ---- Keys to the game + season goals (graded from the box scores; the targets themselves are staff data, encrypted) ----
+{
+  const pkey = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
+  const pc = (m, a) => (a ? +(100 * m / a).toFixed(1) : null);
+  const METRICS = [['pts', 'Our points', 1], ['opp_pts', 'Their points', 0], ['margin', 'Margin', 1], ['tov', 'Our turnovers', 0], ['opp_tov', 'Their turnovers (forced)', 1], ['oreb_pct', 'Our offensive rebound %', 1], ['dreb_pct', 'Our defensive rebound %', 1],
+    ['reb', 'Our rebounds', 1], ['opp_oreb', 'Their offensive rebounds', 0], ['ast', 'Our assists', 1], ['efg', 'Our eFG%', 1], ['opp_efg', 'Their eFG%', 0], ['p3', 'Our 3P%', 1], ['opp_p3', 'Their 3P%', 0], ['p3a', 'Our 3-point attempts', 1], ['opp_p3a', 'Their 3-point attempts', 0],
+    ['fta', 'Our free-throw attempts', 1], ['opp_fta', 'Their free-throw attempts', 0], ['ft_pct', 'Our FT%', 1], ['stl', 'Our steals', 1], ['pf', 'Our fouls', 0]];
+  const games = [];
+  for (const C of ACTIVE) for (const g of C.mine) {
+    const me = g.home.code === C.code ? g.home : g.away, op = me === g.home ? g.away : g.home, a = me.totals, b = op.totals;
+    const m = { pts: me.score, opp_pts: op.score, margin: me.score - op.score, tov: a.tov, opp_tov: b.tov, oreb_pct: pc(a.oreb, a.oreb + b.dreb), dreb_pct: pc(a.dreb, a.dreb + b.oreb), reb: a.reb, opp_oreb: b.oreb, ast: a.ast,
+      efg: pc(a.fgm2 + 1.5 * a.fgm3, a.fga2 + a.fga3), opp_efg: pc(b.fgm2 + 1.5 * b.fgm3, b.fga2 + b.fga3), p3: pc(a.fgm3, a.fga3), opp_p3: pc(b.fgm3, b.fga3), p3a: a.fga3, opp_p3a: b.fga3, fta: a.fta, opp_fta: b.fta, ft_pct: pc(a.ftm, a.fta), stl: a.stl, pf: a.pf };
+    const pl = {}; for (const [side, s] of [['H', me], ['O', op]]) for (const p of s.players) if (p.min > 0) pl[pkey(p.name)] = [p.name, side, p.pts, p.reb, p.ast, Math.round(p.min), p.pir];
+    games.push({ c: C.key, comp: C.short, code: g.gameCode, date: g.date, opp: titleCase(op.name), oppCode: op.code, home: me === g.home, res: `${me.score > op.score ? 'W' : 'L'} ${me.score}–${op.score}`, href: `${C.pfx}game-${safe(g.gameCode)}.html`, m, pl });
+  }
+  games.sort((a, b) => a.date.localeCompare(b.date));
+  // the next games and their opponents' players (to set "keep X under N points")
+  const up = sched.filter((x) => !x.res && x.utc && Date.parse(x.utc) > Date.now() - 6 * 3600e3).slice(0, 6).map((x) => {
+    const C = COMPS.find((c) => c.key === x.c);
+    const oppPl = new Map(); for (const g of (C?.games || [])) for (const s of [g.home, g.away]) if (s.code === x.oc) for (const p of s.players) if (p.min > 0) { const k = pkey(p.name); const o = oppPl.get(k) || [p.name, 0, 0]; o[1]++; o[2] += p.pts; oppPl.set(k, o); }
+    return { c: x.c, comp: C?.short || x.c, gc: String(x.gc), utc: x.utc, opp: x.opp, oppCode: x.oc, home: x.home, players: [...oppPl].filter(([, o]) => o[1] >= 2).sort((a, b) => b[1][2] / b[1][1] - a[1][2] / a[1][1]).slice(0, 14).map(([k, o]) => [k, o[0], +(o[2] / o[1]).toFixed(1)]) };
+  });
+  const hap = new Map(); for (const g of games) for (const [k, v] of Object.entries(g.pl)) if (v[1] === 'H') hap.set(k, v[0]);
+  writeFileSync(join(OUT, 'hapoel-games.json'), JSON.stringify({ metrics: METRICS, games, upcoming: up, hapPlayers: [...hap] }));
+  const staffCfg = JSON.stringify({ salt: base.internal?.salt, iterations: base.internal?.iterations, repo: process.env.GITHUB_REPOSITORY || 'hta-lab/hta-lab.github.io', branch: process.env.GITHUB_REF_NAME || 'main', path: 'scouting/plan.enc', root: '', comp: 'hub' }).replace(/</g, '\\u003c');
+  writeFileSync(join(OUT, 'keys.html'), page({ title: 'Keys to the game & season goals', cfg, info: { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null }, active: 'index.html', sample: false,
+    body: `<div id="keys-app"><p class="muted">Loading…</p></div>`,
+    hero: `<section class="cover"><div class="wrap"><div><div class="kicker">Hapoel · staff</div><h1>Keys to the game & season goals</h1><p class="lede">Set 3–5 targets before a game (under 12 turnovers, keep their best scorer under 15…) and the site grades them after the game from the official box score. Season goals are tracked game by game. Targets are encrypted with the team password.</p></div></div></section>`,
+    scripts: `<script>window.HTA_STAFF_CFG = ${staffCfg};</script><script src="staff.js?v=${assetVersion()}" defer></script><script src="keys.js?v=${assetVersion()}" defer></script>` }));
+  // ---- Form lines: rolling 5-game averages for every Hapoel player (both competitions) ----
+  const byP = new Map();
+  for (const g of games) for (const [k, v] of Object.entries(g.pl)) { if (v[1] !== 'H') continue; if (!byP.has(k)) byP.set(k, { name: v[0], g: [] }); }
+  for (const C of ACTIVE) for (const g of C.mine) { const me = g.home.code === C.code ? g.home : g.away; for (const p of me.players) { if (!(p.min > 0)) continue; const o = byP.get(pkey(p.name)); if (o) o.g.push({ date: g.date, comp: C.key, pts: p.pts, pir: p.pir, min: p.min, tsa: p.fga2 + p.fga3 + 0.44 * p.fta, reb: p.reb, ast: p.ast }); } }
+  const roll = (arr, f, w = 5) => arr.map((_, i) => { const s = arr.slice(Math.max(0, i - w + 1), i + 1); return f(s); });
+  const avg = (k) => (s) => s.reduce((a, x) => a + x[k], 0) / s.length;
+  const ts = (s) => { const t = s.reduce((a, x) => a + x.tsa, 0); return t ? 100 * s.reduce((a, x) => a + x.pts, 0) / (2 * t) : null; };
+  const spark = (vals, season, color) => { const v = vals.map((x) => (x == null ? null : x)); const ok = v.filter((x) => x != null); if (ok.length < 2) return ''; const lo = Math.min(...ok, season), hi = Math.max(...ok, season), W = 220, H = 46, X = (i) => 4 + (W - 8) * i / (v.length - 1), Y = (y) => H - 5 - (H - 10) * (hi === lo ? 0.5 : (y - lo) / (hi - lo));
+    const pts = v.map((y, i) => (y == null ? null : `${X(i).toFixed(1)},${Y(y).toFixed(1)}`)).filter(Boolean).join(' ');
+    return `<svg viewBox="0 0 ${W} ${H}" class="fl-spark"><line x1="4" x2="${W - 4}" y1="${Y(season).toFixed(1)}" y2="${Y(season).toFixed(1)}" stroke="#bbb" stroke-dasharray="3 3"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/><circle cx="${X(v.length - 1).toFixed(1)}" cy="${Y(v[v.length - 1] ?? season).toFixed(1)}" r="3" fill="${color}"/></svg>`; };
+  const cards = [...byP.values()].filter((o) => o.g.length >= 5).map((o) => { o.g.sort((a, b) => a.date.localeCompare(b.date)); o.min = o.g.reduce((a, x) => a + x.min, 0); return o; }).sort((a, b) => b.min - a.min).map((o) => {
+    const S = [['Points', roll(o.g, avg('pts')), avg('pts')(o.g)], ['PIR', roll(o.g, avg('pir')), avg('pir')(o.g)], ['TS%', roll(o.g, ts), ts(o.g)], ['Minutes', roll(o.g, avg('min')), avg('min')(o.g)]];
+    return `<article class="pcard fl-card"><header><strong>${esc(o.name)}</strong><span class="muted small">${o.g.length} games</span></header>${S.map(([l, v, s]) => { const now = v[v.length - 1], d = now != null && s != null ? now - s : null; return `<div class="fl-row"><div><span class="small muted">${l}</span><br><b>${now == null ? '–' : now.toFixed(1)}</b> <small class="${d == null ? '' : d >= 0 ? 'pos' : 'neg'}">${d == null ? '' : (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1)}</small></div>${spark(v, s, d == null || d >= 0 ? '#1a7f37' : '#c8102e')}</div>`; }).join('')}<p class="muted small">Last game ${esc(o.g[o.g.length - 1].date)}. Line = 5-game average; dashed = season average.</p></article>`; }).join('');
+  writeFileSync(join(OUT, 'hapoel-form.html'), page({ title: 'Hapoel form lines', cfg, info: { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null }, active: 'index.html', sample: false,
+    body: `<div class="pcards fl-grid">${cards}</div><p class="muted small">Every EuroLeague and Winner League game, in date order. The big number is the average of the last 5 games; the small one is the difference from his season average.</p>`,
+    hero: `<section class="cover"><div class="wrap"><div><div class="kicker">Hapoel</div><h1>Form lines</h1><p class="lede">Each player's 5-game rolling average for points, PIR, true shooting and minutes, against his season average — who is trending up, who is cooling off.</p></div></div></section>` }));
 }
 
 const info = { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null };
