@@ -900,3 +900,8 @@ td.warn { color: #d97a00; font-weight: 700; }
 .lu-sum-t { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lu-sum-t th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; white-space: nowrap; padding: 6px 8px 6px 0; }
 .lu-sum-t td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+/* Hapoel game report */
+.gc-actions { text-align: center; margin: 14px 0 0; }
+.ud { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.report h3.pos { color: var(--pos); } .report h3.neg { color: var(--red); }
+.qtab td.small { font-size: 11px; }

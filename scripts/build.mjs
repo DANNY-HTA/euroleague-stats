@@ -322,6 +322,147 @@ const gameMvp = (g) => {
   const p = win.players.filter((x) => x.min > 0).sort((x, y) => y.pir - x.pir || y.pts - x.pts)[0];
   return p ? { p, s: win } : null;
 };
+// ---- Hapoel game report: one printable page per Hapoel game (EuroLeague and Winner League) ----
+const HAP_GAME_CODE = (LEAGUE === 'el' || LEAGUE === 'il') ? (IS_EL ? (cfg.hapoelCode || 'HTA') : teams.find((t) => /hapoel/i.test(t.name) && /tel[ -]?aviv/i.test(t.name))?.code) : null;
+const isHapGame = (g) => !!HAP_GAME_CODE && (g.home.code === HAP_GAME_CODE || g.away.code === HAP_GAME_CODE);
+const hapReportHref = (code) => `game-${safe(code)}-hapoel.html`;
+// how a team got its points in one game
+function scoringBreakdown(g, side, plays) {
+  const me = side === 'H' ? g.home : g.away, op = side === 'H' ? g.away : g.home, t = me.totals;
+  const det = plays ? flowDetail(plays).pts[side] : null;
+  const shotsG = ALLSHOTS.filter((x) => x.g === g.gameCode && x.team === me.code && x.made);
+  const raw = rawShots.get(g.gameCode)?.filter((r) => r[0] === me.code && /M$/.test(r[2]));
+  const fb = shotsG.length || ALLSHOTS.some((x) => x.g === g.gameCode) ? shotsG.filter((x) => x.fb).reduce((s, x) => s + (x.is3 ? 3 : 2), 0) : raw?.length ? raw.filter((r) => r[5]).reduce((s, r) => s + (r[2].startsWith('3') ? 3 : 2), 0) : null;
+  const paint = ALLSHOTS.some((x) => x.g === g.gameCode) ? shotsG.filter((x) => !x.is3 && (x.z === 'rim' || x.z === 'paint')).length * 2 : null;
+  const starters = me.players.filter((p) => p.starter).reduce((s, p) => s + p.pts, 0);
+  const fgm = t.fgm2 + t.fgm3;
+  return { pts: me.score, two: 2 * t.fgm2, three: 3 * t.fgm3, ft: t.ftm, paint, fb, offTO: det?.offTO ?? null, afterSteal: det?.afterSteal ?? null, second: det?.second ?? null, bench: me.score - starters, starters, assisted: fgm ? 100 * t.ast / fgm : null, opp: op.code };
+}
+const teamGameMetrics = (g, side) => {
+  const me = side === 'H' ? g.home : g.away, op = side === 'H' ? g.away : g.home, t = me.totals, o = op.totals;
+  const poss = (x) => x.fga2 + x.fga3 - x.oreb + x.tov + 0.44 * x.fta, P = (poss(t) + poss(o)) / 2, fga = t.fga2 + t.fga3, ofga = o.fga2 + o.fga3;
+  return { pts: me.score, opp: op.score, ppp: P ? me.score / P : 0, oppp: P ? op.score / P : 0, efg: fga ? 100 * (t.fgm2 + 1.5 * t.fgm3) / fga : 0, oefg: ofga ? 100 * (o.fgm2 + 1.5 * o.fgm3) / ofga : 0,
+    p2: t.fga2 ? 100 * t.fgm2 / t.fga2 : 0, p3: t.fga3 ? 100 * t.fgm3 / t.fga3 : 0, fg3m: t.fgm3, fta: t.fta, ft: t.fta ? 100 * t.ftm / t.fta : 0, oreb: t.oreb, dreb: t.dreb, orebPct: 100 * t.oreb / ((t.oreb + o.dreb) || 1), drebPct: 100 * t.dreb / ((t.dreb + o.oreb) || 1),
+    ast: t.ast, tov: t.tov, stl: t.stl, blk: t.blk, pf: t.pf, fd: t.fd ?? 0, oTov: o.tov, oFta: o.fta, o3m: o.fgm3, oReb: o.oreb + o.dreb };
+};
+let HAP_SEASON = null;
+function hapSeason() {
+  if (HAP_SEASON) return HAP_SEASON;
+  const list = games.filter(isHapGame).map((g) => { const side = g.home.code === HAP_GAME_CODE ? 'H' : 'A'; const raw = rawPbp.get(g.gameCode); const plays = raw ? playLog(g, raw).plays : null; return { g, side, m: teamGameMetrics(g, side), s: scoringBreakdown(g, side, plays), so: scoringBreakdown(g, side === 'H' ? 'A' : 'H', plays) }; });
+  const avg = (f) => { const v = list.map(f).filter((x) => x != null && Number.isFinite(x)); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1); const sd = Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1)); return v.length ? { m, sd, n: v.length } : null; };
+  HAP_SEASON = { list, avg };
+  return HAP_SEASON;
+}
+function hapoelGameReport(g, { log, stints, qbJson }) {
+  const side = g.home.code === HAP_GAME_CODE ? 'H' : 'A', me = side === 'H' ? g.home : g.away, op = side === 'H' ? g.away : g.home;
+  const won = me.score > op.score, S = hapSeason(), plays = log?.plays || null;
+  const sc = scoringBreakdown(g, side, plays), sco = scoringBreakdown(g, side === 'H' ? 'A' : 'H', plays);
+  const M = teamGameMetrics(g, side), opT = titleCase(op.name);
+  const f1x = (v) => (v == null || !Number.isFinite(v) ? '–' : v.toFixed(1)), sgn = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
+  // 1. How the points came
+  const rowsS = [['2-pointers', 'two'], ['3-pointers', 'three'], ['Free throws', 'ft'], ['In the paint', 'paint'], ['Fast break', 'fb'], ['Off turnovers', 'offTO'], ['After steals', 'afterSteal'], ['Second chance', 'second'], ['Starters', 'starters'], ['Bench', 'bench']];
+  const scoreTable = `<table class="rtab"><thead><tr><th>Points</th><th class="num">Hapoel</th><th class="num muted">Hapoel avg</th><th class="num">${esc(op.tv)}</th><th class="num muted">Allowed avg</th></tr></thead><tbody>
+${rowsS.filter(([, k]) => sc[k] != null).map(([l, k]) => { const a = S.avg((x) => x.s[k]), b = S.avg((x) => x.so[k]); const cls = (v, av, good) => (av && Math.abs(v - av.m) >= Math.max(3, 0.75 * av.sd) ? ((v > av.m) === good ? 'pos' : 'neg') : ''); return `<tr><td>${l}</td><td class="num ${cls(sc[k], a, true)}"><strong>${sc[k]}</strong></td><td class="num muted">${a ? f1x(a.m) : '–'}</td><td class="num ${cls(sco[k], b, false)}"><strong>${sco[k]}</strong></td><td class="num muted">${b ? f1x(b.m) : '–'}</td></tr>`; }).join('')}
+<tr><td>Assisted baskets</td><td class="num">${f1x(sc.assisted)}%</td><td class="num muted">${f1x(S.avg((x) => x.s.assisted)?.m)}%</td><td class="num">${f1x(sco.assisted)}%</td><td class="num muted">${f1x(S.avg((x) => x.so.assisted)?.m)}%</td></tr>
+</tbody></table><p class="muted small">Green / red: clearly better / worse than Hapoel's average this season in this competition (${S.list.length} games). Paint and fast-break points come from the official shot data${sc.paint == null ? ' (paint not available in this league)' : ''}.</p>`;
+  // 2. Lineups
+  let lineups = '<p class="muted">Lineups are not available for this game (the play-by-play does not match the box score).</p>';
+  if (stints) {
+    const U5 = gameUnits(g, stints, 5)[side], U2 = gameUnits(g, stints, 2)[side];
+    const mm = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+    const nmL = (ids) => ids.map((id) => esc(nameOf.get(id) || id)).join(' · ');
+    const rt = (u) => { const P = (u.poss + u.oposs) / 2; return P ? [100 * u.pf / P, 100 * u.pa / P] : [null, null]; };
+    const unitRows = (list) => list.map((u) => { const d = u.pf - u.pa, [o, dd] = rt(u); return `<tr><td class="small">${nmL(u.ids)}</td><td class="num">${mm(u.secs)}</td><td class="num">${u.pf}–${u.pa}</td><td class="num ${d > 0 ? 'pos' : d < 0 ? 'neg' : ''}"><strong>${d > 0 ? '+' : ''}${d}</strong></td><td class="num">${f1x(o)}</td><td class="num">${f1x(dd)}</td></tr>`; }).join('');
+    const pairs = U2.filter((u) => u.secs >= 300).sort((a, b) => (b.pf - b.pa) - (a.pf - a.pa));
+    const startIds = me.players.filter((p) => p.starter).map((p) => p.id).sort().join(',');
+    const start = U5.find((u) => u.ids.slice().sort().join(',') === startIds);
+    lineups = `${start ? `<p><strong>Starting five:</strong> ${nmL(start.ids)} — ${mm(start.secs)} together, ${start.pf}–${start.pa} (${start.pf - start.pa > 0 ? '+' : ''}${start.pf - start.pa}).</p>` : ''}
+<table class="rtab"><thead><tr><th>Five-man lineup</th><th class="num">MIN</th><th class="num">Score</th><th class="num">+/-</th><th class="num">ORtg</th><th class="num">DRtg</th></tr></thead><tbody>${unitRows(U5.slice(0, 10))}</tbody></table>
+${pairs.length ? `<div class="r-two"><div><h3>Best pairs</h3><table class="rtab"><tbody>${pairs.slice(0, 4).map((u) => `<tr><td class="small">${nmL(u.ids)}</td><td class="num">${mm(u.secs)}</td><td class="num pos">${u.pf - u.pa > 0 ? '+' : ''}${u.pf - u.pa}</td></tr>`).join('')}</tbody></table></div><div><h3>Worst pairs</h3><table class="rtab"><tbody>${pairs.slice(-4).reverse().map((u) => `<tr><td class="small">${nmL(u.ids)}</td><td class="num">${mm(u.secs)}</td><td class="num neg">${u.pf - u.pa > 0 ? '+' : ''}${u.pf - u.pa}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+<p class="muted small">10 most used five-man lineups. ORtg / DRtg = points scored / allowed per 100 possessions while that five was on the court. Pairs: at least 5:00 together.</p>`;
+  }
+  // 3. Quarter by quarter (from the play-by-play)
+  let quarters = '';
+  if (plays) {
+    const nP = Math.max(4, ...plays.map((p) => p[0]));
+    const Z = () => ({ pts: 0, fgm2: 0, fga2: 0, fgm3: 0, fga3: 0, ftm: 0, fta: 0, oreb: 0, dreb: 0, ast: 0, tov: 0, stl: 0, pf: 0 });
+    const Q = Array.from({ length: nP }, () => ({ H: Z(), A: Z(), sc: new Map() }));
+    const MAP = { '2FGM': ['fgm2', 'fga2'], '2FGA': ['fga2'], '3FGM': ['fgm3', 'fga3'], '3FGA': ['fga3'], FTM: ['ftm', 'fta'], FTA: ['fta'], O: ['oreb'], D: ['dreb'], AS: ['ast'], TO: ['tov'], ST: ['stl'], CM: ['pf'], OF: ['pf'] };
+    for (const [per, , s2, pid, type] of plays) { if (s2 !== 'H' && s2 !== 'A') continue; const q = Q[per - 1]; if (!q) continue; for (const k of MAP[type] || []) q[s2][k]++; const p = type === '2FGM' ? 2 : type === '3FGM' ? 3 : type === 'FTM' ? 1 : 0; if (p) { q[s2].pts += p; if (s2 === side && pid) q.sc.set(pid, (q.sc.get(pid) || 0) + p); } }
+    const o = side === 'H' ? 'A' : 'H';
+    const BP = flowDetail(plays).byPeriod, zz = { offTO: 0, second: 0 };
+    const qd = Q.map((q, i) => { const fd = BP[i + 1] || { H: zz, A: zz }; return { ...q, offTO: fd[side].offTO, oOffTO: fd[o].offTO, second: fd[side].second, oSecond: fd[o].second }; });
+    const lbl = (i) => (i < 4 ? 'Q' + (i + 1) : 'OT' + (nP > 5 ? i - 3 : ''));
+    const r = (label, f, good = 1) => `<tr><td>${label}</td>${qd.map((q) => { const [a, b, txt] = f(q); const c = a === b || good === 0 ? '' : (good * (a - b) > 0 ? 'pos' : 'neg'); return `<td class="num ${c}">${txt ?? `${a}–${b}`}</td>`; }).join('')}</tr>`;
+    const pc = (m, a) => (a ? Math.round(100 * m / a) + '%' : '–');
+    quarters = `<table class="rtab qtab"><thead><tr><th>Hapoel – ${esc(op.tv)}</th>${qd.map((_, i) => `<th class="num">${lbl(i)}</th>`).join('')}</tr></thead><tbody>
+${r('Score', (q) => [q[side].pts, q[o].pts, `<strong>${q[side].pts}–${q[o].pts}</strong>`])}
+${r('Margin', (q) => [q[side].pts - q[o].pts, 0, `${q[side].pts - q[o].pts > 0 ? '+' : ''}${q[side].pts - q[o].pts}`])}
+${r('2-pointers', (q) => [q[side].fga2 ? q[side].fgm2 / q[side].fga2 : 0, q[o].fga2 ? q[o].fgm2 / q[o].fga2 : 0, `${q[side].fgm2}/${q[side].fga2} · ${q[o].fgm2}/${q[o].fga2}`])}
+${r('3-pointers', (q) => [q[side].fga3 ? q[side].fgm3 / q[side].fga3 : 0, q[o].fga3 ? q[o].fgm3 / q[o].fga3 : 0, `${q[side].fgm3}/${q[side].fga3} · ${q[o].fgm3}/${q[o].fga3}`])}
+${r('Free throws', (q) => [q[side].ftm, q[o].ftm, `${q[side].ftm}/${q[side].fta} · ${q[o].ftm}/${q[o].fta}`])}
+${r('Rebounds (off.)', (q) => [q[side].oreb + q[side].dreb, q[o].oreb + q[o].dreb, `${q[side].oreb + q[side].dreb} (${q[side].oreb}) · ${q[o].oreb + q[o].dreb} (${q[o].oreb})`])}
+${r('Assists', (q) => [q[side].ast, q[o].ast])}${r('Turnovers', (q) => [q[side].tov, q[o].tov], -1)}${r('Fouls', (q) => [q[side].pf, q[o].pf], -1)}
+${r('Points off turnovers', (q) => [q.offTO, q.oOffTO])}${r('Second-chance points', (q) => [q.second, q.oSecond])}
+<tr><td>Hapoel top scorer</td>${qd.map((q) => { const t = [...q.sc.entries()].sort((a, b) => b[1] - a[1])[0]; return `<td class="num small">${t ? `${esc(nameOf.get(t[0]) || '')} ${t[1]}` : '–'}</td>`; }).join('')}</tr>
+</tbody></table><p class="muted small">Hapoel first, ${esc(op.tv)} second. Green: Hapoel better in that quarter.</p>
+${(() => { const best = qd.map((q, i) => [i, q[side].pts - q[o].pts]).sort((a, b) => b[1] - a[1]); return `<p><strong>Best quarter:</strong> ${lbl(best[0][0])} (${best[0][1] > 0 ? '+' : ''}${best[0][1]}). <strong>Worst quarter:</strong> ${lbl(best[best.length - 1][0])} (${best[best.length - 1][1] > 0 ? '+' : ''}${best[best.length - 1][1]}).</p>`; })()}`;
+  }
+  // 4. Ups and downs: players against their season, team against its season and the opponent
+  const seasonOf = new Map(players.filter((p) => p.team === me.code).map((p) => [p.id, p]));
+  const ups = [], downs = [];
+  const tsOf = (p) => { const a = p.fga2 + p.fga3 + 0.44 * p.fta; return a ? 100 * p.pts / (2 * a) : null; };
+  const lines = me.players.filter((p) => p.min > 0).map((p) => {
+    const s = seasonOf.get(p.id), ts = tsOf(p), fga = p.fga2 + p.fga3;
+    const out = { p, s, ts, notes: [] };
+    if (s && s.gp >= 3) {
+      const dPir = p.pir - s.pirpg, dPts = p.pts - s.ppg;
+      if (p.min >= 8 && (dPir >= Math.max(6, 0.6 * Math.abs(s.pirpg)) || dPts >= 8)) ups.push([dPir + dPts / 2, `<strong>${esc(p.name)}</strong>: ${p.pts} pts${fga ? ` on ${p.fgm2 + p.fgm3}/${fga}` : ''}${ts != null && fga >= 5 ? ` (TS ${ts.toFixed(0)}%)` : ''}, ${p.reb} reb, ${p.ast} ast, PIR ${p.pir} — <span class="pos">${sgn(dPir)} PIR, ${sgn(dPts)} pts vs his average</span>.`]);
+      if (p.min >= 10 && s.pirpg >= 4 && dPir <= -Math.max(6, 0.6 * s.pirpg)) downs.push([-dPir, `<strong>${esc(p.name)}</strong>: PIR ${p.pir} in ${Math.round(p.min)} min — <span class="neg">${sgn(dPir)} vs his average ${s.pirpg.toFixed(1)}</span>${fga ? ` (${p.fgm2 + p.fgm3}/${fga} FG)` : ''}.`]);
+    }
+    if (fga >= 7 && ts != null && ts < 42) downs.push([8, `<strong>${esc(p.name)}</strong>: inefficient shooting — ${p.fgm2 + p.fgm3}/${fga} FG, ${p.fgm3}/${p.fga3} 3P (TS ${ts.toFixed(0)}%).`]);
+    if (p.tov >= 4) downs.push([p.tov + 2, `<strong>${esc(p.name)}</strong>: ${p.tov} turnovers.`]);
+    if (p.pf >= 4 && p.min < 22) downs.push([5, `<strong>${esc(p.name)}</strong>: foul trouble — ${p.pf} fouls in ${Math.round(p.min)} min.`]);
+    if (p.min >= 10 && p.pm <= -12) downs.push([-p.pm / 2, `<strong>${esc(p.name)}</strong>: ${p.pm} while on the court.`]);
+    if (p.min >= 10 && p.pm >= 12) ups.push([p.pm / 2, `<strong>${esc(p.name)}</strong>: +${p.pm} while on the court.`]);
+    if (fga >= 6 && ts != null && ts >= 70) ups.push([7, `<strong>${esc(p.name)}</strong>: efficient — ${p.pts} pts on ${fga} shots (TS ${ts.toFixed(0)}%).`]);
+    return out;
+  });
+  // team: this game against Hapoel's season (z-score) and against the opponent
+  const TK = [['Points per possession', 'ppp', 1, 2], ['Effective FG%', 'efg', 1, 1], ['3-pointers made', 'fg3m', 1, 0], ['3P%', 'p3', 1, 1], ['2P%', 'p2', 1, 1], ['Free-throw attempts', 'fta', 1, 0], ['Offensive rebound %', 'orebPct', 1, 1], ['Defensive rebound %', 'drebPct', 1, 1], ['Assists', 'ast', 1, 0], ['Turnovers', 'tov', -1, 0], ['Steals', 'stl', 1, 0], ['Opponent points per possession', 'oppp', -1, 2], ['Opponent eFG%', 'oefg', -1, 1], ['Opponent 3-pointers made', 'o3m', -1, 0], ['Opponent free-throw attempts', 'oFta', -1, 0], ['Forced turnovers', 'oTov', 1, 0]];
+  for (const [label, k, good, dp] of TK) {
+    const a = S.avg((x) => x.m[k]); if (!a || a.n < 3 || !a.sd) continue;
+    const z = (M[k] - a.m) / a.sd;
+    if (Math.abs(z) < 1) continue;
+    const txt = `<strong>${label}</strong>: ${M[k].toFixed(dp)} — season average ${a.m.toFixed(dp)}.`;
+    (good * z > 0 ? ups : downs).push([Math.abs(z) * 5, txt]);
+  }
+  const gaps = [['Rebounds', M.oreb + M.dreb, M.oReb, 8], ['Turnovers', M.tov, M.oTov, 5, true], ['Free-throw attempts', M.fta, M.oFta, 8], ['3-pointers made', M.fg3m, M.o3m, 4]];
+  if (sc.offTO != null) gaps.push(['Points off turnovers', sc.offTO, sco.offTO, 8], ['Second-chance points', sc.second, sco.second, 8]);
+  if (sc.fb != null) gaps.push(['Fast-break points', sc.fb, sco.fb, 6]);
+  if (sc.paint != null) gaps.push(['Points in the paint', sc.paint, sco.paint, 10]);
+  for (const [label, a, b, lim, low] of gaps) { const d = low ? b - a : a - b; if (Math.abs(d) < lim) continue; (d > 0 ? ups : downs).push([Math.abs(d) / lim * 6, `<strong>${label}</strong>: Hapoel ${a} – ${b} ${esc(op.tv)}.`]); }
+  const li = (arr) => { const seen = new Set(); return arr.sort((a, b) => b[0] - a[0]).filter(([, t]) => { const k = t.match(/<strong>([^<]*)<\/strong>: (?!\d)/)?.[1] + '|' + /season average/.test(t); const lab = t.match(/^<strong>([^<]*)<\/strong>/)?.[1]; if (!/vs his|while on|turnovers\.|foul trouble|inefficient|efficient/.test(t) && seen.has(lab)) return false; seen.add(lab); return true; }).slice(0, 9).map(([, t]) => `<li>${t}</li>`).join('') || '<li class="muted">Nothing stood out.</li>'; };
+  // player lines against their averages
+  const plTable = `<table class="rtab"><thead><tr><th>Player</th><th class="num">MIN</th><th class="num">PTS</th><th class="num">FG</th><th class="num">3P</th><th class="num">FT</th><th class="num">REB</th><th class="num">AST</th><th class="num">TOV</th><th class="num">PF</th><th class="num">+/-</th><th class="num">PIR</th><th class="num muted">avg PIR</th><th class="num">vs avg</th></tr></thead><tbody>
+${lines.sort((a, b) => b.p.min - a.p.min).map(({ p, s }) => { const d = s ? p.pir - s.pirpg : null; return `<tr><td>${p.starter ? '● ' : ''}${esc(p.name)}</td><td class="num">${Math.round(p.min)}</td><td class="num"><strong>${p.pts}</strong></td><td class="num">${p.fgm2 + p.fgm3}/${p.fga2 + p.fga3}</td><td class="num">${p.fgm3}/${p.fga3}</td><td class="num">${p.ftm}/${p.fta}</td><td class="num">${p.reb}</td><td class="num">${p.ast}</td><td class="num">${p.tov}</td><td class="num">${p.pf}</td><td class="num ${p.pm > 0 ? 'pos' : p.pm < 0 ? 'neg' : ''}">${p.pm > 0 ? '+' : ''}${p.pm}</td><td class="num"><strong>${p.pir}</strong></td><td class="num muted">${s ? s.pirpg.toFixed(1) : '–'}</td><td class="num ${d == null ? '' : d >= 3 ? 'pos' : d <= -3 ? 'neg' : ''}">${d == null ? '–' : sgn(d)}</td></tr>`; }).join('')}
+</tbody></table>`;
+  let n = 0; const sec = (t) => `<h2>${++n}. ${t}</h2>`;
+  const body = `<p class="no-print r-actions"><button type="button" class="btn" id="print-btn">Print / save as PDF</button> <a class="btn ghost" href="${gameHref(g.gameCode)}">← Game page</a></p>
+<article class="report">
+<header class="r-head"><div class="r-id">${crests.has(op.code) ? `<img src="${esc(crests.get(op.code))}" alt="" width="64" height="64">` : ''}<div><div class="r-kicker">HTA LAB · Hapoel game report · ${esc(cfg.shortName || cfg.leagueName || 'EuroLeague')}</div><h1>Hapoel ${me.score}–${op.score} ${esc(opT)}</h1>
+<div class="r-meta">${esc(fmtDate(g.date))} · ${side === 'H' ? 'Home' : 'Away'}${g.round ? ` · Round ${g.round}` : ''} · <span class="${won ? 'pos' : 'neg'}"><strong>${won ? 'Win' : 'Loss'}</strong></span> · Quarters ${(me.quarters || []).join('-')} / ${(op.quarters || []).join('-')}</div></div></div>
+<div class="r-date">Generated ${esc(fmtDate(new Date().toISOString().slice(0, 10)))}</div></header>
+<section class="r-sec">${sec('Ups and downs')}<div class="r-two"><div><h3 class="pos">What went well</h3><ul class="ud">${li(ups)}</ul></div><div><h3 class="neg">What went wrong</h3><ul class="ud">${li(downs)}</ul></div></div>
+<p class="muted small">Players compared with their own average this season, the team with Hapoel's average and spread this season (${S.list.length} games), and with ${esc(op.tv)} in this game.</p></section>
+<section class="r-sec">${sec('How the points came')}${scoreTable}</section>
+<section class="r-sec">${sec('Quarter by quarter')}${quarters || '<p class="muted">No play-by-play for this game.</p>'}</section>
+<section class="r-sec">${sec('Lineups')}${lineups}</section>
+<section class="r-sec">${sec('Hapoel players')}${plTable}<p class="muted small">● = starter. "vs avg" = PIR in this game minus his average PIR this season.</p></section>
+<footer class="r-foot">HTA LAB · Official box score and play-by-play (${esc(cfg.leagueName || 'EuroLeague')}), checked before publishing · hta-lab.github.io</footer>
+</article>`;
+  writePage(hapReportHref(g.gameCode), `Hapoel game report — ${me.tv} ${me.score}–${op.score} ${op.tv}`, body, HOME, '', { scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` });
+}
 const sortedGames = [...games].sort((a, b) => a.date.localeCompare(b.date) || a.gameCode - b.gameCode);
 for (const g of sortedGames) {
   const H = g.home, A = g.away, raw = rawPbp.get(g.gameCode);
@@ -404,6 +545,7 @@ for (const g of sortedGames) {
 ${qH.length ? `<table class="qtable"><thead><tr><th scope="col"></th>${qH.map((_, i) => `<th scope="col">${i < 4 ? 'Q' + (i + 1) : 'OT'}</th>`).join('')}<th scope="col">Final</th></tr></thead><tbody>
 <tr><th scope="row">${esc(H.tv)}</th>${qH.map((v, i) => `<td class="${v > (qA[i] ?? 0) ? 'w' : ''}">${v}</td>`).join('')}<td class="w">${H.score}</td></tr>
 <tr><th scope="row">${esc(A.tv)}</th>${qA.map((v, i) => `<td class="${v > (qH[i] ?? 0) ? 'w' : ''}">${v}</td>`).join('')}<td class="w">${A.score}</td></tr></tbody></table>` : ''}
+${isHapGame(g) ? `<p class="gc-actions"><a class="btn white" href="${hapReportHref(g.gameCode)}">Hapoel game report →</a></p>` : ''}
 </div></section>`;
   writePage(gameHref(g.gameCode), `${H.tv} ${H.score}–${A.score} ${A.tv}`, `
 <div class="tiles">
@@ -425,6 +567,7 @@ ${stints ? lineupBlock(g, stints, near ? `Small difference with the official box
 ${log ? `<section class="card"><h2>Best connections</h2><p class="muted">Who assisted whom, by points created.</p><div class="row two">${['H', 'A'].map((s) => `<div>${sideHead(s === 'H' ? H : A)}${connList(s)}</div>`).join('')}</div></section>
 <section class="card"><h2>Play-by-play</h2><div id="pbp-app"><p class="muted">Loading…</p></div></section>
 <script type="application/json" id="pbp-data">${pbpJson}</script>` : ''}`, HOME, hero, { scripts: `<script src="game.js?v=${assetVersion()}" defer></script>${qbJson ? `<script src="gamequarters.js?v=${assetVersion()}" defer></script>` : ''}` });
+  if (isHapGame(g)) hapoelGameReport(g, { log, stints, qbJson });
 }
 console.log(`✓ Game pages: ${sortedGames.length}`);
 // ---- Home: MVP race (several factors) and MVP of each round ----

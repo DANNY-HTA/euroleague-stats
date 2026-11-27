@@ -69,7 +69,7 @@ ${rows.map((x) => `<tr${x.min ? '' : ' class="dnp"'}><td>${nm(x)}</td>${x.min ? 
 <tr class="muted"><th scope="row">Margin</th>${cum(g.q[0]).map((c, i) => { const m = c - (cum(g.q[1])[i] || 0); return `<td class="num ${m >= 0 ? 'pos' : 'neg'}">${m > 0 ? '+' : ''}${m}</td>`; }).join('')}<td></td></tr></tbody></table>`;
   }
   function gameDetail(g, view) {
-    return `<div class="box-views" role="tablist">${VIEWS.map(([k, l]) => `<button type="button" data-view="${k}" aria-selected="${k === view}">${l}</button>`).join('')}<a class="btn-ghost small" href="${esc(g.href)}">Full game page →</a></div>
+    return `<div class="box-views" role="tablist">${VIEWS.map(([k, l]) => `<button type="button" data-view="${k}" aria-selected="${k === view}">${l}</button>`).join('')}<a class="btn-ghost small" href="${esc(g.href)}">Full game page →</a>${g.rep ? ` <a class="btn-ghost small" href="${esc(g.rep)}"><strong>Hapoel game report →</strong></a>` : ''}</div>
 ${view === 'q' ? quarterBox(g) : `<h4>Hapoel Tel Aviv</h4><div class="scroll">${boxTable(g.me, view, true)}</div><h4>${esc(g.opp[0])}</h4><div class="scroll">${boxTable(g.op, view, false)}</div>`}`;
   }
   function renderGames() {

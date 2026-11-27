@@ -89,7 +89,7 @@ for (const C of ACTIVE) for (const g of C.mine) {
   const line = (p) => [p.name, p.id, p.starter ? 1 : 0, r2(p.min), p.pm, ...TK.map((k) => p[k])];
   gameRows.push({ c: C.key, id: String(g.gameCode), d: g.date, r: g.round, h: home ? 1 : 0, w: me.score > op.score ? 1 : 0,
     opp: [titleCase(op.name), C.crests.get(op.code) || null, op.tv], s: [me.score, op.score],
-    q: [me.quarters || [], op.quarters || []], href: `${C.pfx}game-${safe(g.gameCode)}.html`,
+    q: [me.quarters || [], op.quarters || []], href: `${C.pfx}game-${safe(g.gameCode)}.html`, rep: (C.key === 'el' || C.key === 'il') ? `${C.pfx}game-${safe(g.gameCode)}-hapoel.html` : null,
     me: { p: me.players.filter((p) => p.min > 0 || p.starter).map(line), t: TK.map((k) => me.totals[k]), min: me.teamMinutes || 200 },
     op: { p: op.players.filter((p) => p.min > 0 || p.starter).map(line), t: TK.map((k) => op.totals[k]), min: op.teamMinutes || 200 } });
 }
