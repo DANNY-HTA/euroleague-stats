@@ -925,6 +925,69 @@ let HAP = HAP_CODE && teams.some((t) => t.code === HAP_CODE) ? { t: teams.find((
 if (IS_EL && HAP) { mkdirSync(OUT, { recursive: true }); writeFileSync(join(OUT, 'hapoel-ref.json'), JSON.stringify({ team: Object.fromEntries(['w', 'l', 'gp', ...CMP.map((c) => c[1])].map((k) => [k, HAP.t[k]])) })); }
 if (!HAP) { try { const j = JSON.parse(readFileSync(join('site', 'hapoel-ref.json'))); HAP = { t: j.team, label: 'Hapoel Tel Aviv (EuroLeague)', same: false }; } catch { /* no reference yet */ } }
 const splitOf = (code, gs) => (gs.length ? teamTable(gs).find((x) => x.code === code) || null : null);
+// ---- Before / after splits (e.g. a coach change): config.splits = [{ team, from, title, before, after }] ----
+const SPLITS = (cfg.splits || []).filter((s) => teams.some((t) => t.code === s.team));
+const splitHref = (s) => `team-${safe(s.team)}-split-${s.from}.html`;
+for (const S of SPLITS) {
+  const t = teams.find((x) => x.code === S.team), TN = titleCase(t.name);
+  const all = games.filter((g) => g.home.code === S.team || g.away.code === S.team).sort((a, b) => a.date.localeCompare(b.date) || a.gameCode - b.gameCode);
+  const A = all.slice(0, S.from - 1), B = all.slice(S.from - 1);
+  if (!A.length || !B.length) continue;
+  const lA = S.before || `Games 1–${A.length}`, lB = S.after || `Games ${S.from}–${all.length}`;
+  const tA = splitOf(S.team, A), tB = splitOf(S.team, B);
+  const setA = new Set(A.map((g) => g.gameCode)), setB = new Set(B.map((g) => g.gameCode));
+  const pA = pbpOk.filter((e) => setA.has(e.game.gameCode)), pB = pbpOk.filter((e) => setB.has(e.game.gameCode));
+  const fA = pA.length ? flowExtras(pA).find((x) => x.code === S.team) : null, fB = pB.length ? flowExtras(pB).find((x) => x.code === S.team) : null;
+  const shA = ALLSHOTS.filter((x) => setA.has(x.g)), shB = ALLSHOTS.filter((x) => setB.has(x.g));
+  const fbPg = (list, n) => list.filter((x) => x.team === S.team && x.made && x.fb).reduce((s, x) => s + (x.is3 ? 3 : 2), 0) / n;
+  const paintPg = (list, n, side = 'team') => list.filter((x) => x[side] === S.team && x.made && !x.is3 && (x.z === 'rim' || x.z === 'paint')).length * 2 / n;
+  const wl = (gs) => gs.reduce((s, g) => s + ((g.home.code === S.team ? g.home.score > g.away.score : g.away.score > g.home.score) ? 1 : 0), 0);
+  const wA = wl(A), wB = wl(B);
+  // rows: [label, a, b, decimals, higher is better (true/false/null), a text, b text]
+  const row = ([label, a, b, dp = 1, good = true, ta, tb]) => {
+    if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) return '';
+    const tot = Math.abs(a) + Math.abs(b) || 1, wa = (100 * Math.abs(a) / tot).toFixed(1);
+    const bt = good == null || Math.abs(a - b) < 0.05 ? '' : (good ? a > b : a < b) ? 'h' : 'a';
+    const d = b - a;
+    return `<div class="cmp ${bt ? 'b-' + bt : ''}"><span class="v h">${ta ?? a.toFixed(dp)}</span><span class="lab">${label}${good == null ? '' : ` <small class="${(good ? d > 0 : d < 0) ? 'pos' : 'neg'}">${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(dp)}</small>`}</span><span class="v a">${tb ?? b.toFixed(dp)}</span><div class="split"><i style="width:${wa}%"></i><i style="width:${(100 - wa).toFixed(1)}%"></i></div></div>`;
+  };
+  const K = (k) => [tA[k], tB[k]];
+  const groups = [
+    ['Results', [['Win %', 100 * wA / A.length, 100 * wB / B.length, 0, true, `${wA}–${A.length - wA}`, `${wB}–${B.length - wB}`], ['Points', ...K('ppg')], ['Points allowed', ...K('oppg'), 1, false], ['Point differential', tA.ppg - tA.oppg, tB.ppg - tB.oppg]]],
+    ['Efficiency', [['Offensive rating', ...K('ortg')], ['Defensive rating', ...K('drtg'), 1, false], ['Net rating', ...K('net')], ['Pace', ...K('pace'), 1, null]]],
+    ['Offense', [['eFG%', ...K('efg')], ['True shooting %', ...K('ts')], ['2P%', ...K('twoPct')], ['3P%', ...K('threePct')], ['3-point rate', ...K('threeRate'), 1, null], ['Free-throw rate', ...K('ftr')], ['Turnovers / 100', ...K('tov100'), 1, false], ['Offensive rebound %', ...K('orebPct')], ['Assist rate', ...K('astRate')]]],
+    ['Defense', [['Opp eFG%', ...K('efgD'), 1, false], ['Opp 2P%', ...K('twoPctD'), 1, false], ['Opp 3P%', ...K('threePctD'), 1, false], ['Opp 3-point rate', ...K('threeRateD'), 1, null], ['Forced turnovers / 100', ...K('tov100D')], ['Defensive rebound %', ...K('drebPct')], ['Opp free-throw rate', ...K('ftrD'), 1, false]]],
+    ['How the points came (per game)', [
+      fA && fB ? ['Points off turnovers', fA.offTO / fA.games, fB.offTO / fB.games] : null, fA && fB ? ['Second-chance points', fA.second / fA.games, fB.second / fB.games] : null,
+      shA.length && shB.length ? ['Fast-break points', fbPg(shA, A.length), fbPg(shB, B.length)] : null, shA.length && shB.length ? ['Points in the paint', paintPg(shA, A.length), paintPg(shB, B.length)] : null,
+      fA && fB ? ['Opp points off turnovers', fA.offTOA / fA.games, fB.offTOA / fB.games, 1, false] : null, fA && fB ? ['Opp second-chance points', fA.secondA / fA.games, fB.secondA / fB.games, 1, false] : null,
+      shA.length && shB.length ? ['Opp points in the paint', paintPg(shA, A.length, 'opp'), paintPg(shB, B.length, 'opp'), 1, false] : null,
+      fA && fB ? ['Runs of 8+ (for – against)', fA.runs / fA.games - fA.runsA / fA.games, fB.runs / fB.games - fB.runsA / fB.games, 1, true, `${(fA.runs / fA.games).toFixed(1)} – ${(fA.runsA / fA.games).toFixed(1)}`, `${(fB.runs / fB.games).toFixed(1)} – ${(fB.runsA / fB.games).toFixed(1)}`] : null
+    ].filter(Boolean)]
+  ];
+  // players: role before and after
+  const plA = new Map(playerTable(A).filter((p) => p.team === S.team).map((p) => [p.id, p])), plB = new Map(playerTable(B).filter((p) => p.team === S.team).map((p) => [p.id, p]));
+  const ids = [...new Set([...plA.keys(), ...plB.keys()])].sort((x, y) => (plB.get(y)?.mpg || 0) - (plB.get(x)?.mpg || 0) || (plA.get(y)?.mpg || 0) - (plA.get(x)?.mpg || 0));
+  const cellPair = (a, b, k, dp = 1, flag = 3) => { const x = a?.[k], y = b?.[k]; const d = x != null && y != null ? y - x : null; return `<td class="num muted">${x == null ? '–' : x.toFixed(dp)}</td><td class="num"><strong>${y == null ? '–' : y.toFixed(dp)}</strong></td><td class="num ${d == null ? '' : d >= flag ? 'pos' : d <= -flag ? 'neg' : ''}">${d == null ? (x == null ? 'new' : 'out') : (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toFixed(dp)}</td>`; };
+  const plRows = ids.map((id) => { const a = plA.get(id), b = plB.get(id); return `<tr><td><a href="${playerHref(id)}">${esc(nameOf.get(id) || id)}</a></td><td class="num muted">${a ? `${a.gp} (${a.gs})` : '–'}</td><td class="num">${b ? `${b.gp} (${b.gs})` : '–'}</td>${cellPair(a, b, 'mpg', 1, 4)}${cellPair(a, b, 'ppg', 1, 3)}${cellPair(a, b, 'pirpg', 1, 3)}${cellPair(a, b, 'pmpg', 1, 4)}</tr>`; }).join('');
+  // rotation heat maps and starting fives
+  const rotTable = (list, n) => { const R = rotationOf(list, S.team); const pl = R.players.filter((x) => x.mpg >= 3).sort((a, b) => (b.share[0] - a.share[0]) || (b.mpg - a.mpg)); return pl.length ? `<div class="scroll"><table class="rot"><thead><tr><th>Player</th><th class="num">MIN</th>${Array.from({ length: 40 }, (_, m) => `<th class="rot-m${m % 10 === 0 ? ' rot-q' : ''}">${m % 10 === 0 ? 'Q' + (m / 10 + 1) : ''}</th>`).join('')}</tr></thead><tbody>${pl.map((x) => `<tr><td>${esc(nameOf.get(x.id) || x.id)}</td><td class="num">${f1(x.mpg)}</td>${x.share.map((v, m) => `<td class="rot-c${m % 10 === 0 ? ' rot-q' : ''}" style="--a:${Math.min(1, v).toFixed(2)}" title="minute ${m + 1}: ${Math.round(100 * v)}% of games"></td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="muted small">${R.games} of ${n} games with lineups from the play-by-play.</p>` : '<p class="muted">No lineup data.</p>'; };
+  const starters = (gs) => { const m = new Map(); for (const g of gs) { const me = g.home.code === S.team ? g.home : g.away; const k = me.players.filter((p) => p.starter).map((p) => p.id).sort().join(','); m.set(k, (m.get(k) || 0) + 1); } return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `<li>${k.split(',').map((id) => esc(nameOf.get(id) || id)).join(' · ')} <span class="muted">× ${n}</span></li>`).join(''); };
+  const gameList = (gs, off) => gs.map((g, i) => { const home = g.home.code === S.team, me = home ? g.home : g.away, op = home ? g.away : g.home, w = me.score > op.score; return `<tr><td class="muted">${i + 1 + off}</td><td>${esc(fmtDate(g.date))}</td><td>${home ? 'vs' : 'at'} ${esc(titleCase(op.name))}</td><td class="${w ? 'pos' : 'neg'}"><a href="${gameHref(g.gameCode)}">${w ? 'W' : 'L'} ${me.score}–${op.score}</a></td></tr>`; }).join('');
+  const zone = (sh) => zoneRows(sh.filter((x) => x.team === S.team), ALLSHOTS);
+  const zA = shA.length ? zone(shA) : null, zB = shB.length ? zone(shB) : null;
+  const body = `<section class="card"><h2>${esc(TN)}: ${esc(lA)} vs ${esc(lB)}</h2>
+<div class="perf-head split-head"><span>${esc(lA)}<small>${A.length} games · ${wA}–${A.length - wA}</small></span><span>${esc(S.title || 'Before and after')}</span><span>${esc(lB)}<small>${B.length} games · ${wB}–${B.length - wB}</small></span></div>
+${groups.map(([g, rows]) => `<h3 class="cmp-grp">${g}</h3>${rows.map(row).join('')}`).join('')}
+<p class="muted small">Per game and per 100 possessions. The small number under each label is the change (green = better since game ${S.from}). Bars: share of the two periods; red marks the better one. ${B.length} games is a small sample.</p></section>
+${zA && zB ? `<section class="card"><h2>Shot profile</h2><div class="shot-two"><figure><figcaption><strong>${esc(lA)}</strong></figcaption>${courtSvg(shA.filter((x) => x.team === S.team), { mode: 'zones', league: ALLSHOTS, title: lA })}</figure><figure><figcaption><strong>${esc(lB)}</strong></figcaption>${courtSvg(shB.filter((x) => x.team === S.team), { mode: 'zones', league: ALLSHOTS, title: lB })}</figure></div>
+<div class="scroll"><table><thead><tr><th>Zone</th><th class="num">FG% before</th><th class="num">FG% after</th><th class="num">Share before</th><th class="num">Share after</th><th class="num">Change in share</th></tr></thead><tbody>${zA.map((r, i) => { const b = zB[i], d = b.share - r.share; return `<tr><td>${r.label}</td><td class="num muted">${r.pct == null ? '–' : r.pct.toFixed(1)} <small>${r.m}/${r.a}</small></td><td class="num"><strong>${b.pct == null ? '–' : b.pct.toFixed(1)}</strong> <small>${b.m}/${b.a}</small></td><td class="num muted">${r.share.toFixed(1)}%</td><td class="num"><strong>${b.share.toFixed(1)}%</strong></td><td class="num">${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(1)}</td></tr>`; }).join('')}</tbody></table></div><p class="muted small">Zone colours compare with the league average in each zone. Share = part of all field-goal attempts.</p></section>` : ''}
+<section class="card"><h2>Players — role before and after</h2><div class="scroll"><table class="split-pl"><thead><tr><th rowspan="2">Player</th><th colspan="2" class="grp">GP (starts)</th><th colspan="3" class="grp">Minutes</th><th colspan="3" class="grp">Points</th><th colspan="3" class="grp">PIR</th><th colspan="3" class="grp">+/-</th></tr><tr><th class="num">Before</th><th class="num">After</th>${'<th class="num">Before</th><th class="num">After</th><th class="num">Change</th>'.repeat(4)}</tr></thead><tbody>${plRows}</tbody></table></div><p class="muted small">Per game. "new" = did not play in the first period; "out" = has not played since game ${S.from}. Sorted by minutes in the second period.</p></section>
+<section class="card"><h2>Starting fives</h2><div class="r-two"><div><h3>${esc(lA)}</h3><ol>${starters(A)}</ol></div><div><h3>${esc(lB)}</h3><ol>${starters(B)}</ol></div></div></section>
+<section class="card"><h2>Rotation pattern</h2><h3>${esc(lA)}</h3>${rotTable(pA, A.length)}<h3>${esc(lB)}</h3>${rotTable(pB, B.length)}<p class="muted small">Each square is one minute of the game; the darker, the more often the player was on the court in that minute.</p></section>
+<section class="card"><h2>Games</h2><div class="r-two"><div><h3>${esc(lA)}</h3><table class="rtab"><tbody>${gameList(A, 0)}</tbody></table></div><div><h3>${esc(lB)}</h3><table class="rtab"><tbody>${gameList(B, A.length)}</tbody></table></div></div></section>`;
+  writePage(splitHref(S), `${TN} — ${S.title || 'before and after'}`, body, 'teams.html', cover({ kicker: esc(TN), title: S.title || 'Before and after', lede: `${esc(lA)} against ${esc(lB)}: results, efficiency, how the points came, shot profile, roles, starting fives and rotation.`, strip: [[`${wA}–${A.length - wA}`, lA], [`${wB}–${B.length - wB}`, lB]], actions: `<a class="btn white" href="${teamHref(S.team)}">${esc(TN)} team page</a> <a class="btn white" href="team-${safe(S.team)}-report.html">Team report</a>` }));
+}
 const tcols = [['name', 'Team', 's'], ['gp', 'GP'], ['w', 'W'], ['l', 'L'], ['ppg', 'PTS'], ['oppg', 'OPP'], ['ortg', 'ORtg'], ['drtg', 'DRtg'], ['net', 'Net'], ['pace', 'Pace'], ['ts', 'TS%'], ['efg', 'eFG%'], ['tov100', 'TOV/100'], ['orebPct', 'OREB%']];
 {
   const splits = teamSplits(games, teams);
@@ -1029,7 +1092,7 @@ ${R.map(({ q, oo, imp }) => `<tr><td><a href="${playerHref(q.id)}">${esc(q.name)
     meta: `<span>${t.w}–${t.l}</span><span class="sep">/</span><span>${ord(t.rank)} in the standings</span><span class="sep">/</span><span>Home ${t.home} · Away ${t.away}</span><span class="sep">/</span><span class="formrow">${form}</span>`,
     strip: [[f1(t.ortg), `ORtg · ${ord(t.ranks.ortg)}`], [f1(t.drtg), `DRtg · ${ord(t.ranks.drtg)}`], [signed(t.net), `Net · ${ord(t.ranks.net)}`], [f1(t.pace), `Pace · ${ord(t.ranks.pace)}`]],
     side: coverCrest(t.code),
-    actions: `<a class="btn white" href="team-${safe(t.code)}-report.html">Generate team report</a>`
+    actions: `<a class="btn white" href="team-${safe(t.code)}-report.html">Generate team report</a>${SPLITS.filter((x) => x.team === t.code).map((x) => ` <a class="btn white" href="${splitHref(x)}">${esc(x.title || 'Before and after')}</a>`).join('')}`
   });
   // ---- Printable team report ----
   {

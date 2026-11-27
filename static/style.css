@@ -905,3 +905,9 @@ td.warn { color: #d97a00; font-weight: 700; }
 .ud { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
 .report h3.pos { color: var(--pos); } .report h3.neg { color: var(--red); }
 .qtab td.small { font-size: 11px; }
+/* Before / after split page */
+.split-head span { display: flex; flex-direction: column; gap: 2px; }
+.split-head span small { font-weight: 500; color: var(--muted); font-size: 12px; text-transform: none; letter-spacing: 0; }
+.split-head span:last-child { align-items: flex-end; }
+.split-pl th.grp { text-align: center; border-bottom: 1px solid var(--line); }
+.cmp .lab small.pos { color: var(--pos); } .cmp .lab small.neg { color: var(--red); }
