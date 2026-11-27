@@ -1,10 +1,9 @@
-const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats', Accept: 'text/html,application/json' };
-const get = async (u) => { try { const r = await fetch(u, { headers: H, redirect: 'follow' }); const t = await r.text(); return [r.status, t, r]; } catch (e) { return [0, String(e)]; } };
-for (const u of ['https://www.championsleague.basketball/en/games', 'https://www.championsleague.basketball/en/schedule', 'https://www.championsleague.basketball/en/', 'https://www.championsleague.basketball/robots.txt']) {
-  const [s, t] = await get(u);
-  console.log('P', u, s, t.length);
-  if (u.endsWith('robots.txt')) console.log('ROBOTS', t.slice(0, 800).replace(/\n/g, ' | '));
-  const ids = [...new Set((t.match(/fibalivestats[^"' <]+|geniussports[^"' <]+|\/game\/[^"' <]+|"gameId"\s*:\s*"?\d+|api[^"' <]*\.(?:fiba|basketball)[^"' <]*/gi) || []))].slice(0, 25);
-  console.log('IDS', ids.join(' '));
-  const nx = t.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/); if (nx) console.log('NEXT', nx[1].slice(0, 1500));
-}
+const H = { 'User-Agent': 'Mozilla/5.0 HTA LAB stats', Accept: 'text/html' };
+const get = async (u) => { const r = await fetch(u, { headers: H }); return [r.status, await r.text()]; };
+const [, t] = await get('https://www.championsleague.basketball/en/games');
+const links = [...new Set(t.match(/\/en\/games\/[^"'\\ <?#]+/g) || [])];
+console.log('LINKS', links.length, links.slice(0, 12).join(' '));
+const i = t.indexOf('ScoreTeam') > 0 ? t.indexOf('ScoreTeam') : t.search(/"(homeTeam|teamA|HomeTeam)"/); console.log('SNIP', i, t.slice(Math.max(0, i - 600), i + 900).replace(/\s+/g, ' '));
+const g = links.find((l) => l.split('/').length > 4);
+if (g) { const [s, p] = await get('https://www.championsleague.basketball' + g); console.log('GAME', g, s, p.length);
+  for (const k of ['boxscore', 'Boxscore', 'PlayByPlay', 'playByPlay', 'Points', 'FieldGoal', 'Minutes', 'fibalivestats', 'Rebounds']) { const j = p.indexOf(k); console.log('K', k, j, j > 0 ? p.slice(j - 150, j + 350).replace(/\s+/g, ' ') : ''); } }
