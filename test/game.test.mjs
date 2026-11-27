@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { playLog, flowStats, connections } from '../lib/game.mjs';
+import { playLog, flowStats, flowDetail, connections } from '../lib/game.mjs';
 
 const ev = (n, type, team, pid, mt, name = '') => ({ NUMBEROFPLAY: n, PLAYTYPE: type, CODETEAM: team ? team + '  ' : '', PLAYER_ID: pid ? pid + ' ' : '', PLAYER: name, MARKERTIME: mt });
 const game = { home: { code: 'AAA' }, away: { code: 'BBB' } };
@@ -22,8 +22,8 @@ test('play log keeps a running score and readable names', () => {
 
 test('lead changes, ties, biggest lead and runs', () => {
   const f = flowStats(playLog(game, pbp).plays);
-  // 2–0 A leads, 2–3 B leads (change), 5–3 A leads (change), 5–5 tie, 5–7 B leads
-  assert.equal(f.leadChanges, 2);
+  // 2–0 A leads, 2–3 B leads (change), 5–3 A leads (change), 5–5 tie, 5–7 B leads (change: A led last)
+  assert.equal(f.leadChanges, 3);
   assert.equal(f.ties, 1);
   assert.equal(f.maxLead.H, 2);
   assert.equal(f.maxLead.A, 2);
@@ -44,4 +44,11 @@ test('offensive fouls drawn are credited to the defender', async () => {
   assert.deepEqual(r.drawn, { H: 1, A: 1 });
   assert.equal(r.drawers.get('B3'), 1);
   assert.equal(r.drawers.size, 1);
+});
+
+test('ties and lead changes are listed with who did it; points after turnovers', () => {
+  const d = flowDetail(playLog(game, pbp).plays);
+  assert.equal(d.ties.length, 1); assert.equal(d.ties[0].side, 'A'); assert.equal(d.ties[0].hs, 5);
+  assert.deepEqual(d.changes.map((x) => x.side), ['A', 'H', 'A']);
+  assert.equal(d.pts.H.offTO + d.pts.A.offTO, 0);
 });
