@@ -1,4 +1,4 @@
-// Recruiting: every player of every league on HTA LAB in one searchable table, "find players like…", and a shortlist.
+// Recruiting: every player of every league on HTA LAB in one searchable table, and a shortlist.
 (function () {
   const app = document.getElementById('recruit-app');
   if (!app) return;
@@ -9,7 +9,7 @@
   const SL = 'hta-shortlist';
   let shortlist = store.get(SL, []); // keys
   const P = []; // players
-  const st = { lg: new Set(LEAGUES.map((l) => l[0])), pos: '', ageMin: '', ageMax: '', htMin: '', minGp: 5, minMpg: 10, q: '', sort: 'pts40', dir: -1, mode: '40', like: null, show: 100, onlyList: false };
+  const st = { lg: new Set(LEAGUES.map((l) => l[0])), pos: '', ageMin: '', ageMax: '', htMin: '', minGp: 5, minMpg: 10, q: '', sort: 'pts40', dir: -1, mode: '40', show: 100, onlyList: false };
   // [key, label, per-mode?, decimals, higher better]
   const COLS = [['gp', 'GP', 0, 0], ['mpg', 'MIN', 0, 1], ['pts', 'PTS', 1, 1], ['reb', 'REB', 1, 1], ['oreb', 'OR', 1, 1], ['ast', 'AST', 1, 1], ['stl', 'STL', 1, 1], ['blk', 'BLK', 1, 1], ['tov', 'TOV', 1, 1],
     ['p2', '2P%', 0, 1], ['p3', '3P%', 0, 1], ['a3', '3PA', 1, 1], ['pft', 'FT%', 0, 1], ['fta', 'FTA', 1, 1], ['ts', 'TS%', 0, 1], ['usg', 'USG%', 0, 1], ['astTo', 'A/TO', 0, 2], ['pir', 'PIR', 1, 1]];
@@ -33,24 +33,10 @@
       } catch { /* league not available */ }
     }));
     const h = new URLSearchParams(location.hash.slice(1));
-    if (h.get('like')) st.like = h.get('like');
     if (h.get('list')) { for (const k of h.get('list').split(',')) if (!shortlist.includes(k)) shortlist.push(k); store.set(SL, shortlist); st.onlyList = true; }
     render();
   }
   const v = (p, k) => { const x = p[k]; return x != null && typeof x === 'object' ? x[st.mode] : x; };
-
-  // ---- similarity: standardized style profile (per 40 + shot mix + efficiency + size) ----
-  const FEAT = [(p) => p.raw40.pts, (p) => p.raw40.oreb, (p) => p.raw40.dreb, (p) => p.raw40.ast, (p) => p.raw40.stl, (p) => p.raw40.blk, (p) => p.raw40.tov, (p) => p.raw40.fd, (p) => p.tpr, (p) => p.ftr, (p) => p.ts ?? 50, (p) => p.usg ?? 20, (p) => p.ht ?? 198];
-  const W = [1.2, 1, 1, 1.2, 0.7, 0.8, 0.6, 0.6, 1.2, 0.6, 0.7, 1, 1.3];
-  function similar(base) {
-    const pool = P.filter((p) => p.min >= 120 && p !== base);
-    const all = [...pool, base];
-    const mu = FEAT.map((f) => all.reduce((s, p) => s + f(p), 0) / all.length);
-    const sd = FEAT.map((f, i) => Math.sqrt(all.reduce((s, p) => s + (f(p) - mu[i]) ** 2, 0) / all.length) || 1);
-    const z = (p) => FEAT.map((f, i) => (f(p) - mu[i]) / sd[i]);
-    const zb = z(base);
-    return pool.map((p) => { const zp = z(p); const d = Math.sqrt(zp.reduce((s, x, i) => s + W[i] * (x - zb[i]) ** 2, 0) / W.reduce((a, b) => a + b, 0)); return { p, d, sim: Math.max(0, Math.round(100 * Math.exp(-d * 0.9))) }; }).sort((a, b) => a.d - b.d).slice(0, 25);
-  }
 
   function filtered() {
     const q = norm(st.q);
@@ -64,17 +50,6 @@
   const lgTag = (p) => `<span class="rc-lg">${p.lg[3] ? `<img src="${esc(p.lg[3])}" alt="" width="16" height="16">` : ''}${esc(p.lg[1])}</span>`;
   const bio = (p) => `<td class="small">${esc((p.pos || '').slice(0, 1))}</td><td class="num">${p.ht || '–'}</td><td class="num">${p.age ?? '–'}</td><td class="small">${esc(p.nat)}</td>`;
   const statCells = (p) => COLS.map(([k, , , d]) => `<td class="num">${fmt(v(p, k), d)}</td>`).join('');
-
-  function likeHtml() {
-    const base = P.find((p) => p.key === st.like); if (!base) return '';
-    const S = similar(base);
-    return `<div class="rc-like card-inset"><h3>Players like ${esc(base.name)} <span class="muted small">${esc(base.team)} · ${esc(base.lg[1])}</span> <button type="button" class="btn ghost small" id="rc-like-x">Close</button></h3>
-<p class="muted small">Closest style profiles across every league: scoring, rebounding, playmaking, defense stats per 40, shot mix (threes, free throws), efficiency, usage and height. 100 = identical profile. Players with 120+ minutes.</p>
-<div class="scroll"><table class="rc-table"><thead><tr><th></th><th>Similarity</th><th>Player</th><th>League</th><th>Pos</th><th class="num">Ht</th><th class="num">Age</th><th>Nat</th>${COLS.map(([, l]) => `<th class="num">${l}</th>`).join('')}</tr></thead><tbody>
-<tr class="rc-base"><td>${star(base)}</td><td><strong>Base</strong></td><td>${who(base)}</td><td>${lgTag(base)}</td>${bio(base)}${statCells(base)}</tr>
-${S.map(({ p, sim }) => `<tr><td>${star(p)}</td><td><span class="rc-sim" style="--s:${sim}%">${sim}</span></td><td>${who(p)}</td><td>${lgTag(p)}</td>${bio(p)}${statCells(p)}</tr>`).join('')}
-</tbody></table></div></div>`;
-  }
 
   function render() {
     const rows = filtered().sort((a, b) => { const x = v(a, st.sort), y = v(b, st.sort); if (x == null) return 1; if (y == null) return -1; return st.dir * (x - y); });
@@ -92,10 +67,9 @@ ${S.map(({ p, sim }) => `<tr><td>${star(p)}</td><td><span class="rc-sim" style="
 </div></div>
 <div class="rc-shortlist"><strong>Shortlist (${listP.length})</strong> ${listP.map((p) => `<span class="chip">${esc(p.name)} <button type="button" data-star="${esc(p.key)}" aria-label="Remove">×</button></span>`).join('')}
 ${listP.length ? `<button type="button" class="btn ghost small" id="rc-only">${st.onlyList ? 'Show everyone' : 'Show shortlist only'}</button> <a class="btn ghost small" href="compare.html#${listP.slice(0, 3).map((p) => p.key).join(',')}">Compare first 3</a> <button type="button" class="btn ghost small" id="rc-share">Copy link to shortlist</button> <button type="button" class="btn ghost small" id="rc-csv">Download CSV</button>` : '<span class="muted small">Tap ☆ to add players. The shortlist stays in this browser; "Copy link" sends it to someone else.</span>'}</div>
-${likeHtml()}
-<p class="muted small">${rows.length} players. ${st.mode === '40' ? 'Per 40 minutes' : st.mode === 'pg' ? 'Per game' : 'Season totals'}; 3P% and FT% need 10+ attempts. Click a column to sort; ≈ finds players with the same profile. Different leagues are different levels.</p>
-<div class="scroll"><table class="rc-table"><thead><tr><th></th><th></th><th>Player</th><th>League</th><th>Pos</th><th class="num">Ht</th><th class="num">Age</th><th>Nat</th>${COLS.map(([k, l]) => `<th class="num"><button type="button" data-sort="${k}">${l}${st.sort === k ? (st.dir < 0 ? ' ▼' : ' ▲') : ''}</button></th>`).join('')}</tr></thead><tbody>
-${rows.slice(0, st.show).map((p) => `<tr>${'<td>' + star(p) + '</td>'}<td><button type="button" class="rc-likebtn" data-like="${esc(p.key)}" title="Find players like ${esc(p.name)}">≈</button></td><td>${who(p)}</td><td>${lgTag(p)}</td>${bio(p)}${statCells(p)}</tr>`).join('')}
+<p class="muted small">${rows.length} players. ${st.mode === '40' ? 'Per 40 minutes' : st.mode === 'pg' ? 'Per game' : 'Season totals'}; 3P% and FT% need 10+ attempts. Click a column to sort. Different leagues are different levels.</p>
+<div class="scroll"><table class="rc-table"><thead><tr><th></th><th>Player</th><th>League</th><th>Pos</th><th class="num">Ht</th><th class="num">Age</th><th>Nat</th>${COLS.map(([k, l]) => `<th class="num"><button type="button" data-sort="${k}">${l}${st.sort === k ? (st.dir < 0 ? ' ▼' : ' ▲') : ''}</button></th>`).join('')}</tr></thead><tbody>
+${rows.slice(0, st.show).map((p) => `<tr>${'<td>' + star(p) + '</td>'}<td>${who(p)}</td><td>${lgTag(p)}</td>${bio(p)}${statCells(p)}</tr>`).join('')}
 </tbody></table></div>${rows.length > st.show ? `<p><button type="button" class="btn ghost" id="rc-more">Show more (${rows.length - st.show} left)</button></p>` : ''}`;
     const on = (sel, ev, f) => app.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, f));
     on('[data-lg]', 'change', (e) => { const k = e.target.dataset.lg; if (e.target.checked) st.lg.add(k); else st.lg.delete(k); render(); });
@@ -106,8 +80,6 @@ ${rows.slice(0, st.show).map((p) => `<tr>${'<td>' + star(p) + '</td>'}<td><butto
     on('[data-mode]', 'click', (e) => { st.mode = e.target.dataset.mode; render(); });
     on('[data-sort]', 'click', (e) => { const k = e.currentTarget.dataset.sort; if (st.sort === k) st.dir *= -1; else { st.sort = k; st.dir = -1; } render(); });
     on('[data-star]', 'click', (e) => { const k = e.currentTarget.dataset.star; shortlist = shortlist.includes(k) ? shortlist.filter((x) => x !== k) : [...shortlist, k]; store.set(SL, shortlist); if (!shortlist.length) st.onlyList = false; render(); });
-    on('[data-like]', 'click', (e) => { st.like = e.currentTarget.dataset.like; history.replaceState(null, '', '#like=' + encodeURIComponent(st.like)); render(); app.querySelector('.rc-like')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
-    on('#rc-like-x', 'click', () => { st.like = null; history.replaceState(null, '', location.pathname); render(); });
     on('#rc-more', 'click', () => { st.show += 200; render(); });
     on('#rc-only', 'click', () => { st.onlyList = !st.onlyList; render(); });
     on('#rc-share', 'click', (e) => { const u = location.origin + location.pathname + '#list=' + encodeURIComponent(shortlist.join(',')); navigator.clipboard?.writeText(u); e.target.textContent = 'Link copied'; });

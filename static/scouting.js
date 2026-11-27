@@ -110,6 +110,7 @@
   // ---------- state ----------
   const emptyDb = () => ({ v: 1, players: {}, folders: {} });
   let KEY = null, DB = emptyDb(), SHA = null, dirty = false, saving = false, POOL = [], POOL_BY = new Map();
+  const toInternal = [];
   const S = { view: 'all', folder: null, q: '', league: '', team: '', pos: '', ageMax: '', minGp: '', minMin: '', status: '', sort: 'ppg', dir: -1, limit: 150, sel: new Set(), open: null };
 
   /** Merge two databases record by record: the newest change wins; deletions are kept as tombstones. */
@@ -175,6 +176,14 @@
       const text = await encryptJson(KEY, DB);
       SHA = await writeRemote(text, `Scouting update (${getWho() || 'staff'})`);
       dirty = false; saving = false; paintStatus(); render();
+      // then the copies of new notes in Hapoel Internal (one at a time, after the scouting save, so the two never collide)
+      let copied = 0;
+      while (toInternal.length) {
+        const { p, n } = toInternal[0];
+        try { if (await copyToInternal(p, n) === 'ok') copied++; toInternal.shift(); }
+        catch (err) { status.className = 'sc-status err'; status.textContent = 'Saved in scouting; the copy in Hapoel Internal failed (' + err.message + '). It will be tried again with the next save.'; break; }
+      }
+      if (copied) { status.className = 'sc-status ok'; status.textContent = `✓ Saved for the whole staff — ${copied === 1 ? 'the note is' : copied + ' notes are'} also in Hapoel Internal (Player notes).`; }
     } catch (err) { saving = false; paintStatus('Not saved: ' + err.message + '. Your changes are still here — try Save again.'); }
   }
   window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
@@ -203,7 +212,19 @@
     try { const pool = await (await fetch('scouting-pool.json', { cache: 'no-store' })).json(); POOL = pool.players.map(fromPool); CFG.poolNote = pool.note; } catch { POOL = []; }
     POOL_BY = new Map(POOL.map((p) => [p.id, p]));
     DB.players ||= {}; DB.folders ||= {};
-    shell(); return true;
+    shell();
+    // Opened from a player page: show that player, ready for a note
+    const qp = new URLSearchParams(location.search), want = qp.get('player');
+    if (want && allPlayers().some((x) => x.id === want)) { S.open = want; render(); if (qp.get('note')) setTimeout(() => drawer.querySelector('textarea')?.focus(), 50); }
+    return true;
+  }
+  // Every scouting note is also kept in Hapoel Internal (category "Player note"), encrypted with the same team password.
+  async function copyToInternal(p, n) {
+    if (!getToken() || !KEY) return 'not connected';
+    const id = `${n.t.slice(0, 10)}-${Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join('')}`;
+    const meta = { v: 2, id, kind: 'note', title: `${p.name} — scouting note`, category: 'Player note', opponent: p.team || '', author: n.by || 'Staff', date: n.t.slice(0, 10), text: n.text, created: n.t, player: p.id };
+    await gh('/contents/internal/' + id + '.enc', { method: 'PUT', body: JSON.stringify({ message: 'Internal: add player note', content: b64(enc.encode(await encryptJson(KEY, meta))), branch: CFG.branch || 'main' }) });
+    return 'ok';
   }
 
   // ---------- layout ----------
@@ -335,7 +356,12 @@
       el('h3', {}, 'Tags'), el('div', { class: 'sc-chips' }, (r?.tags || []).map((t) => el('span', { class: 'chip' }, t, el('button', { type: 'button', 'aria-label': 'Remove tag ' + t, onclick: () => { const rec = touchRec(p.id); rec.tags = rec.tags.filter((x) => x !== t); render(); } }, '×')))), tagIn,
       el('h3', {}, 'Video & links'), el('ul', { class: 'sc-links' }, (r?.links || []).map((u, i) => el('li', {}, el('a', { href: u, target: '_blank', rel: 'noopener noreferrer' }, u.replace(/^https?:\/\//, '').slice(0, 60)), el('button', { type: 'button', 'aria-label': 'Remove link', onclick: () => { const rec = touchRec(p.id); rec.links = rec.links.filter((_, j) => j !== i); render(); } }, '×')))), linkIn,
       el('h3', {}, 'Scouting notes'), noteBox,
-      el('button', { type: 'button', class: 'btn', onclick: () => { const t = noteBox.value.trim(); if (!t) return; const rec = touchRec(p.id, p.official ? null : null); rec.notes = [{ id: uid('N'), t: now(), by: getWho() || 'Staff', text: t }, ...(rec.notes || [])]; render(); } }, 'Add note'),
+      el('button', { type: 'button', class: 'btn', onclick: () => {
+        const t = noteBox.value.trim(); if (!t) return;
+        const rec = touchRec(p.id, p.official ? null : null); const n = { id: uid('N'), t: now(), by: getWho() || 'Staff', text: t };
+        rec.notes = [n, ...(rec.notes || [])]; render();
+        toInternal.push({ p, n }); // copied to Hapoel Internal right after the scouting database is saved
+      } }, 'Add note'),
       el('ol', { class: 'sc-notes' }, (r?.notes || []).filter((n) => !n.deleted).map((n) => el('li', {}, el('div', { class: 'meta' }, el('strong', {}, n.by || 'Staff'), ' · ', new Date(n.t).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         el('button', { type: 'button', class: 'link small', onclick: () => { if (!confirm('Delete this note?')) return; n.deleted = true; touchRec(p.id); render(); } }, 'delete')), el('p', {}, n.text)))),
       !p.official ? el('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (!confirm(`Delete ${p.name} and all notes about him?`)) return; const rec = touchRec(p.id); rec.deleted = true; for (const f of folders()) f.ids = f.ids.filter((x) => x !== p.id); S.open = null; drawer.hidden = true; render(); } }, 'Delete player') : null);

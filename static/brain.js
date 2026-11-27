@@ -98,10 +98,10 @@
       const parts = [await hapoelText(), ...(await Promise.all([...picked].map(leagueText)))];
       const data = parts.join('\n');
       const system = `You are "the Brain" of HTA LAB, the analytics site of Hapoel Tel Aviv's basketball coaching staff (EuroLeague and the Israeli Winner League). Answer the coach's questions using ONLY the data below, which comes from the official league box scores and play-by-play on the site. If the data does not contain the answer, say so plainly and say what data would be needed; never invent numbers, players or games. Be concise and practical, like a staff analyst: lead with the answer, give the key numbers, use a small markdown table when comparing. Per-game numbers unless the coach asks for totals. Season 2026–27; today is ${new Date().toISOString().slice(0, 10)}.\n\n=== HTA LAB DATA ===\n${data}`;
-      const messages = [];
+      const messages = []; // the site data (system) is cached for 5 minutes, so follow-up questions cost much less
       for (const h of history) { messages.push({ role: 'user', content: h.q }); if (h !== turn && h.a && !h.err) messages.push({ role: 'assistant', content: h.a }); }
       const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: store.get(MODEL) || 'claude-sonnet-5-5', max_tokens: 2500, system, messages }) });
+        body: JSON.stringify({ model: store.get(MODEL) || 'claude-sonnet-5-5', max_tokens: 2500, system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }], messages }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(r.status === 401 ? 'The API key was not accepted — check it, or remove it and paste it again.' : r.status === 429 ? 'Too many questions at once or the account limit was reached — wait a minute and try again.' : (j.error?.message || 'The Brain could not answer (HTTP ' + r.status + ').'));
       turn.a = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n') || '(no answer)';

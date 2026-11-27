@@ -404,15 +404,15 @@ for (const f of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-
   copyFileSync('static/compare.js', join(OUT, 'compare.js'));
   writeFileSync(join(OUT, 'compare.html'), page({ title: 'Compare players', cfg: { ...cfg }, info, active: 'compare.html', sample: false,
     body: `<section class="card"><h2>Compare players</h2>
-<p class="muted">Two or three players side by side — from the same league or from different ones (EuroLeague, EuroCup, Winner League, ACB, BBL, Greece, NBL, ABA, VTB, LBA). Per game, per 40 minutes or totals. The link keeps your selection, so you can send it. <a href="recruit.html">Search all players and find similar ones →</a></p>
+<p class="muted">Two or three players side by side — from the same league or from different ones (EuroLeague, EuroCup, Winner League, ACB, BBL, Greece, NBL, ABA, VTB, LBA). Per game, per 40 minutes or totals. The link keeps your selection, so you can send it. <a href="recruit.html">Search all players →</a></p>
 <div id="compare-app"><p class="muted">Loading…</p></div></section>
 <script type="application/json" id="compare-leagues">${JSON.stringify(leaguesForBrain).replace(/</g, '\\u003c')}</script>`,
     hero: null, scripts: `<script src="compare.js?v=${assetVersion()}" defer></script>` }));
-  // Recruiting: all players of all leagues, similar players, shortlist
+  // Recruiting: all players of all leagues, shortlist
   copyFileSync('static/recruit.js', join(OUT, 'recruit.js'));
   writeFileSync(join(OUT, 'recruit.html'), page({ title: 'Recruiting', cfg: { ...cfg }, info, active: 'recruit.html', sample: false,
     body: `<section class="card"><h2>Recruiting</h2>
-<p class="muted">Every player in every league on HTA LAB in one table. Filter by league, position, age, height, games and minutes; sort by any stat; press ≈ next to a player to find the players with the most similar style in all leagues; tap ☆ to build a shortlist. <a href="compare.html">Compare players side by side →</a></p>
+<p class="muted">Every player in every league on HTA LAB in one table. Filter by league, position, age, height, games and minutes; sort by any stat; tap ☆ to build a shortlist. <a href="compare.html">Compare players side by side →</a></p>
 <div id="recruit-app"><p class="muted">Loading…</p></div></section>
 <script type="application/json" id="recruit-leagues">${JSON.stringify(leaguesForBrain).replace(/</g, '\\u003c')}</script>`,
     hero: null, scripts: `<script src="recruit.js?v=${assetVersion()}" defer></script>` }));
