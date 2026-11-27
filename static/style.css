@@ -911,3 +911,30 @@ td.warn { color: #d97a00; font-weight: 700; }
 .split-head span:last-child { align-items: flex-end; }
 .split-pl th.grp { text-align: center; border-bottom: 1px solid var(--line); }
 .cmp .lab small.pos { color: var(--pos); } .cmp .lab small.neg { color: var(--red); }
+/* Before / after page: PDF export (print) */
+.print-only { display: none; }
+@media print {
+  @page splitpdf { size: A4 portrait; margin: 10mm; }
+  body:has(.split-page) .cover { display: none !important; }
+  body:has(.split-page) main, body:has(.split-page) main.wrap { margin-top: 0 !important; padding-top: 0 !important; }
+  .split-page { page: splitpdf; font-size: 11px; }
+  .split-page .print-only { display: block; }
+  .split-ph { border-bottom: 3px solid #c8102e; margin: 0 0 10px; padding-bottom: 6px; }
+  .split-ph { padding-top: 6px; }
+  .split-ph h1 { margin: 2px 0; font-size: 24px; line-height: 1.2; }
+  .split-page table.split-pl { font-size: 8.5px; } .split-page table.split-pl td, .split-page table.split-pl th { padding: 3px 3px; }
+  .split-page .card { box-shadow: none; border: 0; padding: 0; margin: 0 0 14px; break-inside: auto; }
+  .split-page .card > h2 { break-after: avoid; }
+  .split-page .cmp, .split-page tr, .split-page figure { break-inside: avoid; }
+  .split-page .cmp { padding: 2px 0; gap: 1px 10px; } .split-page .cmp .v { font-size: 13px; } .split-page .cmp .lab { font-size: 10px; } .split-page .cmp .split { height: 5px; }
+  .split-page .cmp-grp { margin: 8px 0 0; font-size: 10px; }
+  .split-page .card > h2 { font-size: 16px; margin: 0 0 6px; }
+  .split-page .perf-head { font-size: 11px; }
+  .split-page .card:nth-of-type(2) { break-before: page; }
+  .split-page .card:nth-of-type(4), .split-page .card:nth-of-type(6) { break-inside: avoid; }
+  .split-page h3 { break-after: avoid; }
+  .split-page .shot-two { grid-template-columns: 1fr 1fr; }
+  .split-page svg.court { max-width: 100%; }
+  .split-page table.rot .rot-c { width: 9px; min-width: 9px; height: 12px; }
+  .split-page * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
