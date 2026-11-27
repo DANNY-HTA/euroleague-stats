@@ -5,7 +5,7 @@
 //   node scripts/build-hapoel.mjs
 import { readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseGame } from '../lib/parse.mjs';
+import { parseGame, formatName } from '../lib/parse.mjs';
 import { validateGame } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, teamGames, quarterAverages, possessions } from '../lib/stats.mjs';
 import { esc, f1, signed, page, fmtDate, assetVersion } from '../lib/render.mjs';
@@ -270,7 +270,7 @@ const hero = `<section class="cover hap-cover"><div class="wrap"><div>
 </div>${crest ? `<div class="side cover-crest"><img src="${esc(crest)}" alt=""></div>` : ''}</div></section>`;
 
 const tabs = `<div class="comp-tabs" role="tablist" aria-label="Competition"><button type="button" role="tab" data-comp="all" aria-selected="true">All competitions</button>${ACTIVE.map((C) => `<button type="button" role="tab" data-comp="${C.key}" aria-selected="false">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="18" height="18">` : ''}${esc(C.short)}</button>`).join('')}</div>`;
-const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#last-game">Last game</a>${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-wins-losses.html">Wins vs losses (${esc(C.short)})</a>`).join('')}<a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="recruit.html">Recruiting</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
+const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="weekly.html"><strong>This week</strong></a><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#last-game">Last game</a>${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-wins-losses.html">Wins vs losses (${esc(C.short)})</a>`).join('')}${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-benchmark.html">Vs top 10 (${esc(C.short)})</a>`).join('')}${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-lineup-builder.html">Lineup builder (${esc(C.short)})</a>`).join('')}<a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#load">Load &amp; rest</a><a href="#referees">Referees</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="recruit.html">Recruiting</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
 
 const person = (k) => (people.get(k)?.name || k);
 const data = {
@@ -284,7 +284,7 @@ const sgn1 = (v) => (v == null || !Number.isFinite(v) ? '–' : (v > 0 ? '+' : v
 const nextByComp = ACTIVE.map((C) => nextGames.find((x) => x.c === C.key)).filter(Boolean);
 const nextHtml = nextByComp.length ? `<section class="card next-opp" id="next"><h2>Next opponent — pre-game report</h2>
 <p class="muted">Rebuilt every night from the latest games: the opponent's profile, wins vs losses, compared with the league and with Hapoel, starting fives, personnel and player keys, lineups, form in the last 5 games, clutch and after-timeout plays. Print it or save it as a PDF.</p>
-<div class="next-grid">${nextByComp.map((x) => { const C = ACTIVE.find((c) => c.key === x.c); const href = `${C.pfx}team-${safe(x.oc)}-report.html`; const t = C.teams.find((tt) => tt.code === x.oc); return `<a class="next-card" href="${href}">${x.crest ? `<img src="${esc(x.crest)}" alt="" width="56" height="56">` : ''}<span class="nc-body"><span class="kicker">${compBadge(x.c)} ${esc(x.rn || (x.r ? 'Round ' + x.r : ''))}</span><strong>${x.home ? 'vs' : 'at'} ${esc(x.opp)}</strong><span class="muted small">${timeTag(x)}${t ? ` · ${t.w}–${t.l} · ${ord(t.rank)}` : ''}</span><span class="btn">Open pre-game report →</span></span></a>`; }).join('')}</div>${nextByComp.some((x) => x.c === 'el') ? `<p class="small">During the EuroLeague game: ${nextByComp.filter((x) => x.c === 'el').map((x) => `<a href="live.html?game=${x.gc}"><strong>Live</strong></a> · <a href="live.html?game=${x.gc}&view=half"><strong>Halftime report</strong></a> · <a href="live.html?game=${x.gc}&view=bench"><strong>Bench screen</strong></a>`).join('')}</p>` : ''}</section>` : '';
+<div class="next-grid">${nextByComp.map((x) => { const C = ACTIVE.find((c) => c.key === x.c); const href = `${C.pfx}team-${safe(x.oc)}-report.html`; const t = C.teams.find((tt) => tt.code === x.oc); return `<a class="next-card" href="${href}">${x.crest ? `<img src="${esc(x.crest)}" alt="" width="56" height="56">` : ''}<span class="nc-body"><span class="kicker">${compBadge(x.c)} ${esc(x.rn || (x.r ? 'Round ' + x.r : ''))}</span><strong>${x.home ? 'vs' : 'at'} ${esc(x.opp)}</strong><span class="muted small">${timeTag(x)}${t ? ` · ${t.w}–${t.l} · ${ord(t.rank)}` : ''}</span><span class="btn">Open pre-game report →</span></span></a>`; }).join('')}</div><p class="gd-links">${nextByComp.map((x) => { const C = ACTIVE.find((c) => c.key === x.c); return `<a class="btn" href="${C.pfx}gameday-next.html">Game-day pack: ${esc(x.opp)} (${esc(C.short)}) →</a>`; }).join(' ')}</p>${nextByComp.some((x) => x.c === 'el') ? `<p class="small">During the EuroLeague game: ${nextByComp.filter((x) => x.c === 'el').map((x) => `<a href="live.html?game=${x.gc}"><strong>Live</strong></a> · <a href="live.html?game=${x.gc}&view=half"><strong>Halftime report</strong></a> · <a href="live.html?game=${x.gc}&view=bench"><strong>Bench screen</strong></a>`).join('')}</p>` : ''}</section>` : '';
 
 // ---- Post-game summary: the last game in each competition ----
 const lastGameHtml = (() => {
@@ -314,6 +314,52 @@ ${k('Offensive rating', tm.ortg, to.ortg)}${k('Effective FG%', tm.efg, to.efg)}$
 <div><h4>Best Hapoel players</h4><ol class="small">${top(me)}</ol><h4>Best ${esc(op.tv)} players</h4><ol class="small">${top(op)}</ol></div></div>${lu}${fl}</div>`;
   }).filter(Boolean);
   return blocks.length ? `<section class="card" id="last-game"><h2>Last game — summary</h2><p class="muted">Built automatically the night after every game: result, key numbers, best players, best and worst lineups, game flow.</p>${blocks.join('')}</section>` : '';
+})();
+
+// ---- Player load and rest: minutes across both competitions, days of rest, results by rest ----
+const loadHtml = (() => {
+  const all = ACTIVE.flatMap((C) => C.mine.map((g) => ({ C, g, t: Date.parse(g.date + 'T12:00:00Z') }))).sort((a, b) => a.t - b.t);
+  if (all.length < 3) return '';
+  const DAY = 86400000;
+  all.forEach((x, i) => { x.rest = i ? Math.round((x.t - all[i - 1].t) / DAY) - 1 : null; });
+  // results by days of rest (days without a game in between)
+  const bucket = (r) => (r == null ? null : r <= 1 ? '0–1 days' : r === 2 ? '2 days' : '3+ days');
+  const B = new Map();
+  for (const x of all) { const b = bucket(x.rest); if (!b) continue; const me = x.g.home.code === x.C.code ? x.g.home : x.g.away, op = me === x.g.home ? x.g.away : x.g.home; const e = B.get(b) || { w: 0, l: 0, m: 0, n: 0, comps: {} }; e.n++; e.m += me.score - op.score; if (me.score > op.score) e.w++; else e.l++; const c = (e.comps[x.C.short] ||= { w: 0, l: 0 }); if (me.score > op.score) c.w++; else c.l++; B.set(b, e); }
+  const restRows = ['0–1 days', '2 days', '3+ days'].filter((b) => B.has(b)).map((b) => { const e = B.get(b); return `<tr><td>${b}</td><td class="num">${e.n}</td><td class="num"><strong class="${e.w >= e.l ? 'pos' : 'neg'}">${e.w}–${e.l}</strong></td><td class="num ${e.m >= 0 ? 'pos' : 'neg'}">${e.m / e.n > 0 ? '+' : ''}${(e.m / e.n).toFixed(1)}</td><td class="small">${Object.entries(e.comps).map(([k, c]) => `${esc(k)} ${c.w}–${c.l}`).join(' · ')}</td></tr>`; }).join('');
+  // minutes per player per week (Monday–Sunday) across both competitions
+  const weekOf = (t) => { const d = new Date(t); const day = (d.getUTCDay() + 6) % 7; return t - day * DAY; };
+  const weeks = [...new Set(all.map((x) => weekOf(x.t)))].sort((a, b) => a - b).slice(-8);
+  const P = new Map();
+  for (const x of all) { const me = x.g.home.code === x.C.code ? x.g.home : x.g.away, w = weekOf(x.t); for (const p of me.players) { if (!(p.min > 0)) continue; const k = keyOf.get(x.C.key + '|' + p.id) || normName(p.name); const e = P.get(k) || { name: p.name, wk: new Map(), short: [], normal: [], games: [] }; e.wk.set(w, (e.wk.get(w) || 0) + p.min); e.games.push({ t: x.t, min: p.min, pir: p.pir, rest: x.rest }); if (x.rest != null) (x.rest <= 1 ? e.short : e.normal).push(p); P.set(k, e); } }
+  const last = all[all.length - 1].t;
+  const rows = [...P.values()].map((e) => { const m7 = e.games.filter((g) => last - g.t < 7 * DAY).reduce((a, g) => a + g.min, 0), m14 = e.games.filter((g) => last - g.t < 14 * DAY).reduce((a, g) => a + g.min, 0), g7 = e.games.filter((g) => last - g.t < 7 * DAY).length; const avg = (arr, k) => (arr.length ? arr.reduce((a, p) => a + p[k], 0) / arr.length : null); return { ...e, m7, m14, g7, shPir: avg(e.short, 'pir'), nPir: avg(e.normal, 'pir'), shMin: avg(e.short, 'min'), nMin: avg(e.normal, 'min'), tot: e.games.reduce((a, g) => a + g.min, 0) }; }).sort((a, b) => b.m14 - a.m14 || b.tot - a.tot);
+  const maxW = Math.max(...rows.flatMap((r) => weeks.map((w) => r.wk.get(w) || 0)), 1);
+  const wLabel = (w) => new Date(w).toISOString().slice(5, 10).split('-').reverse().join('/');
+  const flag = (r) => r.m7 >= 75 || (r.g7 >= 3 && r.m7 >= 60);
+  return `<section class="card" id="load"><h2>Player load and rest</h2><p class="muted">Minutes across the EuroLeague and the Winner League together, up to the last game (${esc(new Date(last).toISOString().slice(0, 10))}). Red flag = 75+ minutes in 7 days, or 3 games and 60+ minutes in 7 days.</p>
+<div class="scroll"><table class="rtab load-t"><thead><tr><th>Player</th><th class="num">Last 7 days</th><th class="num">Last 14 days</th><th class="num">Season</th>${weeks.map((w) => `<th class="num">Week of ${wLabel(w)}</th>`).join('')}<th class="num">PIR on 0–1 days rest</th><th class="num">PIR with 2+ days</th></tr></thead><tbody>
+${rows.map((r) => `<tr><td>${flag(r) ? '<span class="load-flag" title="High load">●</span> ' : ''}<strong>${esc(r.name)}</strong></td><td class="num"><strong>${Math.round(r.m7)}</strong> <small class="muted">${r.g7} g</small></td><td class="num">${Math.round(r.m14)}</td><td class="num muted">${Math.round(r.tot)}</td>${weeks.map((w) => { const v = r.wk.get(w) || 0; return `<td class="num load-c" style="background:rgba(200,16,46,${(0.5 * v / maxW).toFixed(2)})">${v ? Math.round(v) : ''}</td>`; }).join('')}<td class="num">${r.shPir == null ? '–' : r.shPir.toFixed(1)} <small class="muted">${r.short.length ? r.short.length + ' g' : ''}</small></td><td class="num">${r.nPir == null ? '–' : r.nPir.toFixed(1)} <small class="muted">${r.normal.length ? r.normal.length + ' g' : ''}</small></td></tr>`).join('')}
+</tbody></table></div>
+<h3>Results by days of rest</h3><div class="scroll"><table class="rtab"><thead><tr><th>Rest before the game</th><th class="num">Games</th><th class="num">W–L</th><th class="num">Avg margin</th><th>By competition</th></tr></thead><tbody>${restRows}</tbody></table></div>
+<p class="muted small">Rest = full days without a game before it (a game the next day = 0 days), counting both competitions. Travel distance is not in the data; away games show in the box scores.</p></section>`;
+})();
+
+// ---- Referees: Hapoel's record with each referee, all competitions ----
+const refsHtml = (() => {
+  const m = new Map();
+  for (const C of ACTIVE) for (const g of C.mine) for (const r0 of g.refs || []) {
+    const r = /[A-Za-z]/.test(r0) ? formatName(r0) : r0, me = g.home.code === C.code ? g.home : g.away, op = me === g.home ? g.away : g.home;
+    if (!m.has(r)) m.set(r, { r, comps: new Set(), w: 0, l: 0, pf: 0, opf: 0, fta: 0, ofta: 0, n: 0, list: [] });
+    const e = m.get(r); e.comps.add(C.short); e.n++; if (me.score > op.score) e.w++; else e.l++; e.pf += me.totals.pf; e.opf += op.totals.pf; e.fta += me.totals.fta; e.ofta += op.totals.fta;
+    e.list.push(`<a href="${C.pfx}game-${safe(g.gameCode)}.html" class="${me.score > op.score ? 'pos' : 'neg'}">${me.score > op.score ? 'W' : 'L'} ${me.score}–${op.score} ${esc(op.tv)}</a>`);
+  }
+  const rows = [...m.values()].sort((a, b) => b.n - a.n || (b.w - b.l) - (a.w - a.l));
+  if (!rows.length) return '';
+  return `<section class="card" id="referees"><h2>Referees</h2><p class="muted">Hapoel's record with every referee this season, with fouls and free throws per game (Hapoel – opponent). Full tables: ${ACTIVE.map((C) => `<a href="${C.pfx}referees.html">${esc(C.short)} referees</a>`).join(' · ')}.</p>
+<div class="scroll"><table class="rtab"><thead><tr><th>Referee</th><th>Competition</th><th class="num">Games</th><th class="num">W–L</th><th class="num">Fouls</th><th class="num">FTA</th><th>Games</th></tr></thead><tbody>
+${rows.map((e) => `<tr><td><strong>${esc(e.r)}</strong></td><td class="small">${[...e.comps].map(esc).join(', ')}</td><td class="num">${e.n}</td><td class="num"><strong class="${e.w >= e.l ? 'pos' : 'neg'}">${e.w}–${e.l}</strong></td><td class="num">${(e.pf / e.n).toFixed(1)} – ${(e.opf / e.n).toFixed(1)}</td><td class="num ${e.fta >= e.ofta ? 'pos' : 'neg'}">${(e.fta / e.n).toFixed(1)} – ${(e.ofta / e.n).toFixed(1)}</td><td class="small">${e.list.join(' · ')}</td></tr>`).join('')}
+</tbody></table></div></section>`;
 })();
 
 // ---- On/Off: Hapoel with and without each player ----
@@ -364,6 +410,8 @@ ${quarterTable ? `<h3>Average by quarter</h3>${quarterTable}` : ''}
 
 ${onOffHtml}
 ${clutchHtml}
+${loadHtml}
+${refsHtml}
 <section class="card" id="lineups"><h2>Lineups</h2><p class="muted">Hapoel's five-man units — and 2-, 3- and 4-man combinations — from the official play-by-play. Pick the games: all of them, the last few, wins or losses, one competition, or any games you tick.</p>
 <div id="hap-lineups"><p class="muted">Loading…</p></div></section>
 
@@ -373,6 +421,48 @@ ${ACTIVE.map((C) => `<div class="comp-block" data-comp="${C.key}"><h3 class="com
 
 <section class="card" id="leagues"><h2>Leagues</h2><p class="muted">Every league on HTA LAB — standings, games, players, teams, lineups and reports.</p>${leaguesGrid}</section>
 <script type="application/json" id="hap-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+
+// ---- Weekly summary: the last 7 days (Hapoel, both competitions) and the 7 days ahead ----
+{
+  const DAY = 86400000, nowT = Date.now();
+  const all = ACTIVE.flatMap((C) => C.mine.map((g) => ({ C, g, t: Date.parse(g.date + 'T12:00:00Z') }))).sort((a, b) => a.t - b.t);
+  // the week = the 7 days up to today; if Hapoel did not play in them, the 7 days up to the last game
+  let end = nowT; if (!all.some((x) => x.t > nowT - 7 * DAY) && all.length) end = all[all.length - 1].t + DAY / 2;
+  const wk = all.filter((x) => x.t > end - 7 * DAY && x.t <= end), before = all.filter((x) => x.t <= end - 7 * DAY);
+  const d10 = (t) => new Date(t).toISOString().slice(0, 10);
+  const sideOf = (x) => (x.g.home.code === x.C.code ? [x.g.home, x.g.away] : [x.g.away, x.g.home]);
+  const res = wk.map((x) => { const [me, op] = sideOf(x); const won = me.score > op.score; const top = me.players.filter((p) => p.min > 0).sort((a, b) => b.pir - a.pir)[0]; return `<tr><td>${esc(fmtDate(x.g.date))}</td><td>${compBadge(x.C.key)}</td><td>${x.g.home.code === x.C.code ? 'vs' : 'at'} ${esc(titleCase(op.name))}</td><td class="num"><strong class="${won ? 'pos' : 'neg'}">${won ? 'W' : 'L'} ${me.score}–${op.score}</strong></td><td class="small">${top ? `${esc(top.name)} ${top.pts} pts · PIR ${top.pir}` : ''}</td><td><a href="${x.C.pfx}game-${safe(x.g.gameCode)}.html">Game →</a> · <a href="${x.C.pfx}game-${safe(x.g.gameCode)}-hapoel.html">Report</a></td></tr>`; }).join('');
+  // players: this week vs before
+  const agg = (list) => { const M = new Map(); for (const x of list) { const [me] = sideOf(x); for (const p of me.players) { if (!(p.min > 0)) continue; const k = keyOf.get(x.C.key + '|' + p.id) || normName(p.name); const e = M.get(k) || { name: p.name, g: 0, min: 0, pts: 0, pir: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, pm: 0 }; e.g++; e.min += p.min; e.pts += p.pts; e.pir += p.pir; e.pm += p.pm ?? p.plusMinus ?? 0; M.set(k, e); } } return M; };
+  const W = agg(wk), Bf = agg(before);
+  const prow = [...W.entries()].map(([k, e]) => { const b = Bf.get(k); const ptsD = b ? e.pts / e.g - b.pts / b.g : null, pirD = b ? e.pir / e.g - b.pir / b.g : null; return { ...e, ptsD, pirD, bPts: b ? b.pts / b.g : null, bPir: b ? b.pir / b.g : null }; }).sort((a, b) => b.pir - a.pir);
+  const mvp = prow[0];
+  const dTag = (v) => (v == null ? '<span class="muted">–</span>' : `<span class="${v >= 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}</span>`);
+  const up = prow.filter((r) => r.pirD != null && r.pirD >= 3).sort((a, b) => b.pirD - a.pirD).slice(0, 3), down = prow.filter((r) => r.pirD != null && r.pirD <= -3).sort((a, b) => a.pirD - b.pirD).slice(0, 3);
+  // standings
+  const stand = ACTIVE.map((C) => { const t = C.team; return t ? `<div class="rs"><span>${esc(C.short)}</span><b>${t.w}–${t.l} · ${ord(t.rank)}</b></div>` : ''; }).join('');
+  // the week ahead with predictions (EuroLeague forecast file from the league build)
+  let fc = []; for (const C of ACTIVE) { try { fc.push(...JSON.parse(readFileSync(join(OUT, C.pfx, 'forecast-hapoel.json'))).map((f) => ({ ...f, comp: C.key }))); } catch { /* no forecast */ } }
+  const ahead = sched.filter((x) => !x.res && x.utc && Date.parse(x.utc) >= nowT - DAY / 2 && Date.parse(x.utc) < nowT + 8 * DAY);
+  const aheadRows = ahead.map((x) => { const C = COMPS.find((c) => c.key === x.c); const f = fc.find((y) => y.comp === x.c && String(y.c) === String(x.gc)); const hw = f ? (x.home ? f.win : 1 - f.win) : null; return `<tr><td>${timeTag(x)}</td><td>${compBadge(x.c)}</td><td>${x.home ? 'vs' : 'at'} <strong>${esc(x.opp)}</strong></td><td class="num">${f ? `${x.home ? f.ph : f.pa}–${x.home ? f.pa : f.ph}` : '–'}</td><td class="num">${hw == null ? '–' : Math.round(100 * hw) + '%'}</td><td><a href="${C.pfx}team-${safe(x.oc)}-report.html">Pre-game report</a>${nextByComp.some((n) => n.gc === x.gc && n.c === x.c) ? ` · <a href="${C.pfx}gameday-next.html">Game-day pack</a>` : ''}</td></tr>`; }).join('');
+  // load warnings for the week ahead
+  const mins7 = new Map(); for (const x of all.filter((y) => y.t > end - 7 * DAY)) { const [me] = sideOf(x); for (const p of me.players) if (p.min > 0) { const k = normName(p.name); const e = mins7.get(k) || { name: p.name, m: 0, g: 0 }; e.m += p.min; e.g++; mins7.set(k, e); } }
+  const heavy = [...mins7.values()].filter((e) => e.m >= 75 || (e.g >= 3 && e.m >= 60)).sort((a, b) => b.m - a.m);
+  const wins = wk.filter((x) => { const [me, op] = sideOf(x); return me.score > op.score; }).length;
+  const bodyW = `<p class="no-print" style="margin:0"><button type="button" class="btn" id="print-btn">Download as PDF</button></p>
+<header class="print-only split-ph"><div class="r-kicker">HTA LAB · Weekly summary</div><h1>Hapoel — week of ${esc(d10(end - 7 * DAY + DAY))} to ${esc(d10(end))}</h1></header>
+<section class="card"><h2>The week</h2><div class="r-grid"><div class="rs"><span>Record this week</span><b>${wk.length ? `${wins}–${wk.length - wins}` : 'No games'}</b></div>${stand}${mvp ? `<div class="rs"><span>Player of the week</span><b>${esc(mvp.name)} <small>${(mvp.pir / mvp.g).toFixed(1)} PIR/g</small></b></div>` : ''}</div>
+${res ? `<div class="scroll"><table class="rtab"><thead><tr><th>Date</th><th></th><th>Opponent</th><th class="num">Result</th><th>Best player</th><th></th></tr></thead><tbody>${res}</tbody></table></div>` : '<p class="muted">Hapoel did not play this week.</p>'}</section>
+${prow.length ? `<section class="card"><h2>Players this week</h2><div class="scroll"><table class="rtab"><thead><tr><th>Player</th><th class="num">G</th><th class="num">MIN/g</th><th class="num">PTS/g</th><th class="num">vs before</th><th class="num">PIR/g</th><th class="num">vs before</th></tr></thead><tbody>${prow.map((r) => `<tr><td><strong>${esc(r.name)}</strong></td><td class="num">${r.g}</td><td class="num">${(r.min / r.g).toFixed(1)}</td><td class="num">${(r.pts / r.g).toFixed(1)}</td><td class="num">${dTag(r.ptsD)}</td><td class="num"><strong>${(r.pir / r.g).toFixed(1)}</strong></td><td class="num">${dTag(r.pirD)}</td></tr>`).join('')}</tbody></table></div>
+<div class="r-two"><div><h3>Up</h3>${up.length ? `<ul class="small">${up.map((r) => `<li><strong>${esc(r.name)}</strong>: PIR ${(r.pir / r.g).toFixed(1)} this week vs ${r.bPir.toFixed(1)} before</li>`).join('')}</ul>` : '<p class="muted small">No big jumps.</p>'}</div><div><h3>Down</h3>${down.length ? `<ul class="small">${down.map((r) => `<li><strong>${esc(r.name)}</strong>: PIR ${(r.pir / r.g).toFixed(1)} this week vs ${r.bPir.toFixed(1)} before</li>`).join('')}</ul>` : '<p class="muted small">No big drops.</p>'}</div></div>
+<p class="muted small">"vs before" = this week's average minus his average in all earlier games this season (both competitions). Up/down = PIR changed by 3 or more.</p></section>` : ''}
+<section class="card"><h2>The week ahead</h2>${aheadRows ? `<div class="scroll"><table class="rtab"><thead><tr><th>When</th><th></th><th>Opponent</th><th class="num">Expected score</th><th class="num">Hapoel win chance</th><th></th></tr></thead><tbody>${aheadRows}</tbody></table></div>` : '<p class="muted">No Hapoel games in the next 7 days.</p>'}
+${heavy.length ? `<h3>Load warning</h3><ul class="small">${heavy.map((e) => `<li><span class="load-flag">●</span> <strong>${esc(e.name)}</strong>: ${Math.round(e.m)} minutes in ${e.g} games in the last 7 days</li>`).join('')}</ul>` : '<p class="muted small">No player over the load limit (75 minutes in 7 days).</p>'}
+<p class="muted small">Predictions come from the forecast model (team ratings and home court). Winner League predictions appear once that league has enough games.</p></section>`;
+  writeFileSync(join(OUT, 'weekly.html'), page({ title: 'Weekly summary', cfg, info: { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null }, active: 'index.html', sample: false,
+    body: `<div class="split-page">${bodyW}</div>`, hero: `<section class="cover"><div class="wrap"><div><div class="kicker">Weekly summary</div><h1>Hapoel's week</h1><p class="lede">${esc(d10(end - 7 * DAY + DAY))} to ${esc(d10(end))}: results, players up and down, standings, the games ahead with predictions, and load warnings. Rebuilt every night.</p></div></div></section>`,
+    scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` }));
+}
 
 const info = { games: gameRows.length, lastDate: gameRows[0]?.d, lastRound: null };
 copyFileSync('static/hapoel.js', join(OUT, 'hapoel.js'));

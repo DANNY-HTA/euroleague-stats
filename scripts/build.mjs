@@ -6,7 +6,7 @@
 
 import { readFileSync, readdirSync, mkdirSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseGame } from '../lib/parse.mjs';
+import { parseGame, formatName } from '../lib/parse.mjs';
 import { validateSeason, validateGame } from '../lib/validate.mjs';
 import { teamTable, playerTable, qualified, leaders, seasonInfo, teamGames, quarterAverages, playerGameLogs } from '../lib/stats.mjs';
 import { esc, f1, signed, scatter, page, fmtDate, assetVersion } from '../lib/render.mjs';
@@ -545,6 +545,7 @@ for (const g of sortedGames) {
 ${qH.length ? `<table class="qtable"><thead><tr><th scope="col"></th>${qH.map((_, i) => `<th scope="col">${i < 4 ? 'Q' + (i + 1) : 'OT'}</th>`).join('')}<th scope="col">Final</th></tr></thead><tbody>
 <tr><th scope="row">${esc(H.tv)}</th>${qH.map((v, i) => `<td class="${v > (qA[i] ?? 0) ? 'w' : ''}">${v}</td>`).join('')}<td class="w">${H.score}</td></tr>
 <tr><th scope="row">${esc(A.tv)}</th>${qA.map((v, i) => `<td class="${v > (qH[i] ?? 0) ? 'w' : ''}">${v}</td>`).join('')}<td class="w">${A.score}</td></tr></tbody></table>` : ''}
+${g.refs?.length ? `<p class="gc-refs"><a href="referees.html">Referees</a>: ${g.refs.map((r) => esc(/[A-Za-z]/.test(r) ? formatName(r) : r)).join(' · ')}</p>` : ''}
 ${isHapGame(g) ? `<p class="gc-actions"><a class="btn white" href="${hapReportHref(g.gameCode)}">Hapoel game report →</a></p>` : ''}
 </div></section>`;
   writePage(gameHref(g.gameCode), `${H.tv} ${H.score}–${A.score} ${A.tv}`, `
@@ -1116,7 +1117,7 @@ ${R.map(({ q, oo, imp }) => `<tr><td><a href="${playerHref(q.id)}">${esc(q.name)
     meta: `<span>${t.w}–${t.l}</span><span class="sep">/</span><span>${ord(t.rank)} in the standings</span><span class="sep">/</span><span>Home ${t.home} · Away ${t.away}</span><span class="sep">/</span><span class="formrow">${form}</span>`,
     strip: [[f1(t.ortg), `ORtg · ${ord(t.ranks.ortg)}`], [f1(t.drtg), `DRtg · ${ord(t.ranks.drtg)}`], [signed(t.net), `Net · ${ord(t.ranks.net)}`], [f1(t.pace), `Pace · ${ord(t.ranks.pace)}`]],
     side: coverCrest(t.code),
-    actions: `<a class="btn white" href="team-${safe(t.code)}-report.html">Generate team report</a>${SPLITS.filter((x) => x.team === t.code).map((x) => ` <a class="btn white" href="${splitHref(x)}">${esc(x.title || 'Before and after')}</a>`).join('')}${WL_SPECS.filter((x) => x.team === t.code).map((x) => ` <a class="btn white" href="${x.href}">Wins vs losses</a>`).join('')}`
+    actions: `<a class="btn white" href="team-${safe(t.code)}-report.html">Generate team report</a>${SPLITS.filter((x) => x.team === t.code).map((x) => ` <a class="btn white" href="${splitHref(x)}">${esc(x.title || 'Before and after')}</a>`).join('')}${WL_SPECS.filter((x) => x.team === t.code).map((x) => ` <a class="btn white" href="${x.href}">Wins vs losses</a>`).join('')}${t.code === HAP_GAME_CODE ? ` <a class="btn white" href="team-${safe(t.code)}-benchmark.html">Against the top 10</a>` : ''}`
   });
   // ---- Printable team report ----
   {
@@ -1723,6 +1724,196 @@ if (OFE.length) {
 <script type="application/json" id="charges-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`, HOME,
     cover({ kicker: esc(roundLine), title: 'Charges drawn', lede: `Every offensive foul of the season — ${OFE.length} in ${new Set(OFE.map((e) => e.g.gameCode)).size} games — with who drew it, who committed it, when and the score. The league's play-by-play records charges, illegal screens and push-offs all as "offensive foul", so all three are included.` }),
     { scripts: `<script src="charges.js?v=${assetVersion()}" defer></script>` });
+}
+
+// ---- Referees: every referee of the season, and Hapoel's record with each ----
+const refName = (r) => (/[A-Za-z]/.test(r) ? formatName(r) : r);
+const REFS = (() => {
+  const m = new Map();
+  for (const g of games) for (const r0 of g.refs || []) {
+    const r = refName(r0); if (!m.has(r)) m.set(r, { name: r, games: [], hapW: 0, hapL: 0 });
+    const e = m.get(r); e.games.push(g);
+    if (HAP_GAME_CODE && (g.home.code === HAP_GAME_CODE || g.away.code === HAP_GAME_CODE)) { const me = g.home.code === HAP_GAME_CODE ? g.home : g.away, op = me === g.home ? g.away : g.home; if (me.score > op.score) e.hapW++; else e.hapL++; }
+  }
+  return [...m.values()].sort((a, b) => b.games.length - a.games.length || a.name.localeCompare(b.name));
+})();
+if (!REFS.length) writePage('referees.html', 'Referees', '<section class="card"><p class="muted">This league\'s data does not list the referees.</p></section>', HOME, cover({ kicker: esc(roundLine), title: 'Referees', lede: 'Referee data is not available for this league.' }));
+if (REFS.length) {
+  const avg = (list, f) => list.reduce((s, g) => s + f(g), 0) / (list.length || 1);
+  const fouls = (g) => g.home.totals.pf + g.away.totals.pf, fta = (g) => g.home.totals.fta + g.away.totals.fta, pts = (g) => g.home.score + g.away.score;
+  const lg = { f: avg(games, fouls), t: avg(games, fta), p: avg(games, pts), h: 100 * games.filter((g) => g.home.score > g.away.score).length / (games.length || 1) };
+  const cell = (v, txt, base, hiIsMore = true) => `<td class="num ${base != null && Math.abs(v - base) >= 0.1 * base ? (v > base ? 'ref-hi' : 'ref-lo') : ''}" data-v="${v}">${txt}</td>`;
+  const rows = REFS.map((r) => { const n = r.games.length, F = avg(r.games, fouls), T = avg(r.games, fta), P = avg(r.games, pts), H = 100 * r.games.filter((g) => g.home.score > g.away.score).length / n; const hg = r.hapW + r.hapL;
+    return `<tr><td data-v="${esc(r.name)}"><strong>${esc(r.name)}</strong></td><td class="num" data-v="${n}">${n}</td>${cell(F, F.toFixed(1), lg.f)}${cell(T, T.toFixed(1), lg.t)}${cell(P, P.toFixed(1), lg.p)}${cell(H, H.toFixed(0) + '%', lg.h)}<td class="num" data-v="${hg ? r.hapW / hg + hg / 1000 : -1}">${hg ? `<span class="${r.hapW >= r.hapL ? 'pos' : 'neg'}"><strong>${r.hapW}–${r.hapL}</strong></span>` : '–'}</td></tr>`; }).join('');
+  // Hapoel games, one line per game, with the crew
+  const hapGames = HAP_GAME_CODE ? games.filter((g) => g.home.code === HAP_GAME_CODE || g.away.code === HAP_GAME_CODE).sort((a, b) => b.date.localeCompare(a.date)) : [];
+  const hapRows = hapGames.map((g) => { const me = g.home.code === HAP_GAME_CODE ? g.home : g.away, op = me === g.home ? g.away : g.home, w = me.score > op.score;
+    return `<tr><td>${esc(fmtDate(g.date))}</td><td>${me === g.home ? 'vs' : 'at'} ${esc(titleCase(op.name))}</td><td class="${w ? 'pos' : 'neg'}"><a href="${gameHref(g.gameCode)}">${w ? 'W' : 'L'} ${me.score}–${op.score}</a></td><td class="small">${(g.refs || []).map((r) => esc(refName(r))).join(' · ') || '–'}</td><td class="num">${me.totals.pf}–${op.totals.pf}</td><td class="num">${me.totals.fta}–${op.totals.fta}</td></tr>`; }).join('');
+  const hapByRef = REFS.filter((r) => r.hapW + r.hapL > 0).map((r) => { const hg = r.games.filter((g) => g.home.code === HAP_GAME_CODE || g.away.code === HAP_GAME_CODE); const side = (g) => (g.home.code === HAP_GAME_CODE ? [g.home, g.away] : [g.away, g.home]);
+    const pf = avg(hg, (g) => side(g)[0].totals.pf), opf = avg(hg, (g) => side(g)[1].totals.pf), ft = avg(hg, (g) => side(g)[0].totals.fta), oft = avg(hg, (g) => side(g)[1].totals.fta);
+    return `<tr><td><strong>${esc(r.name)}</strong></td><td class="num">${hg.length}</td><td class="num"><span class="${r.hapW >= r.hapL ? 'pos' : 'neg'}"><strong>${r.hapW}–${r.hapL}</strong></span></td><td class="num">${pf.toFixed(1)} – ${opf.toFixed(1)}</td><td class="num ${ft - oft >= 0 ? 'pos' : 'neg'}">${ft.toFixed(1)} – ${oft.toFixed(1)}</td></tr>`; }).join('');
+  writePage('referees.html', 'Referees', `${hapByRef ? `<section class="card"><h2>Hapoel with each referee</h2><div class="scroll"><table class="rtab"><thead><tr><th>Referee</th><th class="num">Games</th><th class="num">Hapoel W–L</th><th class="num">Fouls (Hapoel – opp)</th><th class="num">Free throws (Hapoel – opp)</th></tr></thead><tbody>${hapByRef}</tbody></table></div><p class="muted small">Per game, in Hapoel's games refereed by him. Records with a few games are a small sample.</p></section>` : ''}
+<section class="card"><h2>All referees this season</h2><p class="muted">Per game in the games each referee worked. League average: ${lg.f.toFixed(1)} fouls, ${lg.t.toFixed(1)} free-throw attempts, ${lg.p.toFixed(1)} points, home teams win ${lg.h.toFixed(0)}%. Red = at least 10% above the league average, blue = at least 10% below. Click a column to sort.</p>
+<div class="scroll"><table class="sortable ref-t"><thead><tr><th scope="col"><button type="button">Referee</button></th><th scope="col" class="num"><button type="button">Games</button></th><th scope="col" class="num"><button type="button">Fouls</button></th><th scope="col" class="num"><button type="button">FTA</button></th><th scope="col" class="num"><button type="button">Points</button></th><th scope="col" class="num"><button type="button">Home wins</button></th><th scope="col" class="num"><button type="button">Hapoel W–L</button></th></tr></thead><tbody>${rows}</tbody></table></div></section>
+${hapRows ? `<section class="card"><h2>Hapoel games and their crews</h2><div class="scroll"><table class="rtab"><thead><tr><th>Date</th><th>Game</th><th>Result</th><th>Referees</th><th class="num">Fouls</th><th class="num">FTA</th></tr></thead><tbody>${hapRows}</tbody></table></div></section>` : ''}`, HOME,
+    cover({ kicker: esc(roundLine), title: 'Referees', lede: `Every referee of the season (${REFS.length}), how their games are called, and Hapoel's record with each of them.` }));
+}
+
+// ---- Game predictions and standings forecast (team ratings from this season, simulated to the end) ----
+const FORECAST = (() => {
+  if (games.length < 10 || teams.length < 4) return null;
+  const P = teams.reduce((s, t) => s + t.pace, 0) / teams.length;
+  const lgRtg = teams.reduce((s, t) => s + t.ortg, 0) / teams.length;
+  const hm = games.reduce((s, g) => s + (g.home.score - g.away.score), 0) / games.length;
+  const HCA = Math.max(0, Math.min(5, hm));
+  const T = new Map(teams.map((t) => { const k = t.gp / (t.gp + 4); return [t.code, { t, o: lgRtg + (t.ortg - lgRtg) * k, d: lgRtg + (t.drtg - lgRtg) * k, pace: P + (t.pace - P) * k }]; }));
+  const predict = (h, a) => { const H = T.get(h), A = T.get(a); if (!H || !A) return null; const pace = (H.pace + A.pace) / 2; const ph = pace * (H.o + A.d - lgRtg) / 100 + HCA / 2, pa = pace * (A.o + H.d - lgRtg) / 100 - HCA / 2; return { ph, pa, m: ph - pa }; };
+  // spread of real results around the prediction (for win probabilities)
+  const res = games.map((g) => { const p = predict(g.home.code, g.away.code); return p ? (g.home.score - g.away.score) - p.m : 0; });
+  const sigma = Math.max(9, Math.min(14, Math.sqrt(res.reduce((s, x) => s + x * x, 0) / (res.length || 1))));
+  const Phi = (z) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
+  const prob = (h, a) => { const p = predict(h, a); return p ? { ...p, win: Phi(p.m / sigma) } : null; };
+  const left = upcoming.filter((x) => T.has(x.h.code) && T.has(x.a.code) && !/play.?off|final/i.test(x.rn || ''));
+  const N = 5000, cut = [1, 4, 6, 8, 10], count = new Map(teams.map((t) => [t.code, { wins: 0, pos: cut.map(() => 0) }]));
+  const pr = left.map((x) => [x.h.code, x.a.code, prob(x.h.code, x.a.code).win]);
+  let seed = 12345; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let i = 0; i < N; i++) {
+    const w = new Map(teams.map((t) => [t.code, t.w]));
+    for (const [h, a, p] of pr) { if (rnd() < p) w.set(h, w.get(h) + 1); else w.set(a, w.get(a) + 1); }
+    const order = teams.map((t) => [t.code, w.get(t.code) + rnd() * 0.5 + (T.get(t.code).o - T.get(t.code).d) * 0.001]).sort((x, y) => y[1] - x[1]);
+    order.forEach(([c], k) => { const e = count.get(c); e.wins += w.get(c); cut.forEach((n, j) => { if (k < n) e.pos[j]++; }); });
+  }
+  const table = teams.map((t) => { const e = count.get(t.code); return { code: t.code, name: t.name, tv: t.tv, w: t.w, l: t.l, rating: T.get(t.code).o - T.get(t.code).d, expW: e.wins / N, games: t.gp + left.filter((x) => x.h.code === t.code || x.a.code === t.code).length, p: e.pos.map((v) => v / N) }; }).sort((a, b) => b.expW - a.expW);
+  return { prob, table, cut, sigma, HCA, left: left.length, N };
+})();
+if (!FORECAST) writePage('forecast.html', 'Forecast', '<section class="card"><p class="muted">The forecast starts once enough games have been played.</p></section>', HOME, cover({ kicker: esc(roundLine), title: 'Forecast', lede: 'Not enough games yet.' }));
+if (FORECAST) {
+  const pc = (v) => (v >= 0.995 ? '>99%' : v <= 0.005 ? (v > 0 ? '<1%' : '–') : Math.round(100 * v) + '%');
+  const heat = (v) => `style="background:rgba(200,16,46,${(0.08 + 0.6 * v).toFixed(2)})"`;
+  const nextRound = upcoming.length ? upcoming.filter((x) => x.r === upcoming[0].r) : [];
+  const predRow = (x) => { const p = FORECAST.prob(x.h.code, x.a.code); if (!p) return ''; const hap = x.h.code === HAP_GAME_CODE || x.a.code === HAP_GAME_CODE; return `<tr${hap ? ' class="hap-row"' : ''}><td>${timeTag(x)}</td><td>${esc(titleCase(x.h.name))} <span class="muted">vs</span> ${esc(titleCase(x.a.name))}</td><td class="num"><strong>${Math.round(p.ph)}–${Math.round(p.pa)}</strong></td><td class="num">${pc(p.win)} – ${pc(1 - p.win)}</td></tr>`; };
+  const hapNext = HAP_GAME_CODE ? upcoming.filter((x) => x.h.code === HAP_GAME_CODE || x.a.code === HAP_GAME_CODE).slice(0, 8) : [];
+  writePage('forecast.html', 'Forecast', `${hapNext.length ? `<section class="card"><h2>Hapoel's next games</h2><div class="scroll"><table class="rtab"><thead><tr><th>Date</th><th>Game</th><th class="num">Expected score</th><th class="num">Win chance (home – away)</th></tr></thead><tbody>${hapNext.map(predRow).join('')}</tbody></table></div></section>` : ''}
+<section class="card"><h2>Standings forecast</h2><p class="muted">${FORECAST.N.toLocaleString('en')} simulations of the ${FORECAST.left} games left, from each team's ratings this season (offense, defense and pace, pulled towards the league average early in the season) and home court (+${FORECAST.HCA.toFixed(1)}).${IS_EL ? ' EuroLeague: 1–6 go to the playoffs, 7–10 to the play-in.' : ''}</p>
+<div class="scroll"><table class="rtab fc-t"><thead><tr><th>Team</th><th class="num">Now</th><th class="num">Rating</th><th class="num">Projected</th>${FORECAST.cut.map((n) => `<th class="num">${n === 1 ? '1st' : 'Top ' + n}</th>`).join('')}</tr></thead><tbody>
+${FORECAST.table.map((r) => `<tr${r.code === HAP_GAME_CODE ? ' class="hap-row"' : ''}><td>${crests.has(r.code) ? `<img class="crest small" src="${esc(crests.get(r.code))}" alt="" width="20" height="20"> ` : ''}<a href="${teamHref(r.code)}">${esc(titleCase(r.name))}</a></td><td class="num">${r.w}–${r.l}</td><td class="num">${r.rating > 0 ? '+' : ''}${r.rating.toFixed(1)}</td><td class="num"><strong>${r.expW.toFixed(1)}–${(r.games - r.expW).toFixed(1)}</strong></td>${r.p.map((v) => `<td class="num" ${heat(v)}>${pc(v)}</td>`).join('')}</tr>`).join('')}
+</tbody></table></div><p class="muted small">Rating = expected points per 100 possessions against an average team. A forecast, not a certainty: injuries, trades and coaching changes are not in the numbers.</p></section>
+${nextRound.length ? `<section class="card"><h2>Next round: predictions</h2><div class="scroll"><table class="rtab"><thead><tr><th>Date</th><th>Game</th><th class="num">Expected score</th><th class="num">Win chance (home – away)</th></tr></thead><tbody>${nextRound.map(predRow).join('')}</tbody></table></div><p class="muted small">Typical miss: about ±${FORECAST.sigma.toFixed(0)} points on the margin.</p></section>` : ''}`, HOME,
+    cover({ kicker: esc(roundLine), title: 'Forecast', lede: 'Expected scores and win chances for the next games, and how the final standings are likely to look — simulated from this season’s numbers.' }));
+  writeFileSync(join(OUT, 'forecast-hapoel.json'), JSON.stringify(hapNext.map((x) => { const p = FORECAST.prob(x.h.code, x.a.code); return { c: x.c, h: x.h.code, a: x.a.code, ph: Math.round(p.ph), pa: Math.round(p.pa), win: x.h.code === HAP_GAME_CODE ? p.win : 1 - p.win }; })));
+}
+
+// ---- Hapoel against the top 10 of the league ----
+if (HAP_GAME_CODE && teams.some((t) => t.code === HAP_GAME_CODE)) {
+  const H = teams.find((t) => t.code === HAP_GAME_CODE);
+  const top = teams.filter((t) => t.code !== HAP_GAME_CODE).sort((a, b) => a.rank - b.rank).slice(0, 10);
+  const situ = (t) => { const fl = FLOW?.find((x) => x.code === t.code), sh = ALLSHOTS.filter((x) => x.team === t.code), shD = ALLSHOTS.filter((x) => x.opp === t.code), n = t.gp || 1; const ct = CLUTCH?.teams.find((x) => x.code === t.code), at = ATO?.find((x) => x.code === t.code);
+    return { offTO: fl ? fl.offTO / fl.games : null, offTOA: fl ? fl.offTOA / fl.games : null, second: fl ? fl.second / fl.games : null, secondA: fl ? fl.secondA / fl.games : null, runs: fl ? fl.runs / fl.games : null, runsA: fl ? fl.runsA / fl.games : null,
+      fb: sh.length ? sh.filter((x) => x.made && x.fb).reduce((a, x) => a + (x.is3 ? 3 : 2), 0) / n : null, paint: sh.length ? 2 * sh.filter((x) => x.made && !x.is3 && (x.z === 'rim' || x.z === 'paint')).length / n : null, paintA: shD.length ? 2 * shD.filter((x) => x.made && !x.is3 && (x.z === 'rim' || x.z === 'paint')).length / n : null,
+      clutch: ct ? situRates({ secs: ct.secs, poss: ct.poss, possD: ct.possD, pf: ct.pf, pa: ct.pa, box: ct.box, opp: ct.opp }).net : null, ato: at && at.off.n ? at.off.pts / at.off.n : null }; };
+  const S = new Map(teams.map((t) => [t.code, situ(t)]));
+  const val = (t, k) => (k in t ? t[k] : S.get(t.code)[k]);
+  const ROWS = [
+    ['Efficiency', [['Net rating', 'net', true], ['Offensive rating', 'ortg', true], ['Defensive rating', 'drtg', false], ['Pace', 'pace', null], ['Points', 'ppg', true], ['Points allowed', 'oppg', false]]],
+    ['Offense', [['eFG%', 'efg', true], ['True shooting %', 'ts', true], ['2P%', 'twoPct', true], ['3P%', 'threePct', true], ['3-point rate', 'threeRate', null], ['Free-throw rate', 'ftr', true], ['FT%', 'ftPct', true], ['Turnovers / 100', 'tov100', false], ['Offensive rebound %', 'orebPct', true], ['Assist rate', 'astRate', true]]],
+    ['Defense', [['Opp eFG%', 'efgD', false], ['Opp 2P%', 'twoPctD', false], ['Opp 3P%', 'threePctD', false], ['Opp 3-point rate', 'threeRateD', false], ['Forced turnovers / 100', 'tov100D', true], ['Defensive rebound %', 'drebPct', true], ['Opp free-throw rate', 'ftrD', false], ['Steals', 'spg', true], ['Blocks', 'bpg', true]]],
+    ['How the points come (per game)', [['Points off turnovers', 'offTO', true], ['Opp points off turnovers', 'offTOA', false], ['Second-chance points', 'second', true], ['Opp second-chance points', 'secondA', false], ['Fast-break points', 'fb', true], ['Points in the paint', 'paint', true], ['Opp points in the paint', 'paintA', false], ['Runs of 8+', 'runs', true], ['Opp runs of 8+', 'runsA', false]]],
+    ['Close games', [['Clutch net rating', 'clutch', true], ['Points per possession after timeouts', 'ato', true]]]
+  ];
+  const gaps = [], okList = [];
+  const body = ROWS.map(([grp, rows]) => {
+    const r = rows.map(([label, k, good]) => {
+      const hv = val(H, k); const tv = top.map((t) => val(t, k)).filter((v) => v != null && Number.isFinite(v)); if (hv == null || !tv.length) return '';
+      const avg = tv.reduce((a, b) => a + b, 0) / tv.length, sd = Math.sqrt(tv.reduce((a, b) => a + (b - avg) ** 2, 0) / tv.length) || 1;
+      const all = teams.map((t) => val(t, k)).filter((v) => v != null && Number.isFinite(v)).sort((a, b) => (good === false ? a - b : b - a));
+      const rank = good == null ? null : 1 + all.indexOf(hv), best = good == null ? null : all[0];
+      const d = hv - avg, z = good == null ? 0 : (good ? d : -d) / sd;
+      if (good != null) (z < -0.5 ? gaps : z > 0.3 ? okList : []).push([z, label, hv, avg, rank]);
+      const dp = k === 'ato' ? 2 : 1, f = (v) => (v == null ? '–' : v.toFixed(dp));
+      const lo = Math.min(hv, ...tv), hi = Math.max(hv, ...tv), pos = (v) => (hi === lo ? 50 : 100 * (v - lo) / (hi - lo));
+      return `<tr><td>${label}</td><td class="num"><strong class="${good == null ? '' : z >= 0 ? 'pos' : 'neg'}">${f(hv)}</strong>${rank ? ` <small class="muted">${ord(rank)}</small>` : ''}</td><td class="num">${f(avg)}</td><td class="num ${good == null ? '' : z >= 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(dp)}</td><td class="bm-strip"><span class="bm-rng"></span>${tv.map((v) => `<i style="left:${pos(v).toFixed(1)}%"></i>`).join('')}<b style="left:${pos(hv).toFixed(1)}%" title="Hapoel"></b><em style="left:${pos(avg).toFixed(1)}%" title="Top-10 average"></em></td><td class="num muted">${best == null ? '–' : f(best)}</td></tr>`;
+    }).join('');
+    return r ? `<tr class="bm-grp"><th colspan="6">${grp}</th></tr>${r}` : '';
+  }).join('');
+  const li = (arr, cls) => arr.sort((a, b) => (cls === 'neg' ? a[0] - b[0] : b[0] - a[0])).slice(0, 8).map(([z, l, hv, avg, rank]) => `<li><strong>${l}</strong>: Hapoel ${hv.toFixed(l.includes('timeouts') ? 2 : 1)}${rank ? ` (${ord(rank)})` : ''}, top 10 average ${avg.toFixed(l.includes('timeouts') ? 2 : 1)}</li>`).join('') || '<li class="muted">None</li>';
+  writePage(`team-${safe(HAP_GAME_CODE)}-benchmark.html`, 'Hapoel against the top 10', `<p class="no-print" style="margin:0"><button type="button" class="btn" id="print-btn">Download as PDF</button></p>
+<section class="card"><h2>Where Hapoel stands</h2><div class="r-two"><div><h3 class="neg">Biggest gaps to the top 10</h3><ol class="ud">${li(gaps, 'neg')}</ol></div><div><h3 class="pos">Already at top-10 level or better</h3><ol class="ud">${li(okList, 'pos')}</ol></div></div>
+<p class="muted small">Top 10 = the ten best teams in the standings apart from Hapoel: ${top.map((t) => esc(t.tv)).join(', ')}. A gap counts when Hapoel is more than half a spread (standard deviation) of those teams below their average.</p></section>
+<section class="card"><h2>Every category</h2><div class="scroll"><table class="rtab bm-t"><thead><tr><th>Stat</th><th class="num">Hapoel (rank)</th><th class="num">Top-10 avg</th><th class="num">Gap</th><th>Hapoel among the top 10</th><th class="num">Best in league</th></tr></thead><tbody>${body}</tbody></table></div>
+<p class="muted small">In the strip: grey dots = the top-10 teams, black line = their average, red dot = Hapoel (left = lowest value, right = highest). Green / red = better / worse than the top-10 average.</p></section>`, 'teams.html',
+    cover({ kicker: esc(cfg.shortName || cfg.leagueName || 'EuroLeague'), title: 'Hapoel against the top 10', lede: 'Every category next to the average of the ten best teams in the standings: what is already at that level, and the biggest gaps to close.', actions: `<a class="btn white" href="${teamHref(HAP_GAME_CODE)}">Hapoel team page</a>` }),
+    { scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` });
+}
+
+// ---- Lineup builder: pick any Hapoel players and see how they have done together ----
+if (HAP_GAME_CODE && pbpOk.some((e) => e.game.home.code === HAP_GAME_CODE || e.game.away.code === HAP_GAME_CODE)) {
+  const mine = pbpOk.filter((e) => e.game.home.code === HAP_GAME_CODE || e.game.away.code === HAP_GAME_CODE);
+  const U = { 5: {}, 4: {}, 3: {}, 2: {}, 1: {} };
+  for (const e of mine) { const sd = e.game.home.code === HAP_GAME_CODE ? 'H' : 'A'; for (const k of [5, 4, 3, 2, 1]) for (const u of gameUnits(e.game, e.stints, k)[sd]) { const key = u.ids.slice().sort().join(','); const o = U[k][key] ||= [0, 0, 0, 0, 0, 0]; o[0] += u.secs; o[1] += u.pf; o[2] += u.pa; o[3] += u.poss; o[4] += u.oposs; o[5]++; } }
+  for (const k of Object.keys(U)) for (const key of Object.keys(U[k])) U[k][key] = U[k][key].map((v, i) => (i === 5 ? v : Math.round(v * 10) / 10));
+  // team totals (to show each player's "off the court" numbers)
+  const tot = [0, 0, 0, 0, 0]; for (const e of mine) for (const s2 of e.stints) { const h = e.game.home.code === HAP_GAME_CODE; tot[0] += s2.secs; tot[1] += h ? s2.pts[e.game.home.code] : s2.pts[e.game.away.code]; tot[2] += h ? s2.pts[e.game.away.code] : s2.pts[e.game.home.code]; tot[3] += h ? s2.possH : s2.possA; tot[4] += h ? s2.possA : s2.possH; }
+  const ids = Object.keys(U[1]).sort((a, b) => U[1][b][0] - U[1][a][0]);
+  const data = { games: mine.length, tot: tot.map((v) => Math.round(v * 10) / 10), players: ids.map((id) => [id, nameOf.get(id) || id, Math.round(U[1][id][0] / 60)]), U: { 5: U[5], 4: U[4], 3: U[3], 2: U[2] } };
+  copyFileSync('static/lineupbuilder.js', join(OUT, 'lineupbuilder.js'));
+  writePage(`team-${safe(HAP_GAME_CODE)}-lineup-builder.html`, 'Lineup builder', `<section class="card"><div id="lb-app"><p class="muted">Loading…</p></div></section>
+<script type="application/json" id="lb-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`, 'lineups.html',
+    cover({ kicker: esc(cfg.shortName || cfg.leagueName || 'EuroLeague'), title: 'Lineup builder', lede: `Pick up to five Hapoel players: how they have played together (${mine.length} games of lineups from the play-by-play), every pair and trio inside the group, and an estimate when the five have never shared the court.` }),
+    { scripts: `<script src="lineupbuilder.js?v=${assetVersion()}" defer></script>` });
+}
+
+// ---- Game-day pack for Hapoel's next game: summary, end-of-game sheet, opponent player cards (printable) ----
+{
+  const nx = HAP_GAME_CODE ? upcoming.find((x) => x.h.code === HAP_GAME_CODE || x.a.code === HAP_GAME_CODE) : null;
+  const oc = nx ? (nx.h.code === HAP_GAME_CODE ? nx.a.code : nx.h.code) : null, O = oc && teams.find((t) => t.code === oc), Hh = teams.find((t) => t.code === HAP_GAME_CODE);
+  if (nx && O && Hh) {
+    const sg = (v) => (v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1));
+    const home = nx.h.code === HAP_GAME_CODE, ON = titleCase(O.name);
+    const pr = FORECAST?.prob(nx.h.code, nx.a.code);
+    const hapWin = pr ? (home ? pr.win : 1 - pr.win) : null;
+    const KEYS = [['Net rating', 'net', true], ['Offensive rating', 'ortg', true], ['Defensive rating', 'drtg', false], ['Pace', 'pace', null], ['eFG%', 'efg', true], ['3P%', 'threePct', true], ['3-point rate', 'threeRate', null], ['Turnovers / 100', 'tov100', false], ['Forced turnovers / 100', 'tov100D', true], ['Offensive rebound %', 'orebPct', true], ['Defensive rebound %', 'drebPct', true], ['Free-throw rate', 'ftr', true], ['Opp eFG%', 'efgD', false]];
+    const kv = (t, k) => `${t[k] == null ? '–' : k === 'net' ? sg(t[k]) : f1(t[k])} <small class="muted">${t.ranks?.[k] ? ord(t.ranks[k]) : ''}</small>`;
+    const compTable = `<table class="rtab"><thead><tr><th>Stat</th><th class="num">Hapoel</th><th class="num">${esc(O.tv)}</th></tr></thead><tbody>${KEYS.map(([l, k, good]) => { const a = Hh[k], b = O[k]; const ca = good == null || a === b ? '' : (good ? a > b : a < b) ? 'pos' : 'neg'; return `<tr><td>${l}</td><td class="num ${ca}">${kv(Hh, k)}</td><td class="num">${kv(O, k)}</td></tr>`; }).join('')}</tbody></table>`;
+    // end of game: their free-throw shooters, closers, closing lineups, after timeouts, clutch
+    const roster = players.filter((p) => p.team === oc && p.gp >= 2).sort((a, b) => b.totalMin - a.totalMin);
+    const rot = PBP ? rotationOf(pbpOk, oc) : null, rotBy = new Map((rot?.players || []).map((x) => [x.id, x]));
+    const closeShare = (id) => { const r = rotBy.get(id); return r ? r.share.slice(36, 40).reduce((a, b) => a + b, 0) / 4 : 0; };
+    const ftList = roster.filter((p) => p.mpg >= 8 && p.totals.fta >= 4).map((p) => ({ p, pct: 100 * p.totals.ftm / p.totals.fta, close: closeShare(p.id) })).sort((a, b) => a.pct - b.pct);
+    const closers = roster.map((p) => ({ p, close: closeShare(p.id) })).filter((x) => x.close > 0.15).sort((a, b) => b.close - a.close).slice(0, 8);
+    // fives in the last 5 minutes of the 4th quarter, any score
+    const lastFives = new Map();
+    for (const e of pbpOk.filter((x) => x.game.home.code === oc || x.game.away.code === oc)) { const side = e.game.home.code === oc ? 'home' : 'away', me = oc, op = side === 'home' ? e.game.away.code : e.game.home.code; for (const s2 of e.periodStints) { if (s2.period !== 4 || s2.start == null) continue; const a = Math.max(s2.start, 2100), b = Math.min(s2.start + s2.secs, 2400); if (b <= a) continue; const k = s2[side].slice().sort().join(','); const f = b - a, frac = s2.secs ? f / s2.secs : 0; const o = lastFives.get(k) || { ids: s2[side], secs: 0, pf: 0, pa: 0, g: new Set() }; o.secs += f; o.pf += s2.pts[me] * frac; o.pa += s2.pts[op] * frac; o.g.add(e.game.gameCode); lastFives.set(k, o); } }
+    const lf = [...lastFives.values()].sort((a, b) => b.secs - a.secs).slice(0, 4);
+    const at = ATO?.find((x) => x.code === oc), ct = CLUTCH?.teams.find((x) => x.code === oc);
+    const ctR = ct ? situRates({ secs: ct.secs, poss: ct.poss, possD: ct.possD, pf: ct.pf, pa: ct.pa, box: ct.box, opp: ct.opp }) : null;
+    const clutchBy = new Map((CLUTCH?.players || []).filter((x) => x.team === oc).map((x) => [x.id, x]));
+    const mmss = (s2) => `${Math.floor(s2 / 60)}:${String(Math.round(s2 % 60)).padStart(2, '0')}`;
+    const endSheet = `<div class="r-two"><div><h3>Free-throw shooters — worst first</h3><table class="rtab"><thead><tr><th>Player</th><th class="num">FT</th><th class="num">FT%</th><th class="num">On court at the end</th></tr></thead><tbody>${ftList.map((x) => `<tr${x.pct < 70 && x.close > 0.3 ? ' class="hap-row"' : ''}><td>${esc(x.p.name)}</td><td class="num">${x.p.totals.ftm}/${x.p.totals.fta}</td><td class="num ${x.pct < 70 ? 'neg' : x.pct >= 85 ? 'pos' : ''}"><strong>${x.pct.toFixed(0)}%</strong></td><td class="num">${Math.round(100 * x.close)}%</td></tr>`).join('')}</tbody></table><p class="muted small">Highlighted: under 70% from the line and often on the court in the last 4 minutes — candidates to foul.</p></div>
+<div><h3>Who closes games</h3><table class="rtab"><thead><tr><th>Player</th><th class="num">On court, last 4 min</th><th class="num">Clutch PTS</th><th class="num">Clutch FG</th></tr></thead><tbody>${closers.map((x) => { const c = clutchBy.get(x.p.id); return `<tr><td>${esc(x.p.name)}</td><td class="num"><strong>${Math.round(100 * x.close)}%</strong></td><td class="num">${c ? c.box.pts : '–'}</td><td class="num">${c ? `${c.box.fgm2 + c.box.fgm3}/${c.box.fga2 + c.box.fga3}` : '–'}</td></tr>`; }).join('')}</tbody></table></div></div>
+${lf.length ? `<h3>Their most used fives in the last 5 minutes of the 4th quarter</h3><table class="rtab"><thead><tr><th>Lineup</th><th class="num">MIN</th><th class="num">Games</th><th class="num">Score</th></tr></thead><tbody>${lf.map((u) => `<tr><td class="small">${u.ids.map((id) => esc(nameOf.get(id) || id)).join(' · ')}</td><td class="num">${mmss(u.secs)}</td><td class="num">${u.g.size}</td><td class="num">${Math.round(u.pf)}–${Math.round(u.pa)}</td></tr>`).join('')}</tbody></table>` : ''}
+<div class="r-grid">${ct ? `<div class="rs"><span>Clutch record</span><b>${ct.w}–${ct.l}</b></div><div class="rs"><span>Clutch net rating</span><b>${sg(ctR.net)}</b></div><div class="rs"><span>Clutch FT</span><b>${ct.box.ftm}/${ct.box.fta}</b></div>` : ''}${at && at.off.n ? `<div class="rs"><span>Points per possession after their timeouts</span><b>${(at.off.pts / at.off.n).toFixed(2)} <small>${ord(1 + ATO.filter((x) => x.off.n && x.off.pts / x.off.n > at.off.pts / at.off.n).length)}</small></b></div><div class="rs"><span>Last 2 min after timeouts</span><b>${at.off.late.n ? `${at.off.late.pts} pts / ${at.off.late.n}` : '–'}</b></div>` : ''}<div class="rs"><span>Team FT%</span><b>${f1(O.ftPct)}</b></div></div>`;
+    // opponent player cards
+    const cards = roster.filter((p) => p.mpg >= 10).slice(0, 9).map((p) => {
+      const sh = ALLSHOTS.filter((x) => x.pid === p.id), r = rotBy.get(p.id), c = clutchBy.get(p.id), oo = onOffOf(p.id);
+      const last = games.filter((g) => [...g.home.players, ...g.away.players].some((x) => x.id === p.id && x.min > 0)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map((g) => { const x = [...g.home.players, ...g.away.players].find((y) => y.id === p.id); return `${x.pts}<small>/${Math.round(x.min)}′</small>`; }).join(' · ');
+      const t = p.totals;
+      return `<article class="pcard"><header><strong>${esc(p.name)}</strong><span class="muted small">${esc(posOf.get(p.id) || '')}</span></header>
+<div class="pc-stats"><span><b>${f1(p.ppg)}</b> pts</span><span><b>${f1(p.rpg)}</b> reb</span><span><b>${f1(p.apg)}</b> ast</span><span><b>${f1(p.mpg)}</b> min</span><span><b>${f1(p.ts)}</b> TS%</span><span><b>${f1(p.usg)}</b> USG%</span><span><b>${t.fga3 ? (100 * t.fgm3 / t.fga3).toFixed(0) : '–'}%</b> 3P (${(t.fga3 / p.gp).toFixed(1)}/g)</span><span><b>${t.fta ? (100 * t.ftm / t.fta).toFixed(0) : '–'}%</b> FT</span>${oo?.swing != null ? `<span><b>${sg(oo.swing)}</b> on/off</span>` : ''}${c ? `<span><b>${c.box.pts}</b> clutch pts</span>` : ''}</div>
+<p class="small"><span class="muted">Last 5 (pts/min):</span> ${last}</p>
+${r ? `<div class="pc-rot" title="Share of games on the court in each minute">${r.share.map((v, m) => `<i class="${m % 10 === 0 ? 'q' : ''}" style="opacity:${(0.08 + 0.92 * Math.min(1, v)).toFixed(2)}"></i>`).join('')}</div><p class="muted small">Minutes pattern: Q1 → Q4</p>` : ''}
+${sh.length >= 15 ? courtSvg(sh, { mode: 'zones', league: ALLSHOTS, title: p.name + ' zones' }) : ''}</article>`;
+    }).join('');
+    const H2H = games.filter((g) => (g.home.code === HAP_GAME_CODE && g.away.code === oc) || (g.away.code === HAP_GAME_CODE && g.home.code === oc));
+    const body = `<p class="no-print" style="margin:0"><button type="button" class="btn" id="print-btn">Download the pack as PDF</button> <a class="btn ghost" href="team-${safe(oc)}-report.html">Full pre-game report</a> <a class="btn ghost" href="matchup.html?a=${encodeURIComponent(HAP_GAME_CODE)}&b=${encodeURIComponent(oc)}">Matchup</a></p>
+<header class="print-only split-ph"><div class="r-kicker">HTA LAB · Game-day pack</div><h1>${home ? 'Hapoel vs ' + esc(ON) : 'Hapoel at ' + esc(ON)}</h1><div class="r-meta">${esc(nx.utc ? nx.utc.slice(0, 16).replace('T', ' ') + ' UTC' : '')}${nx.rn ? ' · ' + esc(nx.rn) : ''}</div></header>
+<section class="card"><h2>The game</h2><div class="r-grid"><div class="rs"><span>Records</span><b>Hapoel ${Hh.w}–${Hh.l} · ${esc(O.tv)} ${O.w}–${O.l}</b></div>${pr ? `<div class="rs"><span>Expected score</span><b>${home ? `Hapoel ${Math.round(pr.ph)}–${Math.round(pr.pa)}` : `Hapoel ${Math.round(pr.pa)}–${Math.round(pr.ph)}`}</b></div><div class="rs"><span>Hapoel win chance</span><b>${Math.round(100 * hapWin)}%</b></div>` : ''}<div class="rs"><span>Earlier meetings</span><b>${H2H.length ? H2H.map((g) => { const me = g.home.code === HAP_GAME_CODE ? g.home : g.away, op = me === g.home ? g.away : g.home; return `${me.score > op.score ? 'W' : 'L'} ${me.score}–${op.score}`; }).join(', ') : 'None this season'}</b></div></div>
+<h3>Team numbers</h3>${compTable}<p class="muted small">Small numbers are league ranks. Green = Hapoel better.</p></section>
+<section class="card gd-end"><h2>End-of-game sheet — ${esc(ON)}</h2>${endSheet}</section>
+<section class="card gd-cards"><h2>${esc(ON)} — player cards</h2><div class="pcards">${cards}</div><p class="muted small">Season numbers. On/off = their team's net rating with him on minus off. Zones: red = better than the league, blue = worse.</p></section>`;
+    writePage('gameday-next.html', `Game-day pack: Hapoel ${home ? 'vs' : 'at'} ${O.tv}`, `<div class="split-page">${body}</div>`, HOME,
+      cover({ kicker: esc(nx.rn || 'Next game'), title: `Game-day pack: ${home ? 'vs' : 'at'} ${esc(ON)}`, lede: 'Everything for the next game in one place: the numbers, a prediction, the end-of-game sheet and a card for every opponent player. Download it as one PDF.' }),
+      { scripts: `<script>document.getElementById('print-btn').addEventListener('click', () => window.print());</script>` });
+  }
 }
 
 // ---- Glossary ----
