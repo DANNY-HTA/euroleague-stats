@@ -1076,3 +1076,8 @@ tr.av-ok td:first-child::after { content: ' ✓'; color: #1a7f37; }
 .fl-row b { font-size: 1.1rem; }
 .fl-spark { width: 60%; height: 46px; }
 @media print { .av-out { opacity: .5; } }
+/* injury report: the tables already show the status, so no crossing out there */
+.inj-t tr.av-out, .inj-t tr.av-doubt { opacity: 1; text-decoration: none; background: none; }
+.inj-t .av-badge { display: none; }
+.inj-media { margin-top: 10px; }
+.inj-media th:first-child { color: var(--ink, #111); }

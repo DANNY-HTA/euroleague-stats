@@ -92,24 +92,29 @@
 
   // ---- Apply availability marks to any page that tags players (data-pname / data-pnames) ----
   function apply(plan) {
-    const av = plan?.avail || {}; const st = (k) => av[k]?.status;
+    const av = plan?.avail || {}, MEDIA = window.HTA_MEDIA || {};
+    // the staff's own mark wins (including "available"); otherwise the media report, if the page has one
+    const eff = (k) => { const s = av[k]; if (s && s.status && s.status !== 'cleared') return { ...s, src: 'staff' }; const m = MEDIA[k]; return m ? { ...m, src: 'media' } : null; };
+    const label = (e) => (e.src === 'media' && e.label ? e.label : S.STATUS[e.status]) + (e.src === 'media' ? ' · media' : '');
     document.querySelectorAll('[data-pname]').forEach((n) => {
-      const s = st(n.dataset.pname); n.classList.toggle('av-out', s === 'out'); n.classList.toggle('av-doubt', s === 'doubt');
-      n.querySelector(':scope > .av-badge, :scope header .av-badge, :scope td .av-badge')?.remove();
-      if (s === 'out' || s === 'doubt') { const host = n.querySelector('header strong, td') || n; host.append(el('span', { class: 'av-badge av-' + s, title: av[n.dataset.pname]?.note || '' }, S.STATUS[s])); }
+      const e = eff(n.dataset.pname), s = e?.status; n.classList.toggle('av-out', s === 'out'); n.classList.toggle('av-doubt', s === 'doubt');
+      n.querySelectorAll('.av-badge').forEach((b) => b.remove());
+      if (s === 'out' || s === 'doubt') { const host = n.querySelector('header strong, td') || n; host.append(el('span', { class: 'av-badge av-' + s, title: e.note || '' }, label(e))); }
     });
-    document.querySelectorAll('[data-pnames]').forEach((n) => { const bad = n.dataset.pnames.split('|').some((k) => st(k) === 'out'); n.classList.toggle('av-out', bad); });
+    document.querySelectorAll('[data-pnames]').forEach((n) => { const bad = n.dataset.pnames.split('|').some((k) => eff(k)?.status === 'out'); n.classList.toggle('av-out', bad); });
     const note = document.getElementById('avail-note');
     if (note) {
-      const here = new Set([...document.querySelectorAll('[data-pname]')].map((n) => n.dataset.pname));
-      const list = Object.entries(av).filter(([k, v]) => here.has(k) && (v.status === 'out' || v.status === 'doubt'));
-      note.replaceChildren(list.length ? el('p', { class: 'note-warn' }, 'Marked by the staff: ', list.map(([, v], i) => [i ? ', ' : '', el('strong', {}, v.name), ` (${S.STATUS[v.status].toLowerCase()}${v.note ? ': ' + v.note : ''})`]), '. Out players are crossed out below.') : el('p', { class: 'muted small' }, 'No players on this page are marked out. ', el('a', { href: ROOT + 'injuries.html' }, 'Injury report')));
+      const here = [...new Set([...document.querySelectorAll('[data-pname]')].map((n) => n.dataset.pname))];
+      const list = here.map((k) => eff(k)).filter((e) => e && (e.status === 'out' || e.status === 'doubt'));
+      note.replaceChildren(list.length ? el('p', { class: 'note-warn' }, 'Not fully available: ', list.map((v, i) => [i ? ', ' : '', el('strong', {}, v.name), ` (${(v.src === 'media' && v.label ? v.label : S.STATUS[v.status]).toLowerCase()}${v.src === 'media' ? ', media report' : ', staff'}${v.note ? ': ' + v.note.replace(/ \(media, [^)]*\)$/, '') : ''})`]), '. Out players are crossed out below.') : el('p', { class: 'muted small' }, 'No players on this page are marked out. ', el('a', { href: ROOT + 'injuries.html' }, 'Injury report')));
+      if (!plan) note.append(S.unlockForm(() => {}, 'Unlock to add the staff’s own marks:'));
     }
   }
   function boot() {
     const note = document.getElementById('avail-note');
+    apply(null);
     S.onChange(apply);
-    S.ready().then((plan) => { if (!plan && note) note.replaceChildren(S.unlockForm(() => {}, 'Unlock to see injury marks set by the staff:')); });
+    S.ready().then((plan) => { if (!plan) apply(null); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

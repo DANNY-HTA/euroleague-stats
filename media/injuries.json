@@ -1,0 +1,115 @@
+{
+  "note": "EuroLeague availability as reported by the media. Edited by hand (or by Claude on request). status: out | doubt | uncertain | expected | ready. kind: injury | coach | roster | national | illness.",
+  "updated": "2026-11-26",
+  "round": 15,
+  "sources": [
+    { "name": "BasketNews — EuroLeague Injury Report (updated daily)", "url": "https://basketnews.com/news-212393-euroleague-injury-report-updated.html", "date": "2026-11-26" },
+    { "name": "EuroLeague — official injury reports (news)", "url": "https://www.euroleaguebasketball.net/euroleague/news/", "date": "2026-11-25" }
+  ],
+  "players": [
+    { "team": "IST", "name": "Isaia Cordinier", "status": "out", "kind": "injury", "reason": "Rehab after surgery, no return date" },
+    { "team": "IST", "name": "Bruno Fernando", "status": "doubt", "kind": "injury", "reason": "Calf, 3–4 weeks from mid-November" },
+    { "team": "IST", "name": "Mike James", "status": "out", "kind": "injury", "reason": "Achilles surgery, out for the season" },
+    { "team": "IST", "name": "Ruzgar Fenemen", "status": "doubt", "kind": "coach", "reason": "Has not played this season" },
+
+    { "team": "MIL", "name": "Leandro Bolmaro", "status": "uncertain", "kind": "injury", "reason": "Adductor discomfort, missed Round 14" },
+    { "team": "MIL", "name": "Alec Peters", "status": "uncertain", "kind": "injury", "reason": "Hip / psoas muscle, missed Round 14" },
+    { "team": "MIL", "name": "Devin Booker", "status": "out", "kind": "injury", "reason": "Thigh tendon, up to three months (from early November)" },
+    { "team": "MIL", "name": "Nicola Akele", "status": "uncertain", "kind": "coach", "reason": "Not used in Rounds 12–14" },
+    { "team": "MIL", "name": "Diego Flaccadori", "status": "uncertain", "kind": "coach", "reason": "Not used since Round 1" },
+
+    { "team": "BAR", "name": "Josh Nebo", "status": "out", "kind": "injury", "reason": "Right knee patellar tendon, 3–4 months" },
+    { "team": "BAR", "name": "Kevin Punter", "status": "out", "kind": "injury", "reason": "Ankle sprain, back around Round 18" },
+    { "team": "BAR", "name": "Tosan Evbuomwan", "status": "uncertain", "kind": "injury", "reason": "Oblique muscle tear, early December" },
+    { "team": "BAR", "name": "Umoja Gibson", "status": "uncertain", "kind": "injury", "reason": "Abdominal strain, about 3 weeks from Round 11" },
+    { "team": "BAR", "name": "Killian Hayes", "status": "uncertain", "kind": "injury", "reason": "Discomfort, missed Round 14" },
+    { "team": "BAR", "name": "Yoan Makoundou", "status": "uncertain", "kind": "injury", "reason": "Left knee, missed Round 14" },
+    { "team": "BAR", "name": "Abdu Kone", "status": "uncertain", "kind": "coach", "reason": "Not used in Round 14" },
+
+    { "team": "BES", "name": "Wenyen Gabriel", "status": "out", "kind": "injury", "reason": "Long-term injury from Round 13" },
+    { "team": "BES", "name": "Jaylen Nowell", "status": "out", "kind": "injury", "reason": "Surgery on a broken nose, no return date" },
+    { "team": "BES", "name": "Eugene Omoruyi", "status": "uncertain", "kind": "injury", "reason": "Missed Round 14, not disclosed" },
+    { "team": "BES", "name": "Mady Sissoko", "status": "uncertain", "kind": "coach", "reason": "Listed but not used in Round 14" },
+    { "team": "BES", "name": "Berk Ugurlu", "status": "uncertain", "kind": "coach", "reason": "Not used in Rounds 11–14" },
+
+    { "team": "RED", "name": "Stefan Miljenovic", "status": "out", "kind": "injury", "reason": "Ankle surgery, no return date" },
+    { "team": "RED", "name": "Ebuka Izundu", "status": "uncertain", "kind": "injury", "reason": "Missed Round 14, not disclosed" },
+    { "team": "RED", "name": "Patrick Baldwin Jr.", "status": "uncertain", "kind": "coach", "reason": "Not used in Round 14" },
+    { "team": "RED", "name": "Nikola Djurisic", "status": "uncertain", "kind": "coach", "reason": "Not used in Rounds 13–14" },
+
+    { "team": "DUB", "name": "Mouhammadou Jaiteh", "status": "out", "kind": "injury", "reason": "Achilles rehab, no return date" },
+    { "team": "DUB", "name": "Justin Anderson", "status": "out", "kind": "injury", "reason": "Hamstring, has not played; may leave the club" },
+    { "team": "DUB", "name": "Davis Bertans", "status": "doubt", "kind": "injury", "reason": "Hamstring, missed Rounds 10–14" },
+    { "team": "DUB", "name": "Thomas Walkup", "status": "uncertain", "kind": "injury", "reason": "Back, left out in Round 14" },
+    { "team": "DUB", "name": "Klemen Prepelic", "status": "uncertain", "kind": "national", "reason": "National team in Round 14; missed Rounds 8–13" },
+    { "team": "DUB", "name": "Davion Mintz", "status": "uncertain", "kind": "coach", "reason": "Left out in Round 14" },
+
+    { "team": "MUN", "name": "Justus Hollatz", "status": "uncertain", "kind": "injury", "reason": "Missed Rounds 12–14, not disclosed" },
+    { "team": "MUN", "name": "Niels Giffey", "status": "uncertain", "kind": "coach", "reason": "Not used in Round 14" },
+    { "team": "MUN", "name": "Austin Wiley", "status": "ready", "kind": "injury", "reason": "Back in Round 14 after missing Round 13" },
+
+    { "team": "ULK", "name": "Nicolo Melli", "status": "out", "kind": "injury", "reason": "Meniscus surgery, back around Rounds 19–21" },
+    { "team": "ULK", "name": "Braxton Key", "status": "out", "kind": "injury", "reason": "Finger surgery, back around Rounds 19–21" },
+    { "team": "ULK", "name": "Trent Forrest", "status": "uncertain", "kind": "injury", "reason": "Missed Round 14, not disclosed" },
+    { "team": "ULK", "name": "Melih Mahmutoglu", "status": "uncertain", "kind": "coach", "reason": "Not used in Round 14" },
+
+    { "team": "HTA", "name": "Bruno Caboclo", "status": "uncertain", "kind": "injury", "reason": "Minor calf tear, missed Rounds 11–14" },
+    { "team": "HTA", "name": "Tyler Ennis", "status": "uncertain", "kind": "injury", "reason": "Back in practice Nov 19 after Achilles tear" },
+    { "team": "HTA", "name": "Khadeen Carrington", "status": "uncertain", "kind": "coach", "reason": "Not used in Rounds 11–14; played in the league Nov 21" },
+    { "team": "HTA", "name": "Tamir Blatt", "status": "doubt", "kind": "coach", "reason": "Not used in Rounds 10–14; played in the league Nov 21" },
+    { "team": "HTA", "name": "Bar Timor", "status": "doubt", "kind": "coach", "reason": "Not used in Rounds 7–14; played in the league Nov 21" },
+    { "team": "HTA", "name": "Guy Palatin", "status": "out", "kind": "roster", "reason": "Not on the EuroLeague roster" },
+    { "team": "HTA", "name": "Oz Blayzer", "status": "out", "kind": "roster", "reason": "Not on the EuroLeague roster" },
+
+    { "team": "BAS", "name": "Kenneth Faried", "status": "out", "kind": "injury", "reason": "Left thigh, no return date" },
+    { "team": "BAS", "name": "Marcio Santos", "status": "out", "kind": "injury", "reason": "Left calf tear, no return date" },
+    { "team": "BAS", "name": "Tadas Sedekerskis", "status": "uncertain", "kind": "injury", "reason": "Right thigh since Round 7, return expected late November" },
+
+    { "team": "ASV", "name": "Juhann Begarin", "status": "uncertain", "kind": "injury", "reason": "Missed Rounds 8–14, not disclosed" },
+    { "team": "ASV", "name": "Yves Pons", "status": "uncertain", "kind": "injury", "reason": "Missed Rounds 12–14, not disclosed" },
+    { "team": "ASV", "name": "Lorenz Sanz", "status": "uncertain", "kind": "coach", "reason": "Not used in Rounds 10–14" },
+
+    { "team": "TEL", "name": "Gabriel Lundberg", "status": "out", "kind": "injury", "reason": "Quad tendon surgery, not before February" },
+    { "team": "TEL", "name": "T.J. Leaf", "status": "uncertain", "kind": "coach", "reason": "Not used in Round 14" },
+    { "team": "TEL", "name": "Will Rayman", "status": "uncertain", "kind": "coach", "reason": "Not used in Rounds 12–14" },
+    { "team": "TEL", "name": "Gur Lavi", "status": "ready", "kind": "injury", "reason": "Played in Round 14 after missing Rounds 1–13" },
+
+    { "team": "OLY", "name": "Jean Montero", "status": "out", "kind": "injury", "reason": "Left knee meniscus, until the end of April" },
+    { "team": "OLY", "name": "Codi Miller-McIntyre", "status": "expected", "kind": "illness", "reason": "Missed Round 14 with illness" },
+    { "team": "OLY", "name": "Tyler Dorsey", "status": "uncertain", "kind": "national", "reason": "National team in Round 14; out of the rotation since Round 6" },
+
+    { "team": "PAN", "name": "Kostas Sloukas", "status": "uncertain", "kind": "injury", "reason": "Knee swelling, missed Round 14" },
+    { "team": "PAN", "name": "Konstantinos Mitoglou", "status": "uncertain", "kind": "injury", "reason": "Hurt with the national team on Nov 26" },
+    { "team": "PAN", "name": "Panagiotis Kalaitzakis", "status": "uncertain", "kind": "coach", "reason": "Not used in Rounds 13–14" },
+
+    { "team": "PRS", "name": "T.J. Warren", "status": "uncertain", "kind": "injury", "reason": "Missed Round 14, not disclosed" },
+    { "team": "PRS", "name": "Terry Tarpey", "status": "uncertain", "kind": "injury", "reason": "Missed Rounds 13–14, not disclosed" },
+    { "team": "PRS", "name": "Daulton Hommes", "status": "uncertain", "kind": "coach", "reason": "Not used in Rounds 11–14" },
+
+    { "team": "PAR", "name": "Lamar Stevens", "status": "uncertain", "kind": "injury", "reason": "Calf strain, missed Rounds 13–14" },
+    { "team": "PAR", "name": "Ethan Thompson", "status": "uncertain", "kind": "injury", "reason": "Hip, missed Rounds 12–14" },
+    { "team": "PAR", "name": "Luca Vildoza", "status": "uncertain", "kind": "injury", "reason": "Ankle, missed Rounds 13–14" },
+    { "team": "PAR", "name": "Derek Willis", "status": "uncertain", "kind": "injury", "reason": "Ankle since Round 1" },
+    { "team": "PAR", "name": "Joffrey Lauvergne", "status": "out", "kind": "roster", "reason": "Removed from the EuroLeague roster" },
+
+    { "team": "MAD", "name": "Facundo Campazzo", "status": "expected", "kind": "injury", "reason": "Left hamstring; expected back for Round 15" },
+    { "team": "MAD", "name": "Gabriel Deck", "status": "out", "kind": "injury", "reason": "Shoulder surgery, back mid-February to mid-March" },
+    { "team": "MAD", "name": "Usman Garuba", "status": "out", "kind": "injury", "reason": "Torn ACL, no return date" },
+    { "team": "MAD", "name": "Mikael Jantunen", "status": "out", "kind": "injury", "reason": "Plantar fascia rupture, no return date" },
+    { "team": "MAD", "name": "Max Shulga", "status": "uncertain", "kind": "national", "reason": "National team in Round 14" },
+    { "team": "MAD", "name": "Olivier Sarr", "status": "uncertain", "kind": "coach", "reason": "Left out in Round 14" },
+
+    { "team": "PAM", "name": "Nate Reuvers", "status": "uncertain", "kind": "injury", "reason": "Left foot bone, missed Rounds 8–14" },
+    { "team": "PAM", "name": "Jasiel Rivero", "status": "uncertain", "kind": "injury", "reason": "Left foot, missed Round 14" },
+    { "team": "PAM", "name": "Lucas Mari", "status": "out", "kind": "coach", "reason": "Not used in Rounds 11–14" },
+
+    { "team": "VIR", "name": "Davide Casarin", "status": "out", "kind": "injury", "reason": "Bone bruise, at least until Round 21" },
+    { "team": "VIR", "name": "Bobi Klintman", "status": "uncertain", "kind": "injury", "reason": "Left ankle sprain, missed Round 14" },
+    { "team": "VIR", "name": "Francesco Ferrari", "status": "uncertain", "kind": "national", "reason": "National team in Round 14" },
+
+    { "team": "ZAL", "name": "Nigel Williams-Goss", "status": "uncertain", "kind": "injury", "reason": "Hamstring, aggravated in Round 6" },
+    { "team": "ZAL", "name": "Marek Blazevic", "status": "uncertain", "kind": "national", "reason": "National team in Round 14; out of the rotation since Round 8" },
+    { "team": "ZAL", "name": "Dovydas Giedraitis", "status": "uncertain", "kind": "national", "reason": "National team in Round 14; out of the rotation since Round 8" },
+    { "team": "ZAL", "name": "Deividas Sirvydis", "status": "uncertain", "kind": "national", "reason": "National team in Round 14; out of the rotation since Round 8" }
+  ]
+}
