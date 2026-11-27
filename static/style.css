@@ -743,18 +743,6 @@ table.box.q { max-width: 520px; }
 .sc-dh .sc-x { flex: none; background: var(--soft); }
 .sc-mbox { max-height: none; } .sc-mbox > .sc-x { position: sticky; top: 0; float: right; z-index: 3; background: #fff; }
 /* ---- Ask the Brain ---- */
-nav a.nav-brain { background: #111; color: #fff; } nav a.nav-brain[aria-current="page"] { background: #fff; color: var(--red); }
-.brain-key { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; margin: 0 0 12px; }
-.brain-key input { width: min(420px, 100%); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
-.brain-key p { flex-basis: 100%; margin: 0; }
-.brain-leagues { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 14px; font-size: 14px; }
-.brain-leagues img { width: 18px; height: 18px; object-fit: contain; vertical-align: -4px; }
-.brain-thread { display: grid; gap: 10px; margin: 0 0 14px; }
-.brain-q { background: var(--red-soft); border-radius: 12px; padding: 10px 14px; }
-.brain-a { border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px; } .brain-a h4 { margin: 12px 0 4px; } .brain-a table { font-size: 13px; }
-.brain-ask textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--line); border-radius: 12px; font: inherit; resize: vertical; }
-.brain-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
-.brain-row select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
 
 /* Game page: quarter box score & playing time */
 #quarters h3 { margin: 1.2rem 0 .4rem; font-size: 1rem; }
