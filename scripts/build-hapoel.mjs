@@ -270,7 +270,7 @@ const hero = `<section class="cover hap-cover"><div class="wrap"><div>
 </div>${crest ? `<div class="side cover-crest"><img src="${esc(crest)}" alt=""></div>` : ''}</div></section>`;
 
 const tabs = `<div class="comp-tabs" role="tablist" aria-label="Competition"><button type="button" role="tab" data-comp="all" aria-selected="true">All competitions</button>${ACTIVE.map((C) => `<button type="button" role="tab" data-comp="${C.key}" aria-selected="false">${C.logo ? `<img src="${esc(C.logo)}" alt="" width="18" height="18">` : ''}${esc(C.short)}</button>`).join('')}</div>`;
-const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#last-game">Last game</a><a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="recruit.html">Recruiting</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
+const navLinks = `<nav class="hap-toc" aria-label="On this page"><a href="#schedule">Schedule</a><a href="#boxscores">Box scores</a><a href="#team">Team stats</a><a href="#players">Players</a><a href="#next">Next opponent</a><a href="#last-game">Last game</a>${ACTIVE.map((C) => `<a href="${C.pfx}team-${safe(C.code)}-wins-losses.html">Wins vs losses (${esc(C.short)})</a>`).join('')}<a href="#onoff">On/Off</a><a href="#clutch">Clutch</a><a href="#lineups">Lineups</a><a href="compare.html">Compare players</a><a href="recruit.html">Recruiting</a><a href="#boards">Leaderboards</a><a href="#leagues">Leagues</a></nav>`;
 
 const person = (k) => (people.get(k)?.name || k);
 const data = {
