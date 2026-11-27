@@ -975,3 +975,14 @@ table.mu-pl th, table.mu-pl td { padding: 5px 6px; border-bottom: 1px solid var(
   #matchup-app table.mu-pl { font-size: 8px; } #matchup-app table.mu-pl th, #matchup-app table.mu-pl td { padding: 2px 3px; }
   #matchup-app * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+/* Lineups in two sets of games */
+.sl-filters { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; margin-bottom: 6px; }
+.sl-filters input[type=number] { width: 60px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; }
+.sl-filters select { padding: 6px; border: 1px solid var(--line); border-radius: 6px; max-width: 180px; }
+.chip.with { border-color: #1a7f37; } .chip.without { border-color: var(--red); text-decoration: line-through; }
+table.sl-table { font-size: 12.5px; border-collapse: collapse; width: 100%; }
+table.sl-table th, table.sl-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); }
+table.sl-table th.grp { text-align: center; border-bottom: 1px solid var(--line); }
+table.sl-table th button { border: 0; background: none; font: inherit; font-weight: 700; cursor: pointer; padding: 0; color: inherit; }
+table.sl-table td:nth-child(6), table.sl-table th:nth-child(2) { border-right: 1px solid var(--line); }
+@media print { .sl-filters { display: none; } table.sl-table { font-size: 8.5px; } table.sl-table th, table.sl-table td { padding: 2px 3px; } }
