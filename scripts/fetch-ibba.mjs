@@ -83,6 +83,12 @@ for (const g of games.filter(played)) {
     await writeFile(join(OUT, file), JSON.stringify(raw));
     fresh++;
   }
+  // referees (Hebrew names from the league's game list) and attendance, kept in the header like the EuroLeague feed
+  const refs = decode(g.Ref).split(',').map((x) => x.trim()).filter(Boolean);
+  const before = JSON.stringify([raw.header.Referee1, raw.header.Referee2, raw.header.Referee3, raw.header.Audience]);
+  refs.slice(0, 3).forEach((r, i) => { raw.header['Referee' + (i + 1)] = r; });
+  if (g.total_viewers) raw.header.Audience = String(g.total_viewers);
+  if (JSON.stringify([raw.header.Referee1, raw.header.Referee2, raw.header.Referee3, raw.header.Audience]) !== before) await writeFile(join(OUT, file), JSON.stringify(raw));
   for (const s of raw.boxscore.Stats) for (const p of s.PlayersStats) lsPlayers.set(p.Player_ID, { name: p.Player, dorsal: p.Dorsal, club: p.Team });
 }
 for (const f of await readdir(OUT)) if (f.endsWith('.json') && !keep.has(f)) await unlink(join(OUT, f));
